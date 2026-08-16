@@ -1,0 +1,27 @@
+name: Publicar módulo
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check
+      - name: Montar pacote
+        run: zip -r old-dragon-2-qualidade-de-vida.zip module.json README.md LICENSE lang scripts styles
+      - name: Publicar release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            module.json
+            old-dragon-2-qualidade-de-vida.zip
+          generate_release_notes: true

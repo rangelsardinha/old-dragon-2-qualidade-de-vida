@@ -1,0 +1,88 @@
+.od2ca-card {
+  display: grid;
+  gap: 6px;
+}
+
+.od2ca-card .od2ca-title {
+  font-weight: 700;
+}
+
+.od2ca-card .od2ca-hit {
+  color: #16713a;
+  font-weight: 700;
+}
+
+.od2ca-card .od2ca-miss {
+  color: #9b2430;
+  font-weight: 700;
+}
+
+.od2ca-card dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 8px;
+  margin: 0;
+}
+
+.od2ca-card dt {
+  font-weight: 700;
+}
+
+.od2ca-card dd {
+  margin: 0;
+}
+
+.od2ca-critical {
+  border-top: 1px solid rgba(0, 0, 0, 0.18);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.od2ca-xp-summary ul,
+.od2ca-xp-result ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.od2ca-xp-total {
+  border-top: 1px solid rgba(0, 0, 0, 0.18);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+.od2ca-xp-form table,
+.od2ca-xp-result table {
+  margin: 4px 0;
+  width: 100%;
+}
+
+.od2ca-xp-form th,
+.od2ca-xp-form td,
+.od2ca-xp-result th,
+.od2ca-xp-result td {
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.od2ca-xp-form th:last-child,
+.od2ca-xp-form td:last-child {
+  text-align: right;
+  width: 130px;
+}
+
+.od2ca-xp-form input[type='number'] {
+  text-align: right;
+  width: 100%;
+}
+
+.od2ca-xp-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  justify-content: flex-end;
+}
+
+.od2ca-xp-over {
+  color: #9b2430;
+  font-weight: 700;
+}

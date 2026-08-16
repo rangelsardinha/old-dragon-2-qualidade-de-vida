@@ -1,0 +1,10 @@
+{
+  "name": "old-dragon-2-qualidade-de-vida",
+  "version": "0.4.7",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node scripts/check-manifest.mjs && node --test"
+  }
+}

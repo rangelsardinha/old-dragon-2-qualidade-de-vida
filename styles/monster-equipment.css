@@ -1,0 +1,23 @@
+.od2qdv-monster-equipment { padding: .5rem; }
+.od2qdv-monster-equipment > header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--color-border-highlight, #922); padding-bottom: .35rem; }
+.od2qdv-monster-equipment button { width: auto; min-width: 0; }
+.od2qdv-monster-equipment .hint { opacity: .75; font-style: italic; }
+.od2qdv-monster-equipment .item-list { margin: 0; padding: 0; list-style: none; overflow-x: hidden; }
+.od2qdv-monster-item { display: grid; grid-template-columns: 32px minmax(70px, 1fr) minmax(65px, 90px) 24px 42px; gap: .3rem; align-items: center; width: 100%; min-width: 0; padding: .3rem 0; border-bottom: 1px solid rgba(127,127,127,.3); }
+.od2qdv-monster-item > * { min-width: 0; }
+.od2qdv-monster-item > button { text-align: left; border: 0; background: transparent; }
+.od2qdv-monster-item-controls { display: flex; justify-content: flex-end; gap: .45rem; white-space: nowrap; }
+.od2qdv-monster-item-controls a { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 20px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.od2qdv-monster-item > .od2qdv-container-summary,
+.od2qdv-monster-item > .od2qdv-container-contents,
+.od2qdv-monster-item > .od2qdv-container-empty { grid-column: 2 / -1; width: auto; min-width: 0; }
+.od2qdv-monster-item > .od2qdv-container-summary { padding: .2rem .25rem; gap: .35rem; }
+.od2qdv-monster-item > .od2qdv-container-summary > span:last-child { display: flex; gap: .4rem; flex: 0 0 auto; }
+.od2qdv-monster-item > .od2qdv-container-summary button { width: 18px; height: 20px; padding: 0; overflow: hidden; font-size: 0; }
+.od2qdv-monster-item > .od2qdv-container-summary button i { font-size: .75rem; }
+.od2qdv-monster-item > .od2qdv-container-contents { margin: 0 0 .25rem .35rem; padding-left: .4rem; }
+.od2qdv-monster-wallet { display: flex; flex-wrap: wrap; gap: .35rem .55rem; align-items: center; margin: .5rem 0; }
+.od2qdv-monster-wallet label { display: inline-flex; gap: .2rem; align-items: center; }
+.od2qdv-monster-wallet input { flex: 0 0 58px; width: 58px; min-width: 0; }
+.od2qdv-monster-load { margin-left: auto; white-space: nowrap; }
+.od2qdv-monster-empty { padding: 1rem; text-align: center; opacity: .7; }
