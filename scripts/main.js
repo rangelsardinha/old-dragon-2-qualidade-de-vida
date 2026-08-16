@@ -13,6 +13,14 @@ Hooks.once("init", () => {
     enableMonsterEquipment: {
       name: "Monstros carregam itens",
       hint: "Adiciona uma aba de equipamentos aos monstros e permite transferir itens entre monstros, ajudantes e personagens."
+    },
+    enableSpellTome: {
+      name: "Tomo de Magia",
+      hint: "Adiciona os compêndios, navegador, regras e automações de Magia Selvagem do Tomo de Magia OD2."
+    },
+    enableScrollGenerator: {
+      name: "Gerador de pergaminhos",
+      hint: "Permite ao Mestre gerar pergaminhos arcanos e divinos do SRD e, quando habilitado, do Tomo de Magia."
     }
   };
   const localized = (key, fallback) => {
@@ -32,6 +40,8 @@ Hooks.once("init", () => {
   worldToggle("enableCombatAutomation");
   worldToggle("enableEquipmentContainers");
   worldToggle("enableMonsterEquipment");
+  worldToggle("enableSpellTome");
+  worldToggle("enableScrollGenerator");
 
   game.settings.register(MODULE_ID, "combatAutoDamage", {
     name: "OD2CA.Settings.combatAutoDamage.name",

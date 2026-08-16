@@ -1,0 +1,23 @@
+<section class="od2qdv-scroll-builder">
+  <p>Arraste uma ou mais magias de um compêndio, do diretório de Itens ou de uma ficha para a área abaixo.</p>
+  <div class="form-group">
+    <label>Maldição</label>
+    <select name="curseMode">
+      <option value="random">Aleatória (10% de chance)</option>
+      <option value="cursed">Amaldiçoado (caótico)</option>
+      <option value="safe">Não amaldiçoado</option>
+    </select>
+  </div>
+  <div class="od2qdv-scroll-drop"><i class="fas fa-scroll"></i><strong>Solte as magias aqui</strong></div>
+  <ol class="od2qdv-scroll-selected">
+    {{#each spells as |spell index|}}
+      <li>{{spell.name}} — {{spell.circle}}º círculo ({{spell.source}}) <a data-remove-spell="{{index}}" title="Remover"><i class="fas fa-trash"></i></a></li>
+    {{else}}
+      <li class="empty">Nenhuma magia selecionada.</li>
+    {{/each}}
+  </ol>
+  <footer class="od2qdv-scroll-builder-actions">
+    <button type="button" data-action="create"><i class="fas fa-wand-magic-sparkles"></i> Criar pergaminho</button>
+    <button type="button" data-action="cancel"><i class="fas fa-times"></i> Cancelar</button>
+  </footer>
+</section>

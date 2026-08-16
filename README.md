@@ -36,6 +36,28 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Monstros possuem uma carteira própria de PO, PP e PC, mesmo que a função de recipientes esteja desativada.
 - Com **Equipamentos em recipientes** ativo, recipientes mantêm itens aninhados e moedas durante todas as transferências; monstros recebem uma carteira própria do módulo.
 
+### Tomo de Magia
+
+- Incorpora os compêndios de magias arcanas, divinas, selvagens, de missão e cooperativas do [Tomo de Magia OD2](https://github.com/rangelsardinha/tomo-de-magia-od2).
+- Inclui navegador com filtros por círculo, escola e esfera no diretório de Itens.
+- Disponibiliza tabelas, regras e PDFs de consulta do Tomo de Magia.
+- Automatiza a variação de nível e os surtos ao lançar Magias Selvagens.
+- Pode ser habilitado ou desabilitado independentemente das demais funções do QdV.
+- Ao usar esta versão incorporada, desative o módulo separado `tomo-de-magia-od2` para evitar duplicidades.
+
+### Gerador de pergaminhos
+
+- Adiciona **Gerar Pergaminho** ao diretório de Itens para o Mestre.
+- Permite escolher tradição arcana, divina ou ambas e definir o círculo máximo.
+- Usa magias do SRD; com **Tomo de Magia** habilitado, permite escolher SRD, Tomo ou ambas as fontes.
+- Oferece modo manual, no qual o Mestre arrasta magias específicas para dentro do pergaminho.
+- Sorteia uma magia em 80% dos resultados, duas em 15% e três em 5%.
+- O Mestre escolhe entre maldição aleatória (10%), pergaminho amaldiçoado (caótico) ou não amaldiçoado.
+- O efeito da maldição fica marcado no item, mas só é exibido na interface do Mestre.
+- Cada magia possui link para seu documento e um botão **Usar**; o uso publica o cartão da magia no chat e consome o pergaminho.
+- Ao usar um pergaminho amaldiçoado, o efeito é enviado por mensagem privada somente aos Mestres.
+- O resultado pode ser transferido diretamente para um personagem ou ajudante.
+
 ## Compatibilidade
 
 - Foundry VTT mínimo 13, máximo 14 e verificado no Foundry VTT 14.

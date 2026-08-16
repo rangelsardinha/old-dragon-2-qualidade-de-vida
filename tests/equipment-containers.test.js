@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, normalizeCoins, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
+import { curseForRoll, selectRandomSpells } from "../scripts/features/scroll-generator/model.js";
 
 const items = [
   { id: "bag", parent: null },
@@ -55,4 +56,23 @@ test("lista os usuários proprietários do ator sem incluir Mestres", () => {
     { id: "gm", name: "Mestre", isGM: true }
   ];
   assert.deepEqual(actorOwnerNames(actor, users), ["Ana", "Bruno"]);
+});
+
+test("mapeia corretamente os quatro efeitos de maldição", () => {
+  assert.equal(curseForRoll(1).key, "bodyVulnerability");
+  assert.equal(curseForRoll(2).key, "bodyVulnerability");
+  assert.equal(curseForRoll(3).key, "memoryFluidity");
+  assert.equal(curseForRoll(4).key, "soulWeakness");
+  assert.equal(curseForRoll(5).key, "precisionInefficiency");
+  assert.equal(curseForRoll(6).key, "precisionInefficiency");
+});
+
+test("sorteia de uma a três magias sem repetição", () => {
+  const pool = [{ name: "A" }, { name: "B" }, { name: "C" }, { name: "D" }];
+  const sequence = (values) => () => values.shift() ?? 0;
+  assert.equal(selectRandomSpells(pool, 3, sequence([0.79, 0])).length, 1);
+  assert.equal(selectRandomSpells(pool, 3, sequence([0.80, 0, 0])).length, 2);
+  const selected = selectRandomSpells(pool, 3, sequence([0.95, 0, 0, 0]));
+  assert.equal(selected.length, 3);
+  assert.equal(new Set(selected.map((spell) => spell.name)).size, 3);
 });

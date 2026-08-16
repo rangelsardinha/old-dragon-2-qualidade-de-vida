@@ -1,0 +1,54 @@
+<section class="tomo-browser">
+  <header class="tomo-filters">
+    <div class="tomo-tabs">
+      {{#each traditions as |label key|}}
+        <button type="button" class="{{#ifCond ../filters.tradition "==" key}}active{{/ifCond}}" data-filter="tradition" value="{{key}}">{{label}}</button>
+      {{/each}}
+    </div>
+    <input type="search" placeholder="Buscar magia, escola, esfera ou texto" value="{{filters.query}}" data-filter="query">
+    <select data-filter="circle">
+      <option value="">Todos os circulos</option>
+      {{#each circles as |circle|}}
+        <option value="{{circle}}" {{#ifCond ../filters.circle "==" circle}}selected{{/ifCond}}>{{circle}}º circulo</option>
+      {{/each}}
+    </select>
+    <select data-filter="school">
+      <option value="">Todas as escolas</option>
+      {{#each schools as |school|}}
+        <option value="{{school}}" {{#ifCond ../filters.school "==" school}}selected{{/ifCond}}>{{school}}</option>
+      {{/each}}
+    </select>
+    <select data-filter="sphere" {{#unless isDivine}}disabled{{/unless}}>
+      <option value="">Todas as esferas</option>
+      {{#each spheres as |sphere|}}
+        <option value="{{sphere}}" {{#ifCond ../filters.sphere "==" sphere}}selected{{/ifCond}}>{{sphere}}</option>
+      {{/each}}
+    </select>
+  </header>
+
+  <div class="tomo-count">{{shown}} de {{total}} magias</div>
+
+  <div class="tomo-list">
+    {{#each grouped as |spells circle|}}
+      <h2>{{circle}}º circulo</h2>
+      {{#each spells as |spell|}}
+        <article class="tomo-spell-row" data-spell-id="{{spell._id}}" draggable="true">
+          <div class="tomo-main">
+            <h3>{{spell.name}}</h3>
+            <div class="tomo-tags">
+              {{#each spell.tomoMeta.escolas as |school|}}<span>{{school}}</span>{{/each}}
+              {{#each spell.tomoMeta.esferas as |sphere|}}<span class="sphere">{{sphere}}</span>{{/each}}
+            </div>
+          </div>
+          <div class="tomo-stat"><strong>Alcance</strong>{{spell.system.range}}</div>
+          <div class="tomo-stat"><strong>Duracao</strong>{{spell.system.duration}}</div>
+          <div class="tomo-stat"><strong>JP</strong>{{spell.system.jp}}</div>
+          <div class="tomo-actions">
+            <button type="button" data-action="preview" title="Abrir ficha"><i class="fa-solid fa-eye"></i></button>
+            <button type="button" data-action="add" title="Adicionar ao personagem selecionado"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </article>
+      {{/each}}
+    {{/each}}
+  </div>
+</section>

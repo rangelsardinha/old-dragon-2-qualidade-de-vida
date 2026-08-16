@@ -1,0 +1,145 @@
+.tomo-de-magia .window-content {
+  padding: 0;
+}
+
+.tomo-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100%;
+  padding: 12px;
+}
+
+.tomo-filters {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) repeat(3, minmax(140px, 180px));
+  gap: 8px;
+  align-items: center;
+}
+
+.tomo-tabs {
+  display: inline-flex;
+  border: 1px solid var(--color-border-light-primary);
+}
+
+.tomo-tabs button {
+  border: 0;
+  border-radius: 0;
+  padding: 6px 10px;
+}
+
+.tomo-tabs button.active {
+  background: #6f2138;
+  color: #fff;
+}
+
+.tomo-filters input,
+.tomo-filters select {
+  height: 32px;
+}
+
+.tomo-count {
+  color: var(--color-text-dark-secondary);
+  font-size: 12px;
+}
+
+.tomo-list {
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.tomo-list h2 {
+  margin: 14px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-border-light-tertiary);
+  font-size: 16px;
+}
+
+.tomo-spell-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 120px 150px 90px 72px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: grab;
+}
+
+.tomo-spell-row:hover {
+  background: rgba(111, 33, 56, 0.08);
+}
+
+.tomo-main h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.tomo-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tomo-tags span {
+  padding: 1px 5px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tomo-tags .sphere {
+  border-color: #2f5f73;
+  color: #1f4d60;
+}
+
+.tomo-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.tomo-stat strong {
+  color: var(--color-text-dark-secondary);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.tomo-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.tomo-actions button {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+}
+
+.tomo-de-magia-meta {
+  margin-bottom: 10px;
+  padding: 8px;
+  border-left: 3px solid #6f2138;
+  background: rgba(111, 33, 56, 0.08);
+}
+
+.tomo-de-magia-meta p {
+  margin: 0 0 3px;
+}
+
+@media (max-width: 760px) {
+  .tomo-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .tomo-spell-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tomo-actions {
+    justify-content: flex-start;
+  }
+}

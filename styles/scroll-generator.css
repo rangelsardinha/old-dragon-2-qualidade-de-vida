@@ -1,0 +1,17 @@
+.od2qdv-open-scroll-generator { width: auto; }
+.od2qdv-scroll-form .form-group { margin-bottom: .5rem; }
+.od2qdv-scroll-result ol { padding-left: 1.5rem; }
+.od2qdv-scroll-result li { margin: .25rem 0; }
+.od2qdv-scroll-drop { display: flex; min-height: 90px; align-items: center; justify-content: center; gap: .5rem; border: 2px dashed var(--color-border-light-primary, #777); border-radius: 5px; transition: background .15s, border-color .15s; }
+.od2qdv-scroll-drop.dragover { border-color: #6f2138; background: rgba(111, 33, 56, .12); }
+.od2qdv-scroll-selected { margin: .65rem 0; padding-left: 1.5rem; }
+.od2qdv-scroll-selected li { padding: .2rem 0; }
+.od2qdv-scroll-selected a { float: right; cursor: pointer; }
+.od2qdv-scroll-builder-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+.od2qdv-scroll-builder-actions button { width: auto; }
+.od2qdv-scroll-use { margin: .75rem; padding: .65rem; border: 1px solid var(--color-border-light-primary, #777); border-radius: 4px; }
+.od2qdv-scroll-use ol { padding-left: 1.5rem; }
+.od2qdv-scroll-use li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin: .35rem 0; }
+.od2qdv-scroll-use button { flex: 0 0 auto; width: auto; }
+.od2qdv-scroll-curse { margin: .75rem 0; padding: .65rem; border: 2px solid #8b1e1e; background: rgba(139, 30, 30, .12); color: var(--color-text-primary); }
+.od2qdv-scroll-curse strong { color: #a51f1f; }

@@ -17,7 +17,7 @@ jobs:
           node-version: 22
       - run: npm run check
       - name: Montar pacote
-        run: zip -r old-dragon-2-qualidade-de-vida.zip module.json README.md LICENSE lang scripts styles
+        run: zip -r old-dragon-2-qualidade-de-vida.zip module.json README.md LICENSE lang scripts styles data assets packs
       - name: Publicar release
         uses: softprops/action-gh-release@v2
         with:

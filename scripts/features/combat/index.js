@@ -70,7 +70,7 @@ const FALLBACK_I18N = {
   'OD2CA.Dialog.damageAdjustment.weakness': 'Fraqueza',
   'OD2CA.Dialog.damageAdjustment.resistance': 'Resistencia',
   'OD2CA.Dialog.damageAdjustment.final': 'Dano aplicado',
-  'OD2CA.Dialog.rollMode': 'Modo da rolagem',
+  'OD2CA.Dialog.rollMode.label': 'Modo da rolagem',
   'OD2CA.Dialog.rollMode.public': 'Publica',
   'OD2CA.Dialog.rollMode.private': 'Mestre',
   'OD2CA.Dialog.rollMode.blind': 'Cega',
@@ -120,8 +120,12 @@ Hooks.on('renderActorSheet', (app, html) => {
   root.addEventListener('click', (event) => onSheetClick(event, app.actor), true);
 });
 
-Hooks.on('renderChatMessage', onRenderChatMessage);
-Hooks.on('renderChatMessageHTML', onRenderChatMessage);
+Hooks.once('init', () => {
+  const hook = Number(game.release?.generation ?? 13) >= 14
+    ? 'renderChatMessageHTML'
+    : 'renderChatMessage';
+  Hooks.on(hook, onRenderChatMessage);
+});
 
 function onRenderChatMessage(message, html) {
   if (!isEnabled()) return;
@@ -555,7 +559,7 @@ async function requestAttackOptions(actor, item, button) {
         </select>
       </div>
       <div class="form-group">
-        <label>${t('OD2CA.Dialog.rollMode')}</label>
+        <label>${t('OD2CA.Dialog.rollMode.label')}</label>
         <select name="rollMode">
           <option value="public">${t('OD2CA.Dialog.rollMode.public')}</option>
           <option value="private">${t('OD2CA.Dialog.rollMode.private')}</option>
