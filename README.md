@@ -6,6 +6,8 @@ Módulo comunitário para Foundry VTT que reúne automações opcionais para o s
 
 Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Configurar ajustes → Configurações de módulo**.
 
+[![Assista à apresentação do Old Dragon 2: Qualidade de Vida](https://img.youtube.com/vi/R_b9y9a12qI/maxresdefault.jpg)](https://youtu.be/R_b9y9a12qI)
+
 ### Automação de combate
 
 - Intercepta ataques das fichas de personagens e monstros.
@@ -57,6 +59,15 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Cada magia possui link para seu documento e um botão **Usar**; o uso publica o cartão da magia no chat e consome o pergaminho.
 - Ao usar um pergaminho amaldiçoado, o efeito é enviado por mensagem privada somente aos Mestres.
 - O resultado pode ser transferido diretamente para um personagem ou ajudante.
+
+### Carta de Controle de Sessão
+
+- Adiciona **Nova Carta de Controle** ao diretório de Diários para o Mestre.
+- Organiza quatro horas de exploração em turnos de 10 minutos.
+- Automatiza rolagens secretas de encontro e avisos de descanso, tochas e lanternas.
+- Mantém notas públicas e notas privadas exclusivas do Mestre.
+- Reconhece cartas criadas pelo antigo módulo independente `carta-de-controle-de-sessao-od2`.
+- Ao usar esta versão incorporada, desative o módulo separado para evitar eventos duplicados.
 
 ## Compatibilidade
 

@@ -21,6 +21,10 @@ Hooks.once("init", () => {
     enableScrollGenerator: {
       name: "Gerador de pergaminhos",
       hint: "Permite ao Mestre gerar pergaminhos arcanos e divinos do SRD e, quando habilitado, do Tomo de Magia."
+    },
+    enableSessionControl: {
+      name: "Carta de Controle de Sessão",
+      hint: "Adiciona aos Diários uma carta para controlar turnos, encontros, descanso, tochas, lanternas e notas da sessão."
     }
   };
   const localized = (key, fallback) => {
@@ -42,6 +46,13 @@ Hooks.once("init", () => {
   worldToggle("enableMonsterEquipment");
   worldToggle("enableSpellTome");
   worldToggle("enableScrollGenerator");
+  worldToggle("enableSessionControl");
+
+  game.settings.register(MODULE_ID, "sessionEncounterDie", {
+    name: "Dado de encontros aleatórios",
+    hint: "Fórmula rolada em segredo para o Mestre nos turnos marcados com E.",
+    scope: "world", config: true, type: String, default: "1d6"
+  });
 
   game.settings.register(MODULE_ID, "combatAutoDamage", {
     name: "OD2CA.Settings.combatAutoDamage.name",

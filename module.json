@@ -2,11 +2,11 @@
   "id": "old-dragon-2-qualidade-de-vida",
   "title": "Old Dragon 2: Qualidade de Vida",
   "description": "Automações modulares e configuráveis para o sistema Old Dragon 2ª Edição.",
-  "version": "0.6.17",
+  "version": "0.7.1",
   "license": "CC-BY-SA-4.0",
   "url": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida",
   "manifest": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/latest/download/module.json",
-  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.6.17/old-dragon-2-qualidade-de-vida.zip",
+  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.7.1/old-dragon-2-qualidade-de-vida.zip",
   "authors": [{ "name": "Rangel Sardinha" }],
   "compatibility": {
     "minimum": "13",
@@ -19,14 +19,16 @@
     "scripts/features/equipment-containers/index.js",
     "scripts/features/monster-equipment/index.js",
     "scripts/features/spell-tome/index.js",
-    "scripts/features/scroll-generator/index.js"
+    "scripts/features/scroll-generator/index.js",
+    "scripts/features/session-control/index.js"
   ],
   "styles": [
     "styles/combat.css",
     "styles/equipment-containers.css",
     "styles/monster-equipment.css",
     "styles/spell-tome.css",
-    "styles/scroll-generator.css"
+    "styles/scroll-generator.css",
+    "styles/session-control.css"
   ],
   "packs": [
     { "name": "arcane-spells", "label": "Tomo de Magia: Arcanas por Círculo", "path": "packs/arcane-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
