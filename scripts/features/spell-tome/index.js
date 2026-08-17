@@ -737,18 +737,54 @@ async function ensurePublicRulesJournals() {
   await game.settings.set(MODULE_ID, "worldRulesVersion", PACK_VERSION);
 }
 
-const BaseApplication = foundry.appv1?.api?.Application ?? Application;
+async function browserContext(filters) {
+  const data = await loadSpells();
+  const all = data[filters.tradition] ?? [];
+  const filtered = all.filter((spell) => {
+    const meta = metaOf(spell);
+    const haystack = [spell.name, spell.system?.description, meta.fonte, ...(meta.escolas ?? []), ...(meta.esferas ?? [])]
+      .join(" ").toLocaleLowerCase("pt-BR");
+    return (!filters.query || haystack.includes(filters.query.toLocaleLowerCase("pt-BR")))
+      && (!filters.circle || meta.circulo === filters.circle)
+      && (!filters.school || (meta.escolas ?? []).includes(filters.school))
+      && (!filters.sphere || (meta.esferas ?? []).includes(filters.sphere));
+  }).map((spell) => {
+    const copy = foundry.utils.deepClone(spell);
+    copy.tomoMeta = metaOf(spell);
+    return copy;
+  });
+  const grouped = filtered.reduce((acc, spell) => {
+    const circle = metaOf(spell).circulo || "?";
+    acc[circle] ??= [];
+    acc[circle].push(spell);
+    return acc;
+  }, {});
+  return {
+    filters, traditions: traditionLabels,
+    circles: uniq(all.map((spell) => metaOf(spell).circulo)).sort((a, b) => Number(a) - Number(b)),
+    schools: uniq(all.flatMap((spell) => metaOf(spell).escolas ?? [])),
+    spheres: uniq((data.divine ?? []).flatMap((spell) => metaOf(spell).esferas ?? [])),
+    grouped, total: all.length, shown: filtered.length,
+    isDivine: filters.tradition === "divine",
+  };
+}
+
+function initialBrowserFilters() {
+  return { tradition: "arcane", query: "", circle: "", school: "", sphere: "" };
+}
+
+async function spellFromBrowserElement(element) {
+  const id = element.closest("[data-spell-id]").dataset.spellId;
+  const data = await loadSpells();
+  return [...data.arcane, ...data.divine].find((spell) => spell._id === id);
+}
+
+const BaseApplication = foundry.appv1?.api?.Application ?? globalThis.Application;
 
 class TomoDeMagiaBrowser extends BaseApplication {
   constructor(options = {}) {
     super(options);
-    this.filters = {
-      tradition: "arcane",
-      query: "",
-      circle: "",
-      school: "",
-      sphere: "",
-    };
+    this.filters = initialBrowserFilters();
   }
 
   static get defaultOptions() {
@@ -764,47 +800,7 @@ class TomoDeMagiaBrowser extends BaseApplication {
   }
 
   async getData() {
-    const data = await loadSpells();
-    const all = data[this.filters.tradition] ?? [];
-    const filtered = all.filter((spell) => {
-      const meta = metaOf(spell);
-      const haystack = [
-        spell.name,
-        spell.system?.description,
-        meta.fonte,
-        ...(meta.escolas ?? []),
-        ...(meta.esferas ?? []),
-      ].join(" ").toLocaleLowerCase("pt-BR");
-      return (
-        (!this.filters.query || haystack.includes(this.filters.query.toLocaleLowerCase("pt-BR"))) &&
-        (!this.filters.circle || meta.circulo === this.filters.circle) &&
-        (!this.filters.school || (meta.escolas ?? []).includes(this.filters.school)) &&
-        (!this.filters.sphere || (meta.esferas ?? []).includes(this.filters.sphere))
-      );
-    }).map((spell) => {
-      const copy = foundry.utils.deepClone(spell);
-      copy.tomoMeta = metaOf(spell);
-      return copy;
-    });
-
-    const grouped = filtered.reduce((acc, spell) => {
-      const circle = metaOf(spell).circulo || "?";
-      acc[circle] ??= [];
-      acc[circle].push(spell);
-      return acc;
-    }, {});
-
-    return {
-      filters: this.filters,
-      traditions: traditionLabels,
-      circles: uniq(all.map((spell) => metaOf(spell).circulo)).sort((a, b) => Number(a) - Number(b)),
-      schools: uniq(all.flatMap((spell) => metaOf(spell).escolas ?? [])),
-      spheres: uniq((data.divine ?? []).flatMap((spell) => metaOf(spell).esferas ?? [])),
-      grouped,
-      total: all.length,
-      shown: filtered.length,
-      isDivine: this.filters.tradition === "divine",
-    };
+    return browserContext(this.filters);
   }
 
   activateListeners(html) {
@@ -839,10 +835,61 @@ class TomoDeMagiaBrowser extends BaseApplication {
   }
 
   async _spellFromElement(element) {
-    const id = element.closest("[data-spell-id]").dataset.spellId;
-    const data = await loadSpells();
-    return [...data.arcane, ...data.divine].find((spell) => spell._id === id);
+    return spellFromBrowserElement(element);
   }
+}
+
+const ApplicationV2 = foundry.applications?.api?.ApplicationV2;
+const HandlebarsApplicationMixin = foundry.applications?.api?.HandlebarsApplicationMixin;
+const TomoDeMagiaBrowserV2 = ApplicationV2 && HandlebarsApplicationMixin
+  ? class extends HandlebarsApplicationMixin(ApplicationV2) {
+    static DEFAULT_OPTIONS = {
+      id: "tomo-de-magia-browser",
+      classes: ["tomo-de-magia"],
+      position: { width: 920, height: 720 },
+      window: { title: "Tomo de Magia", resizable: true },
+    };
+    static PARTS = { main: { template: `modules/${MODULE_ID}/scripts/features/spell-tome/browser.hbs` } };
+
+    constructor(options = {}) {
+      super(options);
+      this.filters = initialBrowserFilters();
+    }
+
+    async _prepareContext() {
+      return browserContext(this.filters);
+    }
+
+    _onRender(context, options) {
+      super._onRender(context, options);
+      const root = this.element;
+      root.querySelectorAll("[data-filter]").forEach((input) => {
+        for (const eventName of ["input", "change", "click"]) input.addEventListener(eventName, () => {
+          this.filters[input.dataset.filter] = input.value;
+          if (input.dataset.filter === "tradition" && input.value === "arcane") this.filters.sphere = "";
+          this.render();
+        });
+      });
+      root.querySelectorAll(".tomo-spell-row").forEach((row) => row.addEventListener("dragstart", async (event) => {
+        const spell = await spellFromBrowserElement(row);
+        event.dataTransfer.setData("text/plain", JSON.stringify(toDropData(spell)));
+      }));
+      root.querySelectorAll("[data-action='add']").forEach((button) => button.addEventListener("click", async () => {
+        await addSpellToActor(await spellFromBrowserElement(button));
+      }));
+      root.querySelectorAll("[data-action='preview']").forEach((button) => button.addEventListener("click", async () => {
+        const spell = await spellFromBrowserElement(button);
+        new Item.implementation(foundry.utils.deepClone(spell), { temporary: true }).sheet.render(true);
+      }));
+    }
+  }
+  : null;
+
+function openSpellBrowser() {
+  if (Number(game.release?.generation ?? 13) >= 14 && TomoDeMagiaBrowserV2) {
+    return new TomoDeMagiaBrowserV2().render({ force: true });
+  }
+  return new TomoDeMagiaBrowser().render(true);
 }
 
 function wildVariationFor(spell, d20) {
@@ -960,7 +1007,7 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   game.od2Qdv ??= {};
   game.od2Qdv.spellTome = {
-    open: () => new TomoDeMagiaBrowser().render(true),
+    open: openSpellBrowser,
     loadSpells,
     loadRules,
     populateCompendia: ensureCompendiaPopulated,

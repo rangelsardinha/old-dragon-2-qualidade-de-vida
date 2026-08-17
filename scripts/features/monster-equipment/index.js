@@ -77,20 +77,24 @@ async function chooseTarget(item) {
     .filter((actor) => actor.id !== item.actor.id && canReceiveContainer(actor) && actor.isOwner)
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!candidates.length) return ui.notifications.warn("Nenhum ator editável está disponível para receber o item.");
-  const DialogClass = foundry.appv1?.api?.Dialog ?? globalThis.Dialog;
   const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS?.OWNER ?? 3;
-  const targetId = await DialogClass.prompt({
-    title: `Transferir ${item.name}`,
-    content: `<div class="form-group"><label>Destino</label><select name="targetActor">${candidates.map((actor) => {
+  const content = `<div class="form-group"><label>Destino</label><select name="targetActor">${candidates.map((actor) => {
       const owners = actorOwnerNames(actor, game.users, ownerLevel);
       const owner = owners.length ? owners.join(", ") : "Mestre";
       const kind = actor.type === "monster" ? " [Monstro]" : actor.type === "retainer" ? " [Ajudante]" : "";
       return `<option value="${actor.id}">${escapeHtml(actor.name)}${kind} (${escapeHtml(owner)})</option>`;
-    }).join("")}</select></div>`,
-    label: "Transferir",
-    callback: (html) => html.find?.('[name="targetActor"]').val() ?? html.querySelector?.('[name="targetActor"]')?.value,
-    rejectClose: false
-  });
+    }).join("")}</select></div>`;
+  const DialogV2 = Number(game.release?.generation ?? 13) >= 14 ? foundry.applications?.api?.DialogV2 : null;
+  const targetId = DialogV2
+    ? await DialogV2.prompt({
+      window: { title: `Transferir ${item.name}` }, content,
+      ok: { label: "Transferir", callback: (_event, button) => button.form.elements.targetActor.value }
+    })
+    : await (foundry.appv1?.api?.Dialog ?? globalThis.Dialog).prompt({
+      title: `Transferir ${item.name}`, content, label: "Transferir",
+      callback: (html) => html.find?.('[name="targetActor"]').val() ?? html.querySelector?.('[name="targetActor"]')?.value,
+      rejectClose: false
+    });
   const target = game.actors.get(targetId);
   if (target) await transferEmbeddedTree(item, target);
 }

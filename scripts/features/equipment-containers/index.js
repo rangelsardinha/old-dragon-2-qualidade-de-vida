@@ -73,6 +73,16 @@ function coinLabel(coins) {
 }
 
 async function confirmDialog({ title, content }) {
+  const DialogV2 = Number(game.release?.generation ?? 13) >= 14
+    ? foundry.applications?.api?.DialogV2
+    : null;
+  if (DialogV2) {
+    return DialogV2.confirm({
+      window: { title }, content,
+      yes: { default: false, callback: () => true },
+      no: { default: true, callback: () => false }
+    });
+  }
   const DialogClass = foundry.appv1?.api?.Dialog ?? globalThis.Dialog;
   if (!DialogClass) return globalThis.confirm?.(content.replace(/<[^>]+>/g, " ")) ?? false;
   return DialogClass.confirm({ title, content, yes: () => true, no: () => false, defaultYes: false });
@@ -222,21 +232,25 @@ async function chooseTransferTarget(container) {
     ui.notifications.warn("Nenhum outro personagem editável está disponível para receber o recipiente.");
     return;
   }
-  const DialogClass = foundry.appv1?.api?.Dialog ?? globalThis.Dialog;
-  if (!DialogClass?.prompt) return;
   const ownerLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS?.OWNER ?? 3;
-  const targetId = await DialogClass.prompt({
-    title: `Transferir ${container.name}`,
-    content: `<div class="form-group"><label>Ator de destino</label><select name="targetActor">${candidates.map((actor) => {
+  const content = `<div class="form-group"><label>Ator de destino</label><select name="targetActor">${candidates.map((actor) => {
       const owners = actorOwnerNames(actor, game.users, ownerLevel);
       const ownerLabel = owners.length ? owners.join(", ") : "Mestre";
       const kind = actor.type === "monster" ? " [Monstro]" : actor.type === "retainer" ? " [Ajudante]" : "";
       return `<option value="${actor.id}">${escapeHtml(actor.name)}${kind} (${escapeHtml(ownerLabel)})</option>`;
-    }).join("")}</select></div>`,
-    label: container.type === "container" ? "Transferir com todo o conteúdo" : "Transferir item",
-    callback: (html) => html.find?.('[name="targetActor"]').val() ?? html.querySelector?.('[name="targetActor"]')?.value,
-    rejectClose: false
-  });
+    }).join("")}</select></div>`;
+  const label = container.type === "container" ? "Transferir com todo o conteúdo" : "Transferir item";
+  const DialogV2 = Number(game.release?.generation ?? 13) >= 14 ? foundry.applications?.api?.DialogV2 : null;
+  const targetId = DialogV2
+    ? await DialogV2.prompt({
+      window: { title: `Transferir ${container.name}` }, content,
+      ok: { label, callback: (_event, button) => button.form.elements.targetActor.value }
+    })
+    : await (foundry.appv1?.api?.Dialog ?? globalThis.Dialog).prompt({
+      title: `Transferir ${container.name}`, content, label,
+      callback: (html) => html.find?.('[name="targetActor"]').val() ?? html.querySelector?.('[name="targetActor"]')?.value,
+      rejectClose: false
+    });
   const target = game.actors.get(targetId);
   if (target) await transferEmbeddedTree(container, target);
 }

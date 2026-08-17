@@ -109,6 +109,44 @@ function tf(key, data = {}) {
   return translated;
 }
 
+function dialogV2() {
+  return Number(game.release?.generation ?? 13) >= 14
+    ? foundry.applications?.api?.DialogV2
+    : null;
+}
+
+async function confirmCompat({ title, content, defaultYes = false }) {
+  const DialogV2 = dialogV2();
+  if (DialogV2) {
+    return DialogV2.confirm({
+      window: { title },
+      content,
+      yes: { default: defaultYes, callback: () => true },
+      no: { default: !defaultYes, callback: () => false },
+    });
+  }
+  return Dialog.confirm({ title, content, yes: () => true, no: () => false, defaultYes });
+}
+
+async function promptNumberCompat({ title, content, label, field = 'damage' }) {
+  const fields = content.replace(/^\s*<form[^>]*>|<\/form>\s*$/g, '');
+  const DialogV2 = dialogV2();
+  if (DialogV2) {
+    return DialogV2.prompt({
+      window: { title },
+      content: fields,
+      ok: { label, callback: (_event, button) => Number(button.form.elements[field]?.value) || 0 },
+    });
+  }
+  return Dialog.prompt({
+    title,
+    content: `<form>${fields}</form>`,
+    label,
+    callback: (html) => Number(new FormData(html[0].querySelector('form')).get(field)) || 0,
+    rejectClose: false,
+  });
+}
+
 Hooks.on('renderActorSheet', (app, html) => {
   if (!isEnabled()) return;
   if (!app.actor?.isOwner) return;
@@ -285,8 +323,8 @@ async function requestXpDistribution(recipients, totalXp) {
       <td>${escapeHtml(actor.name)}</td>
       <td><input type="number" name="xp.${escapeAttribute(actor.id)}" min="0" step="1" value="${equalShare}"></td>
     </tr>`).join('');
-  const content = `
-    <form class="od2ca-xp-form">
+  const fields = `
+    <div class="od2ca-xp-form">
       <div class="od2ca-card">
         <p>${t('OD2CA.Dialog.xpDistribution.content')}</p>
         <div><strong>${t('OD2CA.Chat.totalXp')}:</strong> ${formatXp(totalXp)} XP</div>
@@ -299,7 +337,31 @@ async function requestXpDistribution(recipients, totalXp) {
           <span><strong>${t('OD2CA.Dialog.xpDistribution.remaining')}:</strong> <span data-od2ca-xp-remaining>0</span> XP</span>
         </div>
       </div>
-    </form>`;
+    </div>`;
+
+  const readValues = (form) => {
+    const formData = new FormData(form);
+    return recipients.map((actor) => ({
+      actorId: actor.id,
+      amount: Math.max(0, Math.trunc(Number(formData.get(`xp.${actor.id}`)) || 0)),
+    }));
+  };
+  const DialogV2 = dialogV2();
+  if (DialogV2) {
+    return DialogV2.wait({
+      window: { title: t('OD2CA.Dialog.xpDistribution.title') },
+      content: fields,
+      buttons: [
+        {
+          action: 'distribute', icon: 'fa-solid fa-award',
+          label: t('OD2CA.Dialog.xpDistribution.confirm'), default: true,
+          callback: (_event, button) => readValues(button.form),
+        },
+        { action: 'cancel', icon: 'fa-solid fa-times', label: t('OD2CA.Dialog.cancel'), callback: () => null },
+      ],
+      render: (_event, dialog) => bindXpDistributionTotals(dialog.element, totalXp),
+    });
+  }
 
   return new Promise((resolve) => {
     let settled = false;
@@ -310,19 +372,14 @@ async function requestXpDistribution(recipients, totalXp) {
     };
     const dialog = new Dialog({
       title: t('OD2CA.Dialog.xpDistribution.title'),
-      content,
+      content: `<form>${fields}</form>`,
       buttons: {
         distribute: {
           icon: '<i class="fas fa-award"></i>',
           label: t('OD2CA.Dialog.xpDistribution.confirm'),
           callback: (html) => {
             const root = html instanceof HTMLElement ? html : html[0];
-            const formData = new FormData(root.querySelector('form'));
-            const values = recipients.map((actor) => ({
-              actorId: actor.id,
-              amount: Math.max(0, Math.trunc(Number(formData.get(`xp.${actor.id}`)) || 0)),
-            }));
-            finish(values);
+            finish(readValues(root.querySelector('form')));
           },
         },
         cancel: {
@@ -589,8 +646,8 @@ function getAttackItem(actor, button) {
 
 async function requestAttackOptions(actor, item, button) {
   const baseFormula = getAttackFormula(actor, item, button, 0, '');
-  const content = `
-    <form>
+  const fields = `
+    <div class="od2ca-attack-options">
       <div class="form-group">
         <label>Formula</label>
         <input type="text" value="${escapeAttribute(baseFormula)}" disabled>
@@ -627,23 +684,39 @@ async function requestAttackOptions(actor, item, button) {
           <option value="self">${t('OD2CA.Dialog.rollMode.self')}</option>
         </select>
       </div>
-    </form>`;
+    </div>`;
+
+  const readOptions = (form) => {
+    const data = new FormData(form);
+    return {
+      ba: button.dataset.ba,
+      baBonus: button.dataset.baBonus === '',
+      bonus: Number(data.get('bonus')) || 0,
+      adjustment: String(data.get('adjustment') ?? ''),
+      attackMode: String(data.get('attackMode') ?? getDefaultAttackMode(item)),
+      rollMode: String(data.get('rollMode') ?? 'public'),
+    };
+  };
+
+  const DialogV2 = foundry.applications?.api?.DialogV2;
+  if (Number(game.release?.generation ?? 13) >= 14 && DialogV2) {
+    return DialogV2.prompt({
+      window: { title: `Rolar ataque: ${item.name}` },
+      content: fields,
+      ok: {
+        label: t('OD2CA.Dialog.roll'),
+        callback: (_event, dialogButton) => readOptions(dialogButton.form),
+      },
+    });
+  }
 
   return Dialog.prompt({
     title: `Rolar ataque: ${item.name}`,
-    content,
+    content: `<form>${fields}</form>`,
     label: t('OD2CA.Dialog.roll'),
     callback: (html) => {
       const form = html[0].querySelector('form');
-      const data = new FormData(form);
-      return {
-        ba: button.dataset.ba,
-        baBonus: button.dataset.baBonus === '',
-        bonus: Number(data.get('bonus')) || 0,
-        adjustment: String(data.get('adjustment') ?? ''),
-        attackMode: String(data.get('attackMode') ?? getDefaultAttackMode(item)),
-        rollMode: String(data.get('rollMode') ?? 'public'),
-      };
+      return readOptions(form);
     },
     rejectClose: false,
   });
@@ -746,6 +819,18 @@ function getNaturalD20(roll) {
 }
 
 async function requestCriticalRule() {
+  const DialogV2 = dialogV2();
+  if (DialogV2) {
+    return DialogV2.wait({
+      window: { title: t('OD2CA.Dialog.criticalRule.title') },
+      content: `<p>${t('OD2CA.Dialog.criticalRule.content')}</p>`,
+      buttons: [
+        { action: 'classic', icon: 'fa-solid fa-dice-d20', label: t('OD2CA.Dialog.criticalRule.classic'), default: true, callback: () => classicCriticalResult() },
+        { action: 'expanded', icon: 'fa-solid fa-table-list', label: t('OD2CA.Dialog.criticalRule.expanded'), callback: () => rollCriticalResult() },
+      ],
+      close: () => classicCriticalResult(),
+    });
+  }
   return new Promise((resolve) => {
     let selected = false;
 
@@ -789,6 +874,18 @@ function classicCriticalResult() {
 }
 
 async function requestFumbleRule() {
+  const DialogV2 = dialogV2();
+  if (DialogV2) {
+    return DialogV2.wait({
+      window: { title: t('OD2CA.Dialog.fumbleRule.title') },
+      content: `<p>${t('OD2CA.Dialog.fumbleRule.content')}</p>`,
+      buttons: [
+        { action: 'classic', icon: 'fa-solid fa-dice-d20', label: t('OD2CA.Dialog.fumbleRule.classic'), default: true, callback: () => classicFumbleResult() },
+        { action: 'expanded', icon: 'fa-solid fa-table-list', label: t('OD2CA.Dialog.fumbleRule.expanded'), callback: () => rollFumbleResult() },
+      ],
+      close: () => classicFumbleResult(),
+    });
+  }
   return new Promise((resolve) => {
     let selected = false;
 
@@ -1136,6 +1233,20 @@ async function requestDamageAdjustment(target, damage) {
       </dl>
     </div>`;
 
+  const DialogV2 = dialogV2();
+  if (DialogV2) {
+    return DialogV2.wait({
+      window: { title: t('OD2CA.Dialog.damageAdjustment.title') },
+      content,
+      buttons: [
+        { action: 'normal', label: options.normal.label, default: true, callback: () => options.normal },
+        { action: 'weakness', label: options.weakness.label, callback: () => options.weakness },
+        { action: 'resistance', label: options.resistance.label, callback: () => options.resistance },
+      ],
+      close: () => null,
+    });
+  }
+
   return new Promise((resolve) => {
     let selected = false;
 
@@ -1281,7 +1392,7 @@ async function confirmGmDamageRequest(payload) {
       </dl>
     </div>`;
 
-  return Dialog.confirm({
+  return confirmCompat({
     title: t('OD2CA.Dialog.gmDamage.title'),
     content,
     yes: () => true,
@@ -1382,7 +1493,7 @@ function canApplyDamage(actor) {
 }
 
 async function confirmAndMarkDead(target) {
-  const confirmed = await Dialog.confirm({
+  const confirmed = await confirmCompat({
     title: t('OD2CA.Dialog.death.title'),
     content: `<p>${tf('OD2CA.Dialog.death.content', { name: escapeHtml(target.name) })}</p>`,
     yes: () => true,
@@ -1558,7 +1669,9 @@ async function createChatMessage(data, mode) {
   const messageData = { ...data };
   const value = rollMode(mode);
 
-  if (ChatMessage.applyRollMode) {
+  if (Number(game.release?.generation ?? 13) >= 14 && ChatMessage.applyMode) {
+    ChatMessage.applyMode(messageData, value);
+  } else if (ChatMessage.applyRollMode) {
     ChatMessage.applyRollMode(messageData, value);
   } else if (mode === 'private' || mode === 'blind') {
     messageData.whisper = ChatMessage.getWhisperRecipients('GM').map((user) => user.id);
@@ -1621,7 +1734,7 @@ async function confirmCriticalDamage(target, critical, damageResult) {
       ${criticalHtml(critical, damageResult)}
     </div>`;
 
-  return Dialog.confirm({
+  return confirmCompat({
     title: t('OD2CA.Dialog.criticalDamage.title'),
     content,
     yes: () => true,
@@ -1643,15 +1756,10 @@ async function requestCriticalManualDamage(critical) {
       </div>
     </form>`;
 
-  const value = await Dialog.prompt({
+  const value = await promptNumberCompat({
     title: t('OD2CA.Dialog.criticalDamage.title'),
     content,
     label: t('OD2CA.Dialog.criticalDamage.confirm'),
-    callback: (html) => {
-      const form = html[0].querySelector('form');
-      return Number(new FormData(form).get('damage')) || 0;
-    },
-    rejectClose: false,
   });
 
   return value ?? null;
@@ -1676,15 +1784,10 @@ async function requestManualDamage() {
       </div>
     </form>`;
 
-  const value = await Dialog.prompt({
+  const value = await promptNumberCompat({
     title: t('OD2CA.Dialog.manualDamage.title'),
     content,
     label: t('OD2CA.Dialog.apply'),
-    callback: (html) => {
-      const form = html[0].querySelector('form');
-      return Number(new FormData(form).get('damage')) || 0;
-    },
-    rejectClose: false,
   });
 
   return value ?? null;
