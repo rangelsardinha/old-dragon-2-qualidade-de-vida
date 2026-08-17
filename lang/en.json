@@ -11,6 +11,8 @@
   "OD2QDV.Settings.enableScrollGenerator.hint": "Allows the Gamemaster to generate arcane and divine scrolls from the SRD and, when enabled, the Spell Tome.",
   "OD2QDV.Settings.enableSessionControl.name": "Session Control Card",
   "OD2QDV.Settings.enableSessionControl.hint": "Adds a Journal card to track turns, encounters, rests, torches, lanterns, and session notes.",
+  "OD2QDV.Settings.enableCharacterGenerator.name": "Character generator",
+  "OD2QDV.Settings.enableCharacterGenerator.hint": "Adds an Actor-directory wizard for creating characters from the SRD races, classes, and progression.",
   "OD2CA.Settings.combatAutoDamage.name": "Aplicar dano automatico",
   "OD2CA.Settings.combatAutoDamage.hint": "Quando um ataque acertar, rola o dano da arma e desconta automaticamente do alvo.",
   "OD2CA.Settings.combatRequireOneTarget.name": "Exigir exatamente um alvo",

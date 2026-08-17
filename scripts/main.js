@@ -25,6 +25,10 @@ Hooks.once("init", () => {
     enableSessionControl: {
       name: "Carta de Controle de Sessão",
       hint: "Adiciona aos Diários uma carta para controlar turnos, encontros, descanso, tochas, lanternas e notas da sessão."
+    },
+    enableCharacterGenerator: {
+      name: "Gerador de personagens",
+      hint: "Adiciona ao diretório de Atores um assistente para criar personagens usando raças, classes e progressão do SRD."
     }
   };
   const localized = (key, fallback) => {
@@ -47,6 +51,7 @@ Hooks.once("init", () => {
   worldToggle("enableSpellTome");
   worldToggle("enableScrollGenerator");
   worldToggle("enableSessionControl");
+  worldToggle("enableCharacterGenerator");
 
   game.settings.register(MODULE_ID, "sessionEncounterDie", {
     name: "Dado de encontros aleatórios",

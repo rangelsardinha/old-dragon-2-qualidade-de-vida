@@ -1,0 +1,12 @@
+.od2qdv-roll-styles { display: grid; gap: .5rem; }
+.od2qdv-roll-style { display: flex; gap: .6rem; align-items: flex-start; padding: .55rem; border: 1px solid var(--color-border-light-primary); border-radius: 4px; }
+.od2qdv-roll-style span { display: grid; gap: .2rem; }
+.od2qdv-roll-style small { line-height: 1.25; opacity: .8; }
+.od2qdv-character-success h2 { margin-top: 0; }
+.od2qdv-roll-allocation-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .35rem; margin: .5rem 0 1rem; }
+.od2qdv-roll-allocation-summary span { display: grid; place-items: center; padding: .4rem .2rem; border: 1px solid var(--color-border-light-primary); border-radius: 4px; }
+.od2qdv-roll-allocation-summary strong { font-size: 1.25rem; }
+.od2qdv-roll-allocation-summary small { text-align: center; line-height: 1.1; opacity: .8; }
+.od2qdv-approval-actions { display: flex; gap: .5rem; margin-top: .75rem; }
+.od2qdv-approval-actions button { flex: 1; }
+.od2qdv-character-summary table { margin-top: .5rem; }

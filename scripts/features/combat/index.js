@@ -159,7 +159,7 @@ Hooks.on('renderActorSheet', (app, html) => {
 });
 
 Hooks.once('init', () => {
-  const hook = Number(game.release?.generation ?? 13) >= 14
+  const hook = foundry.applications?.api?.ApplicationV2
     ? 'renderChatMessageHTML'
     : 'renderChatMessage';
   Hooks.on(hook, onRenderChatMessage);

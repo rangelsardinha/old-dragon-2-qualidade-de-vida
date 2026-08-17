@@ -69,6 +69,17 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Reconhece cartas criadas pelo antigo módulo independente `carta-de-controle-de-sessao-od2`.
 - Ao usar esta versão incorporada, desative o módulo separado para evitar eventos duplicados.
 
+### Gerador de personagens
+
+- Adiciona **Criar novo personagem** ao diretório de Atores para o Mestre.
+- Define nome, jogador proprietário e raça a partir do compêndio oficial do SRD.
+- Oferece os estilos Clássico, Aventureiro, Heroico, 3d6 Duplo, Camponês, Distribuição e Racial.
+- Permite distribuir resultados quando o método escolhido admitir e aplica os atributos confirmados à ficha.
+- Filtra classes pelas restrições raciais oficiais e sincroniza habilidades de raça e classe.
+- Configura nível, XP mínimo do nível, PV com dado de vida e Constituição e renda inicial editável.
+- Ao concluir, abre a ficha e orienta o jogador a escolher equipamentos e magias.
+- Jogadores podem solicitar a criação; o Mestre autoriza o início, cada rerrolagem e o resumo final diretamente pelo chat.
+
 ## Compatibilidade
 
 - Foundry VTT mínimo 13, máximo 14 e verificado no Foundry VTT 14.

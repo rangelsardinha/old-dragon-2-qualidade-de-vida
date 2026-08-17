@@ -504,11 +504,15 @@ async function generateScroll() {
 function addDirectoryButton(app, html) {
   if (!enabled() || !game.user.isGM) return;
   const root = rootElement(html);
-  if (!root || root.querySelector(".od2qdv-open-scroll-generator")) return;
-  const header = root.querySelector(".directory-header .header-actions, .directory-header");
-  if (!header) return;
-  header.insertAdjacentHTML("beforeend", '<button type="button" class="od2qdv-open-scroll-generator"><i class="fas fa-scroll"></i> Gerar Pergaminho</button>');
-  header.querySelector(".od2qdv-open-scroll-generator").addEventListener("click", () => generateScroll().catch((error) => {
+  if (!root) return;
+  root.querySelector(".od2qdv-scroll-generator-header")?.remove();
+  const directoryHeader = root.querySelector(".directory-header");
+  if (!directoryHeader?.parentNode) return;
+  const section = document.createElement("header");
+  section.classList.add("od2qdv-scroll-generator-header", "directory-header");
+  section.innerHTML = '<div class="header-actions action-buttons flexrow"><button type="button" class="od2qdv-open-scroll-generator"><i class="fas fa-scroll"></i> Gerar Pergaminho</button></div>';
+  directoryHeader.parentNode.insertBefore(section, directoryHeader);
+  section.querySelector(".od2qdv-open-scroll-generator").addEventListener("click", () => generateScroll().catch((error) => {
     console.error(`${MODULE_ID} | Falha ao gerar pergaminho`, error);
     ui.notifications.error("Não foi possível gerar o pergaminho. Consulte o console.");
   }));
