@@ -408,6 +408,9 @@ async function handleAttack(actor, button) {
   const item = getAttackItem(actor, button);
   if (!item) return;
 
+  const ammunition = await chooseAmmunition(actor, item, button);
+  if (ammunition.required && !ammunition.item) return;
+
   const targetAc = getArmorClass(target.actor);
   if (!Number.isFinite(targetAc)) {
     ui.notifications.warn(t('OD2CA.Notifications.noTargetAc'));
@@ -417,7 +420,16 @@ async function handleAttack(actor, button) {
   const attackData = await requestAttackOptions(actor, item, button);
   if (!attackData) return;
 
+  if (ammunition.item) {
+    const quantity = Math.max(0, Math.trunc(Number(ammunition.item.system?.quantity) || 0));
+    if (quantity < 1) return ui.notifications.warn(`${ammunition.item.name} não possui unidades disponíveis.`);
+    await ammunition.item.update({ 'system.quantity': quantity - 1 });
+  }
+
   const attackRoll = await rollAttack(actor, item, attackData);
+  if (item.system?.type === 'throwing' && !normalizedItemName(item).includes('funda')) {
+    await item.update({ 'system.is_equipped': false });
+  }
   const naturalD20 = getNaturalD20(attackRoll);
   const fumble = naturalD20 === 1 ? await requestFumbleRule() : null;
   const critical = naturalD20 === 20 ? await requestCriticalRule() : null;
@@ -442,11 +454,12 @@ async function handleAttack(actor, button) {
   const combatAutoDamage = game.settings.get(MODULE_ID, 'combatAutoDamage');
   if (!combatAutoDamage && !critical) return;
 
-  const formula = getDamageFormula(actor, item, attackData.attackMode);
+  const damageItem = ammunition.item ?? item;
+  const formula = getDamageFormula(actor, damageItem, attackData.attackMode);
   if (formula) {
     const damageResult = await rollDamage(actor, formula, critical);
-    await sendDamageMessage(actor, item, target, damageResult.total, damageResult.roll, critical, damageResult, attackData.rollMode);
-    const damageContext = buildDamageContext(actor, item, target, damageResult, critical, attackData);
+    await sendDamageMessage(actor, damageItem, target, damageResult.total, damageResult.roll, critical, damageResult, attackData.rollMode);
+    const damageContext = buildDamageContext(actor, damageItem, target, damageResult, critical, attackData);
 
     if (!combatAutoDamage) return;
 
@@ -499,6 +512,53 @@ async function handleAttack(actor, button) {
     return;
   }
   await applyDamage(target, finalManualDamage, attackData.rollMode, damageContext);
+}
+
+function normalizedItemName(item) {
+  return String(item?.name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+}
+
+function ammunitionFilterForWeapon(weapon, attackButton) {
+  if (weapon?.type !== 'weapon') return null;
+  if (weapon.system?.type === 'throwing') return null;
+  const name = normalizedItemName(weapon);
+  if (/\bbesta\s+de\s+mao\b/.test(name)) return (ammo) => normalizedItemName(ammo).includes('virote pequeno');
+  if (name.includes('besta')) return (ammo) => normalizedItemName(ammo).includes('virote') && !normalizedItemName(ammo).includes('pequeno');
+  if (name.includes('arco')) return (ammo) => normalizedItemName(ammo).includes('flecha');
+  if (weapon.system?.type === 'ranged' || attackButton?.dataset?.ba === 'bad') return () => true;
+  return null;
+}
+
+async function chooseAmmunition(actor, weapon, attackButton) {
+  const matchesWeapon = ammunitionFilterForWeapon(weapon, attackButton);
+  if (!matchesWeapon) return { required: false, item: null };
+  const choices = actor.items.filter((item) =>
+    item.type === 'weapon'
+    && item.system?.type === 'ammunition'
+    && item.system?.is_equipped
+    && Number(item.system?.quantity) > 0
+    && matchesWeapon(item)
+  ).sort((left, right) => left.name.localeCompare(right.name));
+  if (!choices.length) {
+    ui.notifications.warn(`Nenhuma munição compatível equipada está disponível para ${weapon.name}.`);
+    return { required: true, item: null };
+  }
+  const options = choices.map((item) => `<option value="${escapeAttribute(item.id)}">${escapeHtml(item.name)} — ${Math.trunc(Number(item.system.quantity))} unidade(s) — dano ${escapeHtml(item.system?.damage ?? '-')}</option>`).join('');
+  const content = `<div class="form-group"><label>Munição usada</label><select name="ammunition">${options}</select></div>`;
+  let itemId;
+  const DialogV2 = foundry.applications?.api?.DialogV2;
+  if (Number(game.release?.generation ?? 13) >= 14 && DialogV2) {
+    itemId = await DialogV2.prompt({
+      window: { title: `Disparar ${weapon.name}` }, content,
+      ok: { label: 'Usar munição', callback: (_event, button) => button.form.elements.ammunition.value }
+    });
+  } else {
+    itemId = await Dialog.prompt({
+      title: `Disparar ${weapon.name}`, content, label: 'Usar munição',
+      callback: (html) => html.find('[name="ammunition"]').val(), rejectClose: false
+    });
+  }
+  return { required: true, item: actor.items.get(itemId) ?? null };
 }
 
 function getSingleTarget() {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, normalizeCoins, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
+import { actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, isAmmunition, normalizeCoins, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
 import { curseForRoll, selectRandomSpells } from "../scripts/features/scroll-generator/model.js";
 
 const items = [
@@ -39,6 +39,15 @@ test("não permite guardar equipamentos que estejam equipados", () => {
   assert.equal(canStoreItem({ system: { is_equipped: true } }), false);
   assert.equal(canStoreItem({ system: { is_equipped: false } }), true);
   assert.equal(canStoreItem({ system: {} }), true);
+});
+
+test("permite munição equipada somente em recipiente autorizado", () => {
+  const ammunition = { type: "weapon", system: { type: "ammunition", is_equipped: true } };
+  const sword = { type: "weapon", system: { type: "melee", is_equipped: true } };
+  assert.equal(isAmmunition(ammunition), true);
+  assert.equal(canStoreItem(ammunition, false), false);
+  assert.equal(canStoreItem(ammunition, true), true);
+  assert.equal(canStoreItem(sword, true), false);
 });
 
 test("permite transferir recipientes para personagens e ajudantes", () => {

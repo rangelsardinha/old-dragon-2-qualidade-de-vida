@@ -6,7 +6,7 @@ Módulo comunitário para Foundry VTT que reúne automações opcionais para o s
 
 Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Configurar ajustes → Configurações de módulo**.
 
-[![Assista à apresentação do Old Dragon 2: Qualidade de Vida](https://img.youtube.com/vi/R_b9y9a12qI/maxresdefault.jpg)](https://youtu.be/R_b9y9a12qI)
+[![Assista à apresentação do Old Dragon 2: Qualidade de Vida](assets/readme/video-qualidade-de-vida.png)](https://youtu.be/R_b9y9a12qI)
 
 ### Automação de combate
 

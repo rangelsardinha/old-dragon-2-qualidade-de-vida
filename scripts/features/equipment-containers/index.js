@@ -1,10 +1,11 @@
 import {
-  COIN_KEYS, actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, descendantIds, normalizeCoins, subtractCoins, sumAllocatedCoins, wouldCreateCycle
+  COIN_KEYS, actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, descendantIds, isAmmunition, normalizeCoins, subtractCoins, sumAllocatedCoins, wouldCreateCycle
 } from "./model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const PARENT_FLAG = "parentContainerId";
 const COINS_FLAG = "containerCoins";
+const EQUIPPED_AMMO_FLAG = "allowEquippedAmmunition";
 const COIN_LABELS = { gp: "PO", sp: "PP", cp: "PC" };
 const INVENTORY_TYPES = new Set(["weapon", "armor", "shield", "misc", "container", "vehicle"]);
 const boundActorSheets = new WeakSet();
@@ -27,6 +28,12 @@ function parentId(item) {
 
 function containerCoins(item) {
   return normalizeCoins(item?.getFlag(MODULE_ID, COINS_FLAG));
+}
+
+function allowsEquippedAmmunition(container) {
+  const configured = container?.getFlag?.(MODULE_ID, EQUIPPED_AMMO_FLAG);
+  if (typeof configured === "boolean") return configured;
+  return String(container?.name ?? "").trim().toLocaleLowerCase("pt-BR") === "aljava";
 }
 
 export function actorCoins(actor) {
@@ -159,8 +166,8 @@ async function handleDrop(event, targetActor, targetContainer = null) {
   if (!sourceItem) return false;
 
   if (targetContainer) {
-    if (!canStoreItem(sourceItem)) {
-      ui.notifications.warn(`${sourceItem.name} está equipado. Desequipe o item antes de guardá-lo em um recipiente.`);
+    if (!canStoreItem(sourceItem, allowsEquippedAmmunition(targetContainer))) {
+      ui.notifications.warn(`${sourceItem.name} está equipado. Apenas munições podem ser guardadas equipadas em recipientes configurados para isso.`);
       return true;
     }
     if (sourceItem.actor?.id === targetActor.id) await nestExistingItem(sourceItem, targetContainer);
@@ -239,11 +246,14 @@ function renderTree(actor, rootContainer, depth = 0) {
   if (!children.length) return `<div class="od2qdv-container-empty">Vazio</div>`;
   return `<ol class="od2qdv-container-contents">${children.map((item) => {
     const nested = item.type === "container" ? renderTree(actor, item, depth + 1) : "";
+    const ammoToggle = allowsEquippedAmmunition(rootContainer) && isAmmunition(item)
+      ? `<button type="button" data-od2qdv-action="toggle-ammunition" data-item-id="${item.id}" title="${item.system?.is_equipped ? "Desequipar" : "Equipar"} munição"><i class="fas ${item.system?.is_equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i></button>`
+      : "";
     return `<li class="od2qdv-contained-item" data-contained-item-id="${item.id}">
       <img src="${escapeHtml(item.img)}" alt="" width="24" height="24">
       <button type="button" data-od2qdv-action="open-item" data-item-id="${item.id}">${escapeHtml(item.name)}</button>
       <span>${item.type === "container" ? coinLabel(containerCoins(item)) : escapeHtml(item.system?.quantity ?? 1)}</span>
-      <span class="od2qdv-contained-controls"><button type="button" data-od2qdv-action="remove-item" data-item-id="${item.id}" title="Retirar do recipiente"><i class="fas fa-eject"></i></button><button type="button" data-od2qdv-action="delete-item" data-item-id="${item.id}" title="Excluir"><i class="fas fa-trash"></i></button></span>
+      <span class="od2qdv-contained-controls">${ammoToggle}<button type="button" data-od2qdv-action="remove-item" data-item-id="${item.id}" title="Retirar do recipiente"><i class="fas fa-eject"></i></button><button type="button" data-od2qdv-action="delete-item" data-item-id="${item.id}" title="Excluir"><i class="fas fa-trash"></i></button></span>
       ${nested}
     </li>`;
   }).join("")}</ol>`;
@@ -258,7 +268,8 @@ export function enhanceActorSheet(app, html) {
   for (const row of root.querySelectorAll(".item[data-item-id]")) {
     const item = actor.items.get(row.dataset.itemId);
     if (!item || !parentId(item)) continue;
-    row.classList.add("od2qdv-nested-original");
+    const equipmentArea = row.closest('.character-tab-equipment, .retainer-tab-equipment, [data-tab="equipment"], .od2qdv-monster-equipment');
+    if (equipmentArea) row.classList.add("od2qdv-nested-original");
   }
   for (const row of root.querySelectorAll(".item[data-item-id]")) {
     const item = actor.items.get(row.dataset.itemId);
@@ -312,6 +323,10 @@ export function enhanceActorSheet(app, html) {
       else await chooseTransferTarget(item);
     }
     if (action.dataset.od2qdvAction === "open-item") actionItem?.sheet.render(true);
+    if (action.dataset.od2qdvAction === "toggle-ammunition" && actionItem && isAmmunition(actionItem)) {
+      const containing = actor.items.get(parentId(actionItem));
+      if (containing && allowsEquippedAmmunition(containing)) await actionItem.update({ "system.is_equipped": !Boolean(actionItem.system?.is_equipped) });
+    }
     if (action.dataset.od2qdvAction === "remove-item" && actionItem) await setParent(actionItem, null);
     if (action.dataset.od2qdvAction === "delete-item" && actionItem?.type === "container") await deleteContainer(actionItem);
     else if (action.dataset.od2qdvAction === "delete-item" && actionItem) await actor.deleteEmbeddedDocuments("Item", [actionItem.id]);
@@ -324,6 +339,7 @@ function itemSheetPanel(item) {
   return `<section class="od2qdv-container-sheet" data-container-id="${item.id}">
     <h2><i class="fas fa-box-open"></i> Conteúdo</h2>
     <p class="hint">Arraste equipamentos para esta área. Recipientes podem ser aninhados.</p>
+    <label class="od2qdv-equipped-ammo-option"><input type="checkbox" data-equipped-ammo ${allowsEquippedAmmunition(item) ? "checked" : ""}> Permitir guardar munição equipada</label>
     <div class="od2qdv-coins">${COIN_KEYS.map((key) => `<label>${COIN_LABELS[key]}<input type="number" min="0" step="1" data-coin="${key}" value="${coins[key]}"></label>`).join("")}<button type="button" data-od2qdv-action="save-coins"><i class="fas fa-coins"></i> Guardar moedas</button></div>
     ${renderTree(item.actor, item)}
     <button type="button" data-od2qdv-action="transfer"><i class="fas fa-people-arrows"></i> Transferir</button>
@@ -372,12 +388,19 @@ function enhanceItemSheet(app, html) {
     if (button.dataset.od2qdvAction === "transfer") await chooseTransferTarget(app.item);
     if (button.dataset.od2qdvAction === "empty") await emptyContainer(app.item);
     if (button.dataset.od2qdvAction === "open-item") selected?.sheet.render(true);
+    if (button.dataset.od2qdvAction === "toggle-ammunition" && selected && isAmmunition(selected) && allowsEquippedAmmunition(app.item)) await selected.update({ "system.is_equipped": !Boolean(selected.system?.is_equipped) });
     if (button.dataset.od2qdvAction === "remove-item" && selected) await setParent(selected, null);
     if (button.dataset.od2qdvAction === "delete-item" && selected?.type === "container") await deleteContainer(selected);
     else if (button.dataset.od2qdvAction === "delete-item" && selected) await actor.deleteEmbeddedDocuments("Item", [selected.id]);
     app.render(false);
   }, true);
   root.addEventListener("change", async (event) => {
+    if (event.target.matches?.(".od2qdv-container-sheet [data-equipped-ammo]")) {
+      event.stopPropagation();
+      await app.item.setFlag(MODULE_ID, EQUIPPED_AMMO_FLAG, event.target.checked);
+      app.render(false);
+      return;
+    }
     if (!event.target.matches?.(".od2qdv-container-sheet [data-coin]")) return;
     event.stopPropagation();
     await saveCoins(app.item, root.querySelector(".od2qdv-container-sheet"));

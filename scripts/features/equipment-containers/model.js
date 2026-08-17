@@ -1,7 +1,12 @@
 export const COIN_KEYS = ["cp", "sp", "gp"];
 
-export function canStoreItem(item) {
-  return !Boolean(item?.system?.is_equipped);
+export function isAmmunition(item) {
+  return item?.type === "weapon" && item?.system?.type === "ammunition";
+}
+
+export function canStoreItem(item, allowEquippedAmmunition = false) {
+  if (!Boolean(item?.system?.is_equipped)) return true;
+  return allowEquippedAmmunition && isAmmunition(item);
 }
 
 export function canReceiveContainer(actor) {
