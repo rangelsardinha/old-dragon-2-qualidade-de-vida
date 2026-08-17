@@ -156,9 +156,8 @@ async function scrollItemData(spells, curse) {
       ?? (spell.system ? foundry.utils.deepClone(spell.system) : null);
     return { ...spell, system };
   }));
-  const tradition = [...new Set(storedSpells.map((spell) => spell.tradition))].map((value) => value === "arcane" ? "Arcana" : "Divina").join(" e ");
   return {
-    name: `Pergaminho Mágico ${tradition}`,
+    name: scrollName(storedSpells),
     type: "misc",
     img: "icons/sundries/scrolls/scroll-bound-sealed-red.webp",
     system: {
@@ -182,6 +181,12 @@ async function scrollItemData(spells, curse) {
 function scrollDescription(spells) {
   const lines = spells.map((spell) => `${spell.name} — ${spell.circle}º círculo (${spell.source})`);
   return `Magias do pergaminho:\n${lines.join("\n")}`;
+}
+
+function scrollName(spells) {
+  const names = spells.map((spell) => spell.name);
+  if (names.length <= 1) return `Pergaminho de ${names[0] ?? "Magia"}`;
+  return `Pergaminho de ${names.slice(0, -1).join(", ")} e ${names.at(-1)}`;
 }
 
 async function migrateScrollDescriptions() {

@@ -2,11 +2,11 @@
   "id": "old-dragon-2-qualidade-de-vida",
   "title": "Old Dragon 2: Qualidade de Vida",
   "description": "Automações modulares e configuráveis para o sistema Old Dragon 2ª Edição.",
-  "version": "0.6.16",
+  "version": "0.6.17",
   "license": "CC-BY-SA-4.0",
   "url": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida",
   "manifest": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/latest/download/module.json",
-  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.6.16/old-dragon-2-qualidade-de-vida.zip",
+  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.6.17/old-dragon-2-qualidade-de-vida.zip",
   "authors": [{ "name": "Rangel Sardinha" }],
   "compatibility": {
     "minimum": "13",
