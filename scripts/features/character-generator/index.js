@@ -63,9 +63,15 @@ async function requestGmApproval(kind, data = {}) {
 
 async function receiveApprovalRequest(payload) {
   if (!game.user.isGM || game.user.id !== payload.gmId) return;
-  const summary = payload.kind === "final" ? finalSummaryHtml(payload.data) : "";
+  const summary = payload.kind === "final"
+    ? finalSummaryHtml(payload.data)
+    : payload.kind === "attributes" ? attributeRerollSummaryHtml(payload.data)
+      : payload.kind === "hp" ? hitPointRerollSummaryHtml(payload.data) : "";
   const character = payload.data?.characterName ? ` para <strong>${escapeHtml(payload.data.characterName)}</strong>` : "";
-  const content = `<div class="od2qdv-character-approval"><h2>${approvalTitle(payload.kind)}</h2><p><strong>${escapeHtml(payload.userName)}</strong> solicita autorização para <strong>${approvalLabel(payload.kind)}</strong>${character}.</p>${summary}<div class="od2qdv-approval-actions"><button type="button" data-character-approval="approve"><i class="fas fa-check"></i> Autorizar</button><button type="button" data-character-approval="deny"><i class="fas fa-times"></i> Recusar</button></div></div>`;
+  const styleChoice = payload.kind === "start"
+    ? `<div class="form-group"><label>Estilo de rolagem dos atributos</label><select data-character-roll-style>${Object.entries(STYLES).map(([key, [name, description]]) => `<option value="${key}" ${key === "adventurer" ? "selected" : ""}>${name} — ${description}</option>`).join("")}</select></div><div class="form-group"><label>Nível inicial</label><input type="number" min="1" max="15" value="1" data-character-level></div><p class="hint">O estilo e o nível serão aplicados automaticamente no navegador do jogador após a autorização.</p>`
+    : "";
+  const content = `<div class="od2qdv-character-approval"><h2>${approvalTitle(payload.kind)}</h2><p><strong>${escapeHtml(payload.userName)}</strong> solicita autorização para <strong>${approvalLabel(payload.kind)}</strong>${character}.</p>${styleChoice}${summary}<div class="od2qdv-approval-actions"><button type="button" data-character-approval="approve"><i class="fas fa-check"></i> Autorizar</button><button type="button" data-character-approval="deny"><i class="fas fa-times"></i> Recusar</button></div></div>`;
   await ChatMessage.create({
     content, whisper: [game.user.id],
     flags: { [MODULE_ID]: { characterApproval: payload, approvalResolved: false } }
@@ -78,13 +84,19 @@ async function respondToApproval(message, approved, buttonRoot) {
   buttonRoot.querySelectorAll("button").forEach((button) => { button.disabled = true; });
   let actorId = null;
   let error = null;
+  const style = payload.kind === "start"
+    ? buttonRoot.closest(".od2qdv-character-approval")?.querySelector("[data-character-roll-style]")?.value
+    : null;
+  const level = payload.kind === "start"
+    ? Math.min(15, Math.max(1, Math.trunc(Number(buttonRoot.closest(".od2qdv-character-approval")?.querySelector("[data-character-level]")?.value) || 1)))
+    : null;
   if (approved && payload.kind === "final") {
     try { actorId = (await createCharacterFromDraft(payload.data)).id; }
     catch (caught) { error = caught.message; approved = false; console.error(`${MODULE_ID} | Falha ao criar personagem aprovado`, caught); }
   }
   await message.setFlag(MODULE_ID, "approvalResolved", true);
   await message.update({ content: `${message.content}<p><strong>${approved ? "Autorizado" : "Recusado"}${error ? `: ${escapeHtml(error)}` : ""}.</strong></p>` });
-  game.socket.emit(SOCKET, { type: "approvalResponse", requestId: payload.requestId, userId: payload.userId, approved, actorId, error });
+  game.socket.emit(SOCKET, { type: "approvalResponse", requestId: payload.requestId, userId: payload.userId, approved, actorId, error, style, level });
 }
 
 function receiveApprovalResponse(payload) {
@@ -120,12 +132,6 @@ async function prompt({ title, content, label = "Continuar", read, render }) {
     render: render ? (html) => render(html[0]) : undefined,
     rejectClose: false
   });
-}
-
-async function confirm({ title, content, yes = "Confirmar" }) {
-  const V2 = dialogV2();
-  if (V2) return V2.confirm({ window: { title }, content, yes: { label: yes, default: true }, no: { label: "Voltar", default: false } });
-  return (foundry.appv1?.api?.Dialog ?? globalThis.Dialog).confirm({ title, content, defaultYes: true });
 }
 
 async function roll(formula) {
@@ -188,7 +194,7 @@ async function rollAttributes(style, raceName) {
     values[racial.strong] = (await roll("2d6+6")).total;
     values[racial.weak] = (await roll("2d6+3")).total;
     for (const attribute of ATTRIBUTES.filter((key) => ![racial.strong, racial.weak].includes(key))) values[attribute] = (await roll("3d6")).total;
-    return confirmAttributes(values, `${STYLES[style][0]} — ${raceName}`);
+    return values;
   }
   for (let index = 0; index < 6; index += 1) {
     if (style === "heroic") {
@@ -199,13 +205,8 @@ async function rollAttributes(style, raceName) {
     } else if (style === "peasant") results.push((await roll("1d6+7")).total);
     else results.push((await roll("3d6")).total);
   }
-  if (["classic", "double"].includes(style)) return confirmAttributes(Object.fromEntries(ATTRIBUTES.map((key, index) => [key, results[index]])), STYLES[style][0]);
+  if (["classic", "double"].includes(style)) return Object.fromEntries(ATTRIBUTES.map((key, index) => [key, results[index]]));
   return distributeResults(results, STYLES[style][0]);
-}
-
-async function confirmAttributes(values, title) {
-  const rows = ATTRIBUTES.map((key) => `<tr><th>${ATTRIBUTE_LABELS[key]}</th><td>${values[key]}</td></tr>`).join("");
-  return await confirm({ title, content: `<p>Confirme os atributos rolados.</p><table>${rows}</table>` }) ? values : null;
 }
 
 async function attributeDecision(values) {
@@ -237,15 +238,13 @@ async function distributeResults(results, title) {
     const assignment = await prompt({
       title: `${title} — Distribuir resultados`,
       content: `<p>Escolher um resultado já alocado troca os valores entre os atributos.</p><div class="od2qdv-roll-allocation-summary">${results.map((value, index) => `<span data-roll-summary="${index}"><strong>${value}</strong><small>${ATTRIBUTE_LABELS[ATTRIBUTES[index]]}</small></span>`).join("")}</div>${ATTRIBUTES.map((key, index) => `<div class="form-group"><label>${ATTRIBUTE_LABELS[key]}</label><select name="${key}" data-allocation-select>${options(index)}</select></div>`).join("")}`,
-      label: "Confirmar atributos",
+      label: "Usar esta distribuição",
       read: (form) => Object.fromEntries(ATTRIBUTES.map((key) => [key, Number(form.elements[key].value)])),
       render: bindAllocationSwaps
     });
     if (!assignment) return null;
     if (new Set(Object.values(assignment)).size === 6) {
-      const values = Object.fromEntries(ATTRIBUTES.map((key) => [key, results[assignment[key]]]));
-      if (await confirmAttributes(values, title)) return values;
-      continue;
+      return Object.fromEntries(ATTRIBUTES.map((key) => [key, results[assignment[key]]]));
     }
     ui.notifications.warn("Cada resultado deve ser usado exatamente uma vez.");
   }
@@ -279,39 +278,56 @@ async function distributeDice(dice) {
     });
     if (!assignments) return null;
     const values = allocationFromDice(dice, assignments);
-    if (Object.values(values).every((value) => value <= 18)) {
-      if (await confirmAttributes(values, "Estilo da Distribuição")) return values;
-      continue;
-    }
+    if (Object.values(values).every((value) => value <= 18)) return values;
     ui.notifications.warn("Nenhum atributo pode ser maior que 18.");
   }
 }
 
-async function classAndLevelStep(classes, race) {
+async function classAndLevelStep(classes, race, fixedLevel = null) {
   const allowed = classes.filter((characterClass) => classAllowsRace(characterClass, race.name));
   const options = allowed.map((characterClass) => `<option value="${characterClass.id}">${escapeHtml(characterClass.name)}</option>`).join("");
+  const level = fixedLevel == null ? null : Math.min(15, Math.max(1, Math.trunc(Number(fixedLevel) || 1)));
   return prompt({
     title: "Classe e nível",
-    content: `<p>As restrições raciais das classes do SRD já foram aplicadas.</p><div class="form-group"><label>Classe</label><select name="classId">${options}</select></div><div class="form-group"><label>Nível</label><input name="level" type="number" min="1" max="15" value="1"></div>`,
+    content: `<p>As restrições raciais das classes do SRD já foram aplicadas.</p><div class="form-group"><label>Classe</label><select name="classId">${options}</select></div>${level == null ? '<div class="form-group"><label>Nível</label><input name="level" type="number" min="1" max="15" value="1"></div>' : `<input type="hidden" name="level" value="${level}"><p>Nível definido pelo Mestre: <strong>${level}</strong></p>`}`,
     read: (form) => ({ classId: form.elements.classId.value, level: Math.min(15, Math.max(1, Math.trunc(Number(form.elements.level.value) || 1))) })
   });
 }
 
-async function hitPointsStep(characterClass, level, constitution, authorizeReroll = async () => true) {
+async function hitPointRoll(characterClass, level, constitution) {
   const die = hitDieForClass(characterClass);
+  const rolls = [];
+  for (let current = 2; current <= level; current += 1) rolls.push((await roll(`1d${die}`)).total);
+  return { die, rolls, hp: calculateHitPoints(die, level, constitution, rolls) };
+}
+
+async function hitPointsStep(characterClass, level, constitution, characterName) {
+  let current = await hitPointRoll(characterClass, level, constitution);
   while (true) {
-    const rolls = [];
-    for (let current = 2; current <= level; current += 1) rolls.push((await roll(`1d${die}`)).total);
-    const suggested = calculateHitPoints(die, level, constitution, rolls);
-    const content = `<p>1º nível: máximo do d${die}. Demais níveis: ${rolls.length ? rolls.join(", ") : "nenhuma rolagem"}. O modificador de Constituição foi aplicado por nível.</p><div class="form-group"><label>PV total</label><input name="hp" type="number" min="1" value="${suggested}"></div>`;
-    while (true) {
-      const decision = await hitPointDecision(content, suggested, level > 1);
-      if (!decision || decision.action === "cancel") return null;
-      if (decision.action === "confirm") return decision.hp;
-      if (await authorizeReroll()) break;
-      ui.notifications.warn("O Mestre não autorizou a rerrolagem dos pontos de vida.");
+    const content = `<p>1º nível: máximo do d${current.die}. Demais níveis: ${current.rolls.length ? current.rolls.join(", ") : "nenhuma rolagem"}. O modificador de Constituição foi aplicado por nível.</p><div class="form-group"><label>PV total</label><input name="hp" type="number" min="1" value="${current.hp}"></div>`;
+    const decision = await hitPointDecision(content, current.hp, level > 1);
+    if (!decision || decision.action === "cancel") return null;
+    if (decision.action === "confirm") return decision.hp;
+    const proposed = await hitPointRoll(characterClass, level, constitution);
+    const response = await requestGmApproval("hp", {
+      characterName,
+      currentHitPoints: current.hp, currentRolls: current.rolls,
+      proposedHitPoints: proposed.hp, proposedRolls: proposed.rolls,
+      hitDie: current.die, level
+    });
+    if (response.approved) {
+      current = proposed;
+      ui.notifications.info("O Mestre autorizou a nova rolagem de pontos de vida.");
+    } else {
+      ui.notifications.warn("O Mestre recusou a nova rolagem; os pontos de vida anteriores foram mantidos.");
     }
   }
+}
+
+function hitPointRerollSummaryHtml(data) {
+  const currentRolls = data.currentRolls?.length ? data.currentRolls.join(", ") : "1º nível usa o máximo";
+  const proposedRolls = data.proposedRolls?.length ? data.proposedRolls.join(", ") : "1º nível usa o máximo";
+  return `<div class="od2qdv-character-summary"><h3>Resultado proposto da rerrolagem de PV</h3><table><thead><tr><th></th><th>Atual</th><th>Novo</th></tr></thead><tbody><tr><th>Rolagens d${data.hitDie}</th><td>${currentRolls}</td><td><strong>${proposedRolls}</strong></td></tr><tr><th>PV total</th><td>${data.currentHitPoints}</td><td><strong>${data.proposedHitPoints}</strong></td></tr></tbody></table><p>Autorizar aplicará o novo total. Recusar manterá os PV atuais.</p></div>`;
 }
 
 async function hitPointDecision(content, suggested, canReroll) {
@@ -355,18 +371,27 @@ function embeddedSource(document) {
 }
 
 async function chooseAttributes(style, raceName, characterName) {
+  let values = await rollAttributes(style, raceName);
+  if (!values) return null;
   while (true) {
-    const values = await rollAttributes(style, raceName);
-    if (!values) return null;
-    while (true) {
-      const decision = await attributeDecision(values);
-      if (!decision || decision === "cancel") return null;
-      if (decision === "confirm") return values;
-      const response = await requestGmApproval("attributes", { characterName });
-      if (response.approved) break;
-      ui.notifications.warn("O Mestre não autorizou a rerrolagem dos atributos.");
-    }
+    const decision = await attributeDecision(values);
+    if (!decision || decision === "cancel") return null;
+    if (decision === "confirm") return values;
+    const proposedAttributes = await rollAttributes(style, raceName);
+    if (!proposedAttributes) continue;
+    const response = await requestGmApproval("attributes", {
+      characterName, currentAttributes: values, proposedAttributes
+    });
+    if (response.approved) {
+      values = proposedAttributes;
+      ui.notifications.info("O Mestre autorizou os novos atributos.");
+    } else ui.notifications.warn("O Mestre recusou os novos atributos; os valores anteriores foram mantidos.");
   }
+}
+
+function attributeRerollSummaryHtml(data) {
+  const rows = ATTRIBUTES.map((key) => `<tr><th>${ATTRIBUTE_LABELS[key]}</th><td>${data.currentAttributes?.[key] ?? "–"}</td><td><strong>${data.proposedAttributes?.[key] ?? "–"}</strong></td></tr>`).join("");
+  return `<div class="od2qdv-character-summary"><h3>Resultado proposto da rerrolagem</h3><table><thead><tr><th>Atributo</th><th>Atual</th><th>Novo</th></tr></thead><tbody>${rows}</tbody></table><p>Autorizar aplicará os valores da coluna <strong>Novo</strong>. Recusar manterá os valores atuais.</p></div>`;
 }
 
 function finalSummaryHtml(draft) {
@@ -396,9 +421,13 @@ async function createCharacterFromDraft(draft) {
 
 async function generateCharacter() {
   const playerMode = !game.user.isGM;
+  let authorizedStyle = null;
+  let authorizedLevel = null;
   if (playerMode) {
     const start = await requestGmApproval("start");
     if (!start.approved) return ui.notifications.warn("O Mestre não autorizou o início da criação.");
+    authorizedStyle = start.style;
+    authorizedLevel = start.level;
   }
   const [races, classes] = await Promise.all([documentsFromPack("races", "race"), documentsFromPack("classes", "class")]);
   const identity = await identityStep(races, playerMode);
@@ -406,16 +435,16 @@ async function generateCharacter() {
   const race = races.find((entry) => entry.id === identity.raceId);
   if (!race) return ui.notifications.error("Raça não encontrada.");
   try {
-    const style = await styleStep();
+    const style = playerMode ? authorizedStyle : await styleStep();
     if (!style) return;
     const attributes = await chooseAttributes(style, race.name, identity.name);
     if (!attributes) return;
-    const selection = await classAndLevelStep(classes, race);
+    const selection = await classAndLevelStep(classes, race, playerMode ? authorizedLevel : null);
     if (!selection) return;
     const characterClass = classes.find((entry) => entry.id === selection.classId);
     if (!characterClass) throw new Error("Classe não encontrada.");
     const xp = experienceForLevel(characterClass, selection.level);
-    const hp = await hitPointsStep(characterClass, selection.level, attributes.constituicao, async () => (await requestGmApproval("hp", { characterName: identity.name })).approved);
+    const hp = await hitPointsStep(characterClass, selection.level, attributes.constituicao, identity.name);
     if (hp == null) return;
     const income = await incomeStep();
     if (income == null) return;
