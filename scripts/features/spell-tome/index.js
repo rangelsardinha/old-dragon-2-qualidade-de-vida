@@ -623,7 +623,9 @@ async function populatePack(config, spells) {
 }
 
 async function ensureCompendiaPopulated() {
-  if (!game.user.isGM) return;
+  const primaryGm = game.users.filter((user) => user.active && user.isGM)
+    .sort((left, right) => left.id.localeCompare(right.id))[0];
+  if (!game.user.isGM || primaryGm?.id !== game.user.id) return;
 
   const data = await loadSpells();
   const packData = {
@@ -691,7 +693,7 @@ async function populateRulesPack() {
 
 async function ensurePublicRulesJournals() {
   const currentVersion = game.settings.get(MODULE_ID, "worldRulesVersion");
-  if (currentVersion === PACK_VERSION) return;
+  const needsUpdate = currentVersion !== PACK_VERSION;
 
   const rules = await loadRules();
   const folderName = "Tomo de Magia - Regras";
@@ -712,7 +714,8 @@ async function ensurePublicRulesJournals() {
 
   for (const journalData of rulesJournals(rules)) {
     const ruleId = journalData.flags?.[MODULE_ID]?.ruleId;
-    const existing = game.journal.find((entry) => entry.getFlag(MODULE_ID, "ruleId") === ruleId);
+    const matches = game.journal.filter((entry) => entry.getFlag(MODULE_ID, "ruleId") === ruleId);
+    const existing = matches[0];
     const payload = {
       ...journalData,
       folder: folder.id,
@@ -722,11 +725,13 @@ async function ensurePublicRulesJournals() {
     };
     delete payload._id;
 
-    if (existing) {
+    if (existing && (needsUpdate || existing.folder?.id !== folder.id)) {
       await existing.update(payload, { diff: false, recursive: false });
-    } else {
+    } else if (!existing) {
       await JournalEntry.create(payload);
     }
+    const duplicateIds = matches.slice(1).map((entry) => entry.id);
+    if (duplicateIds.length) await JournalEntry.deleteDocuments(duplicateIds);
   }
 
   await game.settings.set(MODULE_ID, "worldRulesVersion", PACK_VERSION);
