@@ -859,7 +859,7 @@ function wildVariationFor(spell, d20) {
 
 async function rollWildLevelVariation(spell, actor) {
   const roll = Number(game.release?.generation ?? 13) >= 14
-    ? new Roll("1d20").evaluateSync()
+    ? await new Roll("1d20").evaluate()
     : await new Roll("1d20").roll({ async: true });
   const d20 = roll.total;
   const variation = wildVariationFor(spell, d20);
@@ -870,7 +870,7 @@ async function rollWildLevelVariation(spell, actor) {
 
   if (variation.surge) {
     surgeRoll = Number(game.release?.generation ?? 13) >= 14
-      ? new Roll("1d100").evaluateSync()
+      ? await new Roll("1d100").evaluate()
       : await new Roll("1d100").roll({ async: true });
     rolls.push(surgeRoll);
     surgeResult = WILD_SURGE_RESULTS[surgeRoll.total - 1] ?? "Resultado nao encontrado.";

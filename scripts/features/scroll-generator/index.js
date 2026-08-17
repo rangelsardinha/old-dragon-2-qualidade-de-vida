@@ -31,7 +31,7 @@ function validCircle(value) {
 
 async function evaluateRoll(formula) {
   const roll = new Roll(formula);
-  if (Number(game.release?.generation ?? 13) >= 14) return roll.evaluateSync();
+  if (Number(game.release?.generation ?? 13) >= 14) return roll.evaluate();
   return roll.roll({ async: true });
 }
 
