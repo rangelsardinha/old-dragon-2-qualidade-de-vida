@@ -1,7 +1,8 @@
 import {
   ATTRIBUTES, ATTRIBUTE_LABELS, allocationFromDice, calculateHitPoints,
-  classAllowsRace, experienceForLevel, hitDieForClass, racialAttributes
+  classAllowsRace, experienceForLevel, hitDieForClass, hitPointBonusForClass, jpcBonusForClass, racialAttributes
 } from "./model.js";
+import { darkSunDocuments, darkSunEnabled } from "../../integrations/dark-sun.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const SOCKET = `module.${MODULE_ID}`;
@@ -24,6 +25,10 @@ function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = String(value ?? "");
   return div.innerHTML;
+}
+
+function sourceSuffix(document) {
+  return String(document?.uuid ?? "").startsWith(`Compendium.${game.system.id}.`) ? "" : " [Dark Sun]";
 }
 
 function dialogV2() {
@@ -148,14 +153,20 @@ async function documentsFromPack(name, type) {
   return documents.filter((document) => document.type === type).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+async function characterDocuments(packName, type) {
+  const documents = await documentsFromPack(packName, type);
+  if (darkSunEnabled()) documents.push(...await darkSunDocuments(type));
+  return documents.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function identityStep(races, playerMode = false) {
   const users = game.users.filter((user) => !user.isGM).sort((a, b) => a.name.localeCompare(b.name));
   const userOptions = [`<option value="">Somente o Mestre</option>`, ...users.map((user) => `<option value="${user.id}">${escapeHtml(user.name)}</option>`)].join("");
-  const raceOptions = races.map((race) => `<option value="${race.id}">${escapeHtml(race.name)}</option>`).join("");
+  const raceOptions = races.map((race) => `<option value="${race.uuid}">${escapeHtml(race.name)}${sourceSuffix(race)}</option>`).join("");
   return prompt({
     title: "Criar novo personagem",
     content: `<div class="od2qdv-character-step"><div class="form-group"><label>Nome do personagem</label><input name="name" required autofocus></div>${playerMode ? `<input type="hidden" name="owner" value="${game.user.id}"><p>Jogador dono: <strong>${escapeHtml(game.user.name)}</strong></p>` : `<div class="form-group"><label>Jogador dono</label><select name="owner">${userOptions}</select></div>`}<div class="form-group"><label>Raça (SRD)</label><select name="race">${raceOptions}</select></div></div>`,
-    read: (form) => ({ name: form.elements.name.value.trim(), ownerId: form.elements.owner.value, raceId: form.elements.race.value })
+    read: (form) => ({ name: form.elements.name.value.trim(), ownerId: form.elements.owner.value, raceUuid: form.elements.race.value })
   });
 }
 
@@ -285,26 +296,28 @@ async function distributeDice(dice) {
 
 async function classAndLevelStep(classes, race, fixedLevel = null) {
   const allowed = classes.filter((characterClass) => classAllowsRace(characterClass, race.name));
-  const options = allowed.map((characterClass) => `<option value="${characterClass.id}">${escapeHtml(characterClass.name)}</option>`).join("");
+  const options = allowed.map((characterClass) => `<option value="${characterClass.uuid}">${escapeHtml(characterClass.name)}${sourceSuffix(characterClass)}</option>`).join("");
   const level = fixedLevel == null ? null : Math.min(15, Math.max(1, Math.trunc(Number(fixedLevel) || 1)));
   return prompt({
     title: "Classe e nível",
     content: `<p>As restrições raciais das classes do SRD já foram aplicadas.</p><div class="form-group"><label>Classe</label><select name="classId">${options}</select></div>${level == null ? '<div class="form-group"><label>Nível</label><input name="level" type="number" min="1" max="15" value="1"></div>' : `<input type="hidden" name="level" value="${level}"><p>Nível definido pelo Mestre: <strong>${level}</strong></p>`}`,
-    read: (form) => ({ classId: form.elements.classId.value, level: Math.min(15, Math.max(1, Math.trunc(Number(form.elements.level.value) || 1))) })
+    read: (form) => ({ classUuid: form.elements.classId.value, level: Math.min(15, Math.max(1, Math.trunc(Number(form.elements.level.value) || 1))) })
   });
 }
 
 async function hitPointRoll(characterClass, level, constitution) {
   const die = hitDieForClass(characterClass);
+  const perLevelBonus = hitPointBonusForClass(characterClass);
   const rolls = [];
   for (let current = 2; current <= level; current += 1) rolls.push((await roll(`1d${die}`)).total);
-  return { die, rolls, hp: calculateHitPoints(die, level, constitution, rolls) };
+  return { die, rolls, perLevelBonus, hp: calculateHitPoints(die, level, constitution, rolls, perLevelBonus) };
 }
 
 async function hitPointsStep(characterClass, level, constitution, characterName) {
   let current = await hitPointRoll(characterClass, level, constitution);
   while (true) {
-    const content = `<p>1º nível: máximo do d${current.die}. Demais níveis: ${current.rolls.length ? current.rolls.join(", ") : "nenhuma rolagem"}. O modificador de Constituição foi aplicado por nível.</p><div class="form-group"><label>PV total</label><input name="hp" type="number" min="1" value="${current.hp}"></div>`;
+    const classBonus = current.perLevelBonus ? ` A classe acrescenta +${current.perLevelBonus} PV por nível.` : "";
+    const content = `<p>1º nível: máximo do d${current.die}. Demais níveis: ${current.rolls.length ? current.rolls.join(", ") : "nenhuma rolagem"}. O modificador de Constituição foi aplicado por nível.${classBonus}</p><div class="form-group"><label>PV total</label><input name="hp" type="number" min="1" value="${current.hp}"></div>`;
     const decision = await hitPointDecision(content, current.hp, level > 1);
     if (!decision || decision.action === "cancel") return null;
     if (decision.action === "confirm") return decision.hp;
@@ -400,9 +413,9 @@ function finalSummaryHtml(draft) {
 }
 
 async function createCharacterFromDraft(draft) {
-  const [races, classes] = await Promise.all([documentsFromPack("races", "race"), documentsFromPack("classes", "class")]);
-  const race = races.find((entry) => entry.id === draft.raceId);
-  const characterClass = classes.find((entry) => entry.id === draft.classId);
+  const [races, classes] = await Promise.all([characterDocuments("races", "race"), characterDocuments("classes", "class")]);
+  const race = races.find((entry) => entry.uuid === draft.raceUuid);
+  const characterClass = classes.find((entry) => entry.uuid === draft.classUuid);
   if (!race || !characterClass) throw new Error("Raça ou classe do SRD não encontrada.");
   const ownership = draft.ownerId ? { default: 0, [draft.ownerId]: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER } : { default: 0 };
   const actor = await Actor.create({ name: draft.name, type: "character", ownership });
@@ -429,10 +442,10 @@ async function generateCharacter() {
     authorizedStyle = start.style;
     authorizedLevel = start.level;
   }
-  const [races, classes] = await Promise.all([documentsFromPack("races", "race"), documentsFromPack("classes", "class")]);
+  const [races, classes] = await Promise.all([characterDocuments("races", "race"), characterDocuments("classes", "class")]);
   const identity = await identityStep(races, playerMode);
   if (!identity?.name) return;
-  const race = races.find((entry) => entry.id === identity.raceId);
+  const race = races.find((entry) => entry.uuid === identity.raceUuid);
   if (!race) return ui.notifications.error("Raça não encontrada.");
   try {
     const style = playerMode ? authorizedStyle : await styleStep();
@@ -441,14 +454,14 @@ async function generateCharacter() {
     if (!attributes) return;
     const selection = await classAndLevelStep(classes, race, playerMode ? authorizedLevel : null);
     if (!selection) return;
-    const characterClass = classes.find((entry) => entry.id === selection.classId);
+    const characterClass = classes.find((entry) => entry.uuid === selection.classUuid);
     if (!characterClass) throw new Error("Classe não encontrada.");
     const xp = experienceForLevel(characterClass, selection.level);
     const hp = await hitPointsStep(characterClass, selection.level, attributes.constituicao, identity.name);
     if (hp == null) return;
     const income = await incomeStep();
     if (income == null) return;
-    const draft = { name: identity.name, ownerId: identity.ownerId, raceId: race.id, raceName: race.name, classId: characterClass.id, className: characterClass.name, level: selection.level, xp, hp, income, attributes };
+    const draft = { name: identity.name, ownerId: identity.ownerId, raceUuid: race.uuid, raceName: race.name, classUuid: characterClass.uuid, className: characterClass.name, level: selection.level, xp, hp, income, attributes };
     if (playerMode) {
       const response = await requestGmApproval("final", draft);
       if (!response.approved) return ui.notifications.warn(response.error ? `A criação falhou: ${response.error}` : "O Mestre recusou a criação final do personagem.");
@@ -477,11 +490,31 @@ function addDirectoryButton(app, html) {
   section.querySelector(".od2qdv-create-character").addEventListener("click", () => generateCharacter());
 }
 
+function installBarbarianJpcBonus() {
+  const prototype = CONFIG.Actor.dataModels?.character?.prototype;
+  if (!prototype || prototype.__od2QdvBarbarianJpcBonus) return;
+  let owner = prototype;
+  let descriptor;
+  while (owner && !(descriptor = Object.getOwnPropertyDescriptor(owner, "jpc_total"))) owner = Object.getPrototypeOf(owner);
+  if (typeof descriptor?.get !== "function") {
+    console.warn(`${MODULE_ID} | Não foi possível localizar o cálculo de JPC do sistema.`);
+    return;
+  }
+  const original = descriptor.get;
+  Object.defineProperty(prototype, "jpc_total", {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get() { return original.call(this) + jpcBonusForClass(this.class); }
+  });
+  Object.defineProperty(prototype, "__od2QdvBarbarianJpcBonus", { value: true, configurable: true });
+}
+
 Hooks.on("renderActorDirectory", addDirectoryButton);
 Hooks.on("renderActorDirectoryV2", addDirectoryButton);
 Hooks.on(foundry.applications?.api?.ApplicationV2 ? "renderChatMessageHTML" : "renderChatMessage", bindApprovalMessage);
 
 Hooks.once("ready", () => {
+  installBarbarianJpcBonus();
   game.socket.on(SOCKET, (payload) => {
     if (payload.type === "approvalRequest") receiveApprovalRequest(payload);
     if (payload.type === "approvalResponse") receiveApprovalResponse(payload);

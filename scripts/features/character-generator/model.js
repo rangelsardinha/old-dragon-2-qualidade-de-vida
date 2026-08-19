@@ -49,22 +49,38 @@ const CLASS_HIT_DICE = new Map([
   ["druida", 8], ["academico", 8], ["ladrao", 6], ["ranger", 6],
   ["bardo", 6], ["mago", 4], ["ilusionista", 4], ["necromante", 4],
   ["anao aventureiro", 10], ["arqueiro", 10], ["xama", 8], ["proscrito", 8],
-  ["assassino", 6], ["halfling aventureiro", 6], ["bruxo", 4], ["elfo aventureiro", 4]
+  ["assassino", 6], ["halfling aventureiro", 6], ["bruxo", 4], ["elfo aventureiro", 4],
+  ["bardo athasiano", 6], ["clerigo elemental", 8], ["gladiador", 12],
+  ["preservador", 4], ["profanador", 4], ["psionico", 4], ["templario", 8]
 ]);
 
+const CLASS_HIT_POINT_BONUSES = new Map([["barbaro", 2]]);
+const CLASS_JPC_BONUSES = new Map([["barbaro", 2]]);
+
 export function hitDieForClass(characterClass) {
+  const byName = CLASS_HIT_DICE.get(normalizeName(characterClass?.name));
+  if (byName) return byName;
   const configured = Math.trunc(Number(characterClass?.system?.hp));
   if (configured > 0) return configured;
-  return CLASS_HIT_DICE.get(normalizeName(characterClass?.name)) ?? 4;
+  return 4;
 }
 
-export function calculateHitPoints(hitDie, level, constitution, rolls = []) {
+export function hitPointBonusForClass(characterClass) {
+  return CLASS_HIT_POINT_BONUSES.get(normalizeName(characterClass?.name)) ?? 0;
+}
+
+export function jpcBonusForClass(characterClass) {
+  return CLASS_JPC_BONUSES.get(normalizeName(characterClass?.name)) ?? 0;
+}
+
+export function calculateHitPoints(hitDie, level, constitution, rolls = [], perLevelBonus = 0) {
   const die = Math.max(1, Math.trunc(Number(hitDie) || 1));
   const levels = Math.max(1, Math.trunc(Number(level) || 1));
   const modifier = attributeModifier(constitution);
-  let total = Math.max(1, die + modifier);
+  const classBonus = Math.trunc(Number(perLevelBonus) || 0);
+  let total = Math.max(1, die + modifier + classBonus);
   for (let index = 1; index < levels; index += 1) {
-    total += Math.max(1, Math.trunc(Number(rolls[index - 1]) || 1) + modifier);
+    total += Math.max(1, Math.trunc(Number(rolls[index - 1]) || 1) + modifier + classBonus);
   }
   return total;
 }

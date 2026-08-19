@@ -29,6 +29,10 @@ Hooks.once("init", () => {
     enableCharacterGenerator: {
       name: "Gerador de personagens",
       hint: "Adiciona ao diretório de Atores um assistente para criar personagens usando raças, classes e progressão do SRD."
+    },
+    enableEffectManager: {
+      name: "Gerenciador de efeitos OD2",
+      hint: "Permite criar efeitos persistentes ou temporários que modificam CA, ataques, dano e Jogadas de Proteção."
     }
   };
   const localized = (key, fallback) => {
@@ -52,6 +56,7 @@ Hooks.once("init", () => {
   worldToggle("enableScrollGenerator");
   worldToggle("enableSessionControl");
   worldToggle("enableCharacterGenerator");
+  worldToggle("enableEffectManager");
 
   game.settings.register(MODULE_ID, "sessionEncounterDie", {
     name: "Dado de encontros aleatórios",

@@ -1,3 +1,5 @@
+import { shiftDamageDice, shiftDifficulty } from '../effect-manager/model.js';
+
 const MODULE_ID = 'old-dragon-2-qualidade-de-vida';
 
 const ATTACK_SELECTOR = '.olddragon2e.sheet .attack-roll';
@@ -451,7 +453,18 @@ async function onSheetClick(event, actor) {
   event.stopImmediatePropagation();
 
   try {
-    await handleAttack(actor, attackButton);
+    const attackPerformed = await handleAttack(actor, attackButton);
+    if (!attackPerformed) return;
+    const item = getAttackItem(actor, attackButton);
+    const target = Array.from(game.user.targets ?? [])[0];
+    const attackMode = item ? getDefaultAttackMode(item) : '';
+    const extraAttacks = Math.min(5, Math.max(0, Math.trunc(game.od2Qdv?.effects?.modifierDelta?.(actor, 'attacks.extra', {
+      item, weapon: item, attackMode, attackBasis: attackButton.dataset.ba, targetActor: target?.actor
+    }) ?? 0)));
+    for (let index = 0; index < extraAttacks; index += 1) {
+      ui.notifications.info(`Ataque extra ${index + 1} de ${extraAttacks}.`);
+      await handleAttack(actor, attackButton);
+    }
   } catch (error) {
     console.error(`${MODULE_ID} | Falha ao resolver ataque`, error);
     ui.notifications.error(`OD2 Automacao: ${error.message}`);
@@ -476,6 +489,8 @@ async function handleAttack(actor, button) {
 
   const attackData = await requestAttackOptions(actor, item, button);
   if (!attackData) return;
+  attackData.ammunition = ammunition.item;
+  attackData.targetActor = target.actor;
 
   if (ammunition.item) {
     const quantity = Math.max(0, Math.trunc(Number(ammunition.item.system?.quantity) || 0));
@@ -488,6 +503,9 @@ async function handleAttack(actor, button) {
     await item.update({ 'system.is_equipped': false });
   }
   const naturalD20 = getNaturalD20(attackRoll);
+  const triggerContext = { item, weapon: item, ammunition: ammunition.item, attackMode: attackData.attackMode, attackBasis: attackData.ba, targetActor: target.actor, roll: attackRoll };
+  await game.od2Qdv?.effects?.trigger?.(actor, 'attack', triggerContext);
+  if (naturalD20 === 20) await game.od2Qdv?.effects?.trigger?.(actor, 'natural20', triggerContext);
   const fumble = naturalD20 === 1 ? await requestFumbleRule() : null;
   const critical = naturalD20 === 20 ? await requestCriticalRule() : null;
   const hit = !fumble && (Boolean(critical) || attackRoll.total >= targetAc);
@@ -504,52 +522,55 @@ async function handleAttack(actor, button) {
     fumble,
   });
 
-  if (fumble) return;
+  if (fumble) return true;
 
-  if (!hit) return;
+  if (!hit) return true;
 
   const combatAutoDamage = game.settings.get(MODULE_ID, 'combatAutoDamage');
-  if (!combatAutoDamage && !critical) return;
+  if (!combatAutoDamage && !critical) return true;
 
   const damageItem = ammunition.item ?? item;
-  const formula = getDamageFormula(actor, damageItem, attackData.attackMode);
+  const formula = getDamageFormula(actor, damageItem, attackData.attackMode, {
+    item, weapon: item, ammunition: ammunition.item, attackBasis: attackData.ba, targetActor: target.actor
+  });
   if (formula) {
     const damageResult = await rollDamage(actor, formula, critical);
+    await game.od2Qdv?.effects?.trigger?.(actor, 'damage', { item, weapon: item, ammunition: ammunition.item, attackMode: attackData.attackMode, attackBasis: attackData.ba, targetActor: target.actor, damageResult });
     await sendDamageMessage(actor, damageItem, target, damageResult.total, damageResult.roll, critical, damageResult, attackData.rollMode);
     const damageContext = buildDamageContext(actor, damageItem, target, damageResult, critical, attackData);
 
-    if (!combatAutoDamage) return;
+    if (!combatAutoDamage) return true;
 
     if (critical) {
       const confirmed = await confirmCriticalDamage(target, critical, damageResult);
-      if (!confirmed) return;
+      if (!confirmed) return true;
     }
 
     if (critical?.instantDeath) {
       await applyInstantDeath(target);
-      return;
+      return true;
     }
 
     await applyDamage(target, damageResult.total, attackData.rollMode, damageContext);
-    return;
+    return true;
   }
 
   if (critical?.instantDeath) {
     const instantDeathResult = { total: 0, roll: null, formula: '-', mode: 'none' };
     await sendDamageMessage(actor, item, target, 0, null, critical, instantDeathResult, attackData.rollMode);
 
-    if (!combatAutoDamage) return;
+    if (!combatAutoDamage) return true;
 
     const confirmed = await confirmCriticalDamage(target, critical, instantDeathResult);
-    if (!confirmed) return;
+    if (!confirmed) return true;
 
     await applyInstantDeath(target);
-    return;
+    return true;
   }
 
   ui.notifications.info(t('OD2CA.Notifications.noDamageFormula'));
   const manualDamage = critical ? await requestCriticalManualDamage(critical) : await requestManualDamage();
-  if (manualDamage === null) return;
+  if (manualDamage === null) return true;
 
   const finalManualDamage = critical?.damageMode === 'double' ? manualDamage * 2 : manualDamage;
   const manualDamageResult = { total: finalManualDamage, roll: null, formula: String(manualDamage), mode: critical?.damageMode ?? 'manual' };
@@ -557,18 +578,19 @@ async function handleAttack(actor, button) {
   await sendDamageMessage(actor, item, target, finalManualDamage, null, critical, manualDamageResult, attackData.rollMode);
   const damageContext = buildDamageContext(actor, item, target, manualDamageResult, critical, attackData);
 
-  if (!combatAutoDamage) return;
+  if (!combatAutoDamage) return true;
 
   if (critical) {
     const confirmed = await confirmCriticalDamage(target, critical, manualDamageResult);
-    if (!confirmed) return;
+    if (!confirmed) return true;
   }
 
   if (critical?.instantDeath) {
     await applyInstantDeath(target);
-    return;
+    return true;
   }
   await applyDamage(target, finalManualDamage, attackData.rollMode, damageContext);
+  return true;
 }
 
 function normalizedItemName(item) {
@@ -723,15 +745,19 @@ async function requestAttackOptions(actor, item, button) {
 }
 
 function getAttackFormula(actor, item, source, bonus, adjustment) {
+  const effectContext = { item, weapon: item, ammunition: source?.ammunition ?? null, attackMode: source?.attackMode, attackBasis: source?.ba, targetActor: source?.targetActor ?? null };
+  const effectBonus = game.od2Qdv?.effects?.modifierDelta?.(actor, 'attack', effectContext) ?? 0;
+  const difficultySteps = game.od2Qdv?.effects?.modifierDelta?.(actor, 'test.difficulty', effectContext) ?? 0;
+  const adjustedDifficulty = shiftDifficulty(adjustment, difficultySteps);
   if (actor.type === 'monster') {
-    return joinFormulaTerms(['1d20', adjustmentValue(adjustment), item.system.ba, bonus]);
+    return joinFormulaTerms(['1d20', adjustmentValue(adjustedDifficulty), item.system.ba, bonus, effectBonus]);
   }
 
   const dataset = source?.dataset ?? source ?? {};
   const ba = dataset.ba;
   const baseAttack = ba === 'bad' ? actor.system.bad : actor.system.bac;
   const itemBonus = dataset.baBonus === '' || dataset.baBonus === true ? item.system.bonus_ba : 0;
-  return joinFormulaTerms(['1d20', adjustmentValue(adjustment), baseAttack, itemBonus, bonus]);
+  return joinFormulaTerms(['1d20', adjustmentValue(adjustedDifficulty), baseAttack, itemBonus, bonus, effectBonus]);
 }
 
 async function rollAttack(actor, item, attackData) {
@@ -760,12 +786,14 @@ function buildDamageContext(actor, item, target, damageResult, critical, attackD
   };
 }
 
-function getDamageFormula(actor, item, attackMode) {
+function getDamageFormula(actor, item, attackMode, context = {}) {
   const damage = String(item.system.damage ?? '').trim();
   if (!damage) return '';
 
+  const effectBonus = game.od2Qdv?.effects?.modifierDelta?.(actor, 'damage', { ...context, attackMode }) ?? 0;
+  const dieSteps = game.od2Qdv?.effects?.modifierDelta?.(actor, 'damage.dieStep', { ...context, attackMode }) ?? 0;
   if (actor.type === 'monster') {
-    return joinFormulaTerms([damage, item.system.damage_bonus]);
+    return shiftDamageDice(joinFormulaTerms([damage, item.system.damage_bonus, effectBonus]), dieSteps);
   }
 
   const terms = [damage];
@@ -774,8 +802,9 @@ function getDamageFormula(actor, item, attackMode) {
 
   const raceBonus = Number(actor.system.raceBonusDamage?.(item) ?? 0);
   if (raceBonus) terms.push(raceBonus);
+  if (effectBonus) terms.push(effectBonus);
 
-  return joinFormulaTerms(terms);
+  return shiftDamageDice(joinFormulaTerms(terms), dieSteps);
 }
 
 async function rollDamage(actor, formula, critical) {

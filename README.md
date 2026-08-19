@@ -8,6 +8,17 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 
 [![Assista à apresentação do Old Dragon 2: Qualidade de Vida](assets/readme/video-qualidade-de-vida.png)](https://youtu.be/R_b9y9a12qI)
 
+### Gerenciador de efeitos OD2
+
+- Cria efeitos persistentes ou temporários diretamente nos atores.
+- Modifica CA, BAC, BAD, JPD, JPC, JPS, ataques e dano sem depender do DAE.
+- Controla efeitos por rodadas, turnos, tempo do mundo ou até o próximo descanso.
+- Mantém origem, descrição e notas exclusivas do Mestre para cada efeito.
+- Permite regras condicionais com Quando, Se, Enquanto, Então e Senão, comparando PV, atributos, nível, CA, ataques, JPs e condições presentes no ator.
+- Executa ações de PV com fórmulas de dados, mensagens no chat ou ativação e desativação de outros efeitos pelo nome.
+- Oferece gatilhos de ataque, dano, magia, descanso, 20 natural e subida de nível, com seleção de alvos, distância, aura e ambiente.
+- Controla usos, recuperação no descanso, ataques extras, preparação de magia, invocações e transformações visuais reversíveis.
+
 ### Automação de combate
 
 - Intercepta ataques das fichas de personagens e monstros.
@@ -79,6 +90,14 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Configura nível, XP mínimo do nível, PV com dado de vida e Constituição e renda inicial editável.
 - Ao concluir, abre a ficha e orienta o jogador a escolher equipamentos e magias.
 - Jogadores podem solicitar a criação; o Mestre autoriza o início, cada rerrolagem e o resumo final diretamente pelo chat.
+
+### Integração com Dark Sun
+
+- Detecta automaticamente módulos Dark Sun ativos na versão 1.0.4 ou superior.
+- Acrescenta raças e classes dos compêndios Dark Sun ao gerador de personagens, identificando sua origem nas listas.
+- Acrescenta magias Dark Sun às fontes do gerador de pergaminhos, isoladamente ou combinadas com SRD e Tomo de Magia.
+- Equipamentos, recipientes, munições, inventários de monstros e automação de combate funcionam com itens Dark Sun sem configuração adicional.
+- A integração só é carregada quando o módulo Dark Sun está ativado no mundo, pois módulos inativos não disponibilizam seus compêndios ao Foundry.
 
 ## Compatibilidade
 

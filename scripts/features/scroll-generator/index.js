@@ -1,5 +1,6 @@
 import { actorOwnerNames } from "../equipment-containers/model.js";
 import { curseForRoll, selectRandomSpells } from "./model.js";
+import { darkSunEnabled, darkSunPacks } from "../../integrations/dark-sun.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const TOMO_FLAG_ID = "tomo-de-magia-od2";
@@ -60,6 +61,18 @@ async function loadSrdSpells() {
   return spells;
 }
 
+async function loadDarkSunSpells() {
+  const spells = [];
+  for (const pack of darkSunPacks("Item")) {
+    const index = await pack.getIndex({ fields: ["type", "system.arcane", "system.divine", "system.school", "system.circle"] });
+    for (const entry of index) {
+      const uuid = entry.uuid ?? `Compendium.${pack.collection}.Item.${entry._id}`;
+      spells.push(...spellEntries(entry, "Dark Sun", uuid));
+    }
+  }
+  return spells;
+}
+
 async function loadTomeSpells() {
   const response = await fetch(`modules/${MODULE_ID}/data/spell-tome/spells.json`);
   if (!response.ok) throw new Error(`Falha ao carregar Tomo de Magia: ${response.status}`);
@@ -85,8 +98,10 @@ function deduplicate(spells) {
 
 async function spellPool({ tradition, source, maxCircle }) {
   const spells = [];
-  if (source === "srd" || source === "both") spells.push(...await loadSrdSpells());
-  if (source === "tome" || source === "both") spells.push(...await loadTomeSpells());
+  const sources = new Set((source === "both" ? "srd+tome" : source).split("+"));
+  if (sources.has("srd")) spells.push(...await loadSrdSpells());
+  if (sources.has("dark")) spells.push(...await loadDarkSunSpells());
+  if (sources.has("tome")) spells.push(...await loadTomeSpells());
   return deduplicate(spells).filter((spell) =>
     spell.circle <= maxCircle && (tradition === "both" || spell.tradition === tradition)
   );
@@ -101,8 +116,16 @@ function htmlRoot(html) {
 }
 
 async function promptOptions() {
-  const sourceField = tomeEnabled()
-    ? `<div class="form-group"><label>Fonte das magias</label><select name="source"><option value="srd">SRD</option><option value="tome">Tomo de Magia</option><option value="both">SRD e Tomo</option></select></div>`
+  const hasTome = tomeEnabled();
+  const hasDarkSun = darkSunEnabled();
+  const sourceOptions = [
+    ["srd", "SRD"],
+    ...(hasDarkSun ? [["dark", "Dark Sun"], ["srd+dark", "SRD e Dark Sun"]] : []),
+    ...(hasTome ? [["tome", "Tomo de Magia"], ["srd+tome", "SRD e Tomo"]] : []),
+    ...(hasDarkSun && hasTome ? [["dark+tome", "Dark Sun e Tomo"], ["srd+dark+tome", "SRD, Dark Sun e Tomo"]] : [])
+  ];
+  const sourceField = sourceOptions.length > 1
+    ? `<div class="form-group"><label>Fonte das magias</label><select name="source">${sourceOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></div>`
     : '<input type="hidden" name="source" value="srd">';
   const content = `<div class="od2qdv-scroll-form">
       <div class="form-group"><label>Tradição</label><select name="tradition"><option value="arcane">Arcano</option><option value="divine">Divino</option><option value="both">Arcano e Divino</option></select></div>

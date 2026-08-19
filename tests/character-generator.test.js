@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   allocationFromDice, attributeModifier, calculateHitPoints,
-  classAllowsRace, experienceForLevel, hitDieForClass, racialAttributes
+  classAllowsRace, experienceForLevel, hitDieForClass, hitPointBonusForClass, jpcBonusForClass, racialAttributes
 } from "../scripts/features/character-generator/model.js";
 
 test("usa a tabela oficial de modificadores de atributos", () => {
@@ -37,7 +37,23 @@ test("resolve o dado de vida pelo nome da classe quando o compêndio não inform
   assert.equal(hitDieForClass({ name: "Guerreiro", system: {} }), 10);
   assert.equal(hitDieForClass({ name: "Clérigo", system: {} }), 8);
   assert.equal(hitDieForClass({ name: "Halfling Aventureiro", system: {} }), 6);
-  assert.equal(hitDieForClass({ name: "Mago", system: { hp: 6 } }), 6);
+  assert.equal(hitDieForClass({ name: "Mago", system: { hp: 6 } }), 4);
+  assert.equal(hitDieForClass({ name: "Bardo Athasiano", system: {} }), 6);
+  assert.equal(hitDieForClass({ name: "Clérigo Elemental", system: {} }), 8);
+  assert.equal(hitDieForClass({ name: "Gladiador", system: {} }), 12);
+  assert.equal(hitDieForClass({ name: "Preservador", system: {} }), 4);
+  assert.equal(hitDieForClass({ name: "Profanador", system: {} }), 4);
+  assert.equal(hitDieForClass({ name: "Psiônico", system: {} }), 4);
+  assert.equal(hitDieForClass({ name: "Templário", system: {} }), 8);
+});
+
+test("aplica o bônus de +2 PV por nível do Bárbaro", () => {
+  const barbarian = { name: "Bárbaro", system: {} };
+  assert.equal(hitPointBonusForClass(barbarian), 2);
+  assert.equal(calculateHitPoints(10, 3, 13, [5, 7], hitPointBonusForClass(barbarian)), 31);
+  assert.equal(hitPointBonusForClass({ name: "Guerreiro", system: {} }), 0);
+  assert.equal(jpcBonusForClass(barbarian), 2);
+  assert.equal(jpcBonusForClass({ name: "Guerreiro", system: {} }), 0);
 });
 
 test("distribui sete dados sobre atributos com base oito", () => {

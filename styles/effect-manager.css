@@ -1,0 +1,32 @@
+.od2qdv-effect-tab { overflow: auto; }
+.od2qdv-effect-manager table { width: 100%; border-collapse: collapse; }
+.od2qdv-effect-manager td { vertical-align: middle; }
+.od2qdv-effect-manager td img { border: 0; object-fit: contain; }
+.od2qdv-effect-manager td small { display: block; opacity: .75; }
+.od2qdv-effect-manager .group-heading { background: rgba(0, 0, 0, .09); border-top: 1px solid var(--color-border-light-primary, #999); border-bottom: 1px solid var(--color-border-light-primary, #999); }
+.od2qdv-effect-manager .group-heading th { padding: .3rem .4rem; text-align: left; }
+.od2qdv-effect-manager .group-heading th:nth-last-child(-n+3) { text-align: center; }
+.od2qdv-effect-manager .group-heading button { border: 0; background: transparent; padding: .15rem .3rem; white-space: nowrap; }
+.od2qdv-effect-manager .od2qdv-effect-row { border-bottom: 1px solid rgba(0, 0, 0, .15); }
+.od2qdv-effect-manager .od2qdv-effect-row td { padding: .25rem .35rem; }
+.od2qdv-effect-manager .effect-icon { width: 38px; }
+.od2qdv-effect-manager .effect-name { width: 42%; }
+.od2qdv-effect-manager .effect-source, .od2qdv-effect-manager .effect-duration { text-align: center; }
+.od2qdv-effect-manager tr.is-disabled td:not(.actions) { opacity: .55; }
+.od2qdv-effect-manager .actions { white-space: nowrap; text-align: right; }
+.od2qdv-effect-manager .actions button { width: 2rem; padding: .25rem; border: 0; background: transparent; }
+.od2qdv-effect-manager .actions .conditional-active { color: #2f7d32; text-shadow: 0 0 4px rgba(47, 125, 50, .35); }
+.od2qdv-effect-manager .empty { padding: 1rem; text-align: center; font-style: italic; }
+.od2qdv-effect-dialog { min-width: 520px; min-height: 420px; overflow: hidden; }
+.od2qdv-effect-dialog .window-content { min-height: 0; overflow-y: auto !important; overflow-x: hidden !important; scrollbar-gutter: stable; }
+.od2qdv-effect-dialog .dialog-content { overflow: visible; }
+.od2qdv-effect-dialog .window-resizable-handle { display: block; }
+.od2qdv-effect-editor { box-sizing: border-box; width: 100%; height: auto; min-height: max-content; overflow: visible; padding-right: .45rem; }
+.od2qdv-effect-editor fieldset { margin: .75rem 0; }
+.od2qdv-conditional [data-conditional-options][hidden] { display: none !important; }
+.od2qdv-effect-modifier { display: grid; grid-template-columns: 2fr 1.2fr .7fr 2rem; gap: .35rem; margin-bottom: .35rem; }
+.od2qdv-effect-modifier button { padding: .25rem; }
+.od2qdv-conditional-expression { display: grid; grid-template-columns: .7fr 1.4fr 1fr 1.4fr; gap: .35rem; margin: .5rem 0; }
+.od2qdv-conditional-action { display: grid; grid-template-columns: .55fr 1.1fr 1fr 1fr 1.35fr; align-items: center; gap: .35rem; margin: .45rem 0; }
+.od2qdv-conditional-action label { display: flex; align-items: center; gap: .25rem; }
+.od2qdv-effect-message p { margin: .25rem 0; }
