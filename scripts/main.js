@@ -64,6 +64,10 @@ Hooks.once("init", () => {
     scope: "world", config: true, type: String, default: "1d6"
   });
 
+  game.settings.register(MODULE_ID, "effectTimeLog", {
+    scope: "world", config: false, type: Array, default: []
+  });
+
   game.settings.register(MODULE_ID, "combatAutoDamage", {
     name: "OD2CA.Settings.combatAutoDamage.name",
     hint: "OD2CA.Settings.combatAutoDamage.hint",

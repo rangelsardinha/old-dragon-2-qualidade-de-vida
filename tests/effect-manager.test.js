@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   activeEffects, advanceDurations, applyHpAction, applyModifiers, conditionalEffectApplies, conditionalMatches, conditionalValueType, normalizeEffect,
-  shiftDamageDice, shiftDifficulty
+  effectExpired, OD2_TIME, shiftDamageDice, shiftDifficulty
 } from "../scripts/features/effect-manager/model.js";
 
 test("normaliza efeitos e descarta modificadores inválidos", () => {
@@ -38,6 +38,18 @@ test("expira efeitos temporizados e avança rodadas", () => {
   const twice = advanceDurations(once, { roundChanged: true });
   assert.equal(once[0].duration.remaining, 1);
   assert.equal(activeEffects(twice).length, 0);
+  assert.equal(twice[0].enabled, false);
+});
+
+test("usa as unidades de tempo oficiais do Old Dragon", () => {
+  assert.equal(OD2_TIME.ROUND_SECONDS, 10);
+  assert.equal(OD2_TIME.TURN_SECONDS, 600);
+  const turn = normalizeEffect({ duration: { type: "turns", value: 2, remaining: 2, expiresAt: 2200 } });
+  assert.equal(effectExpired(turn, 2199), false);
+  assert.equal(effectExpired(turn, 2200), true);
+  assert.equal(advanceDurations([turn], { turnChanged: true })[0].duration.remaining, 2);
+  const rounds = normalizeEffect({ duration: { type: "rounds", value: 5, remaining: 5 } });
+  assert.equal(advanceDurations([rounds], { roundsElapsed: 2 })[0].duration.remaining, 3);
 });
 
 test("compara PV, atributos e condições", () => {

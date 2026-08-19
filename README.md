@@ -18,6 +18,8 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - Executa ações de PV com fórmulas de dados, mensagens no chat ou ativação e desativação de outros efeitos pelo nome.
 - Oferece gatilhos de ataque, dano, magia, descanso, 20 natural e subida de nível, com seleção de alvos, distância, aura e ambiente.
 - Controla usos, recuperação no descanso, ataques extras, preparação de magia, invocações e transformações visuais reversíveis.
+- Usa as medidas oficiais de tempo do Old Dragon: rodadas de 10 segundos no combate e turnos de 10 minutos fora dele; o Combat Tracker avança o relógio do mundo a cada rodada.
+- Mantém histórico reversível dos avanços temporais: voltar uma rodada ou desmarcar o último turno restaura ativações, desativações e durações dos efeitos, respeitando a ordem das alterações.
 
 ### Automação de combate
 
@@ -75,6 +77,8 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 
 - Adiciona **Nova Carta de Controle** ao diretório de Diários para o Mestre.
 - Organiza quatro horas de exploração em turnos de 10 minutos.
+- Ao marcar um turno, avança 10 minutos no relógio do mundo e atualiza automaticamente a duração dos efeitos temporários.
+- Ao desmarcar o último turno aplicado, retorna o relógio e restaura os efeitos registrados naquele avanço.
 - Automatiza rolagens secretas de encontro e avisos de descanso, tochas e lanternas.
 - Mantém notas públicas e notas privadas exclusivas do Mestre.
 - Reconhece cartas criadas pelo antigo módulo independente `carta-de-controle-de-sessao-od2`.

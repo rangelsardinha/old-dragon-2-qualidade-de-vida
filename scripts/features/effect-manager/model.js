@@ -26,8 +26,8 @@ export const EFFECT_MODES = Object.freeze({
 });
 export const DURATION_TYPES = Object.freeze({
   permanent: "Permanente",
-  rounds: "Rodadas",
-  turns: "Turnos",
+  rounds: "Rodadas (10 segundos)",
+  turns: "Turnos (10 minutos)",
   minutes: "Minutos",
   hours: "Horas",
   rest: "Até o próximo descanso"
@@ -39,8 +39,9 @@ export const CONDITIONAL_TRIGGERS = Object.freeze({
   spell: "Quando conjurar uma magia", rest: "Quando concluir um descanso", levelUp: "Quando subir de nível",
   hpChange: "Quando os PV mudarem", attributeChange: "Quando um atributo mudar",
   conditionChange: "Quando uma condição ou efeito mudar",
-  turnStart: "No início do turno", roundStart: "No início da rodada"
+  turnStart: "No início da vez do combatente", roundStart: "No início da rodada"
 });
+export const OD2_TIME = Object.freeze({ ROUND_SECONDS: 10, TURN_SECONDS: 600 });
 export const CONDITIONAL_FLOWS = Object.freeze({ if: "Se", while: "Enquanto" });
 export const CONDITIONAL_VALUE_DEFINITIONS = Object.freeze([
   ["hp.value", "PV atuais", "Pontos de vida", "all"], ["hp.max", "PV máximos", "Pontos de vida", "all"],
@@ -308,8 +309,8 @@ export function shiftDifficulty(adjustment, steps = 0) {
 export function effectExpired(effect, worldTime = 0) {
   if (!effect?.enabled) return true;
   const duration = effect.duration || {};
-  if (["rounds", "turns"].includes(duration.type)) return Number(duration.remaining) <= 0;
-  if (["minutes", "hours"].includes(duration.type)) return Number(duration.expiresAt) > 0 && Number(worldTime) >= Number(duration.expiresAt);
+  if (duration.type === "rounds") return Number(duration.remaining) <= 0;
+  if (["turns", "minutes", "hours"].includes(duration.type)) return Number(duration.expiresAt) > 0 && Number(worldTime) >= Number(duration.expiresAt);
   return false;
 }
 
@@ -334,11 +335,13 @@ export function applyModifiers(base, effects, key, worldTime = 0) {
   return result;
 }
 
-export function advanceDurations(effects, { roundChanged = false, turnChanged = false } = {}) {
+export function advanceDurations(effects, { roundChanged = false, roundsElapsed = roundChanged ? 1 : 0 } = {}) {
   return (Array.isArray(effects) ? effects : []).map((effect) => {
     const normalized = normalizeEffect(effect, () => effect.id);
-    const shouldAdvance = normalized.duration.type === "rounds" ? roundChanged : normalized.duration.type === "turns" && turnChanged;
-    if (shouldAdvance && normalized.enabled && normalized.duration.remaining > 0) normalized.duration.remaining -= 1;
+    if (roundsElapsed > 0 && normalized.duration.type === "rounds" && normalized.enabled && normalized.duration.remaining > 0) {
+      normalized.duration.remaining = Math.max(0, normalized.duration.remaining - Math.trunc(roundsElapsed));
+      if (normalized.duration.remaining <= 0) normalized.enabled = false;
+    }
     return normalized;
   });
 }

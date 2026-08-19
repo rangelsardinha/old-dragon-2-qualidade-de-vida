@@ -1,7 +1,7 @@
 import {
   CONDITIONAL_ACTIONS, CONDITIONAL_FLOWS, CONDITIONAL_OPERATORS, CONDITIONAL_TRIGGERS, CONDITIONAL_VALUE_DEFINITIONS,
   DURATION_TYPES, EFFECT_ACTION_TARGETS, EFFECT_EVENT_ACTIONS, EFFECT_KEYS, EFFECT_MODES, activeEffects, advanceDurations, applyHpAction, applyModifiers,
-  conditionalEffectApplies, conditionalMatches, conditionalValueType, normalizeEffect
+  conditionalEffectApplies, conditionalMatches, conditionalValueType, normalizeEffect, OD2_TIME
 } from "./model.js";
 import { actorCoins } from "../equipment-containers/index.js";
 import { carriedLoad } from "../equipment-containers/model.js";
@@ -12,6 +12,9 @@ const boundSheets = new WeakSet();
 const executingConditionals = new Set();
 const evaluatingModifiers = new WeakSet();
 const previousLevels = new WeakMap();
+const previousCombatRounds = new WeakMap();
+const correctingCombats = new WeakSet();
+let temporalMutationDepth = 0;
 const STORED_MODIFIERS = Object.freeze({
   forca: "system.forca", destreza: "system.destreza", constituicao: "system.constituicao",
   inteligencia: "system.inteligencia", sabedoria: "system.sabedoria", carisma: "system.carisma",
@@ -46,6 +49,122 @@ function dialogV2() {
 
 function worldTime() {
   return Number(game.time?.worldTime) || 0;
+}
+
+function isPrimaryActiveGM() {
+  if (!game.user?.isGM) return false;
+  const activeGM = game.users?.activeGM;
+  if (activeGM) return activeGM.id === game.user.id;
+  const first = [...(game.users ?? [])].filter((user) => user.active && user.isGM).sort((left, right) => left.id.localeCompare(right.id))[0];
+  return !first || first.id === game.user.id;
+}
+
+function temporalLog() {
+  return foundry.utils.deepClone(game.settings.get(MODULE_ID, "effectTimeLog") || []);
+}
+
+async function setTemporalLog(entries) {
+  await game.settings.set(MODULE_ID, "effectTimeLog", entries.slice(-100));
+}
+
+function captureEffectStates() {
+  return [...(game.actors ?? [])].map((actor) => ({
+    actorUuid: actor.uuid, actorName: actor.name,
+    effects: foundry.utils.deepClone(effectsFor(actor))
+  }));
+}
+
+function effectStateChanges(before, after) {
+  const afterByActor = new Map(after.map((entry) => [entry.actorUuid, entry]));
+  return before.flatMap((entry) => {
+    const next = afterByActor.get(entry.actorUuid) ?? { actorUuid: entry.actorUuid, actorName: entry.actorName, effects: [] };
+    if (JSON.stringify(entry.effects) === JSON.stringify(next.effects)) return [];
+    const oldById = new Map(entry.effects.map((effect) => [effect.id, effect]));
+    const newById = new Map(next.effects.map((effect) => [effect.id, effect]));
+    const details = [...new Set([...oldById.keys(), ...newById.keys()])].flatMap((id) => {
+      const oldEffect = oldById.get(id), newEffect = newById.get(id);
+      if (JSON.stringify(oldEffect) === JSON.stringify(newEffect)) return [];
+      const name = newEffect?.name ?? oldEffect?.name ?? "Efeito";
+      if (!oldEffect) return [`${name}: criado/ativado`];
+      if (!newEffect) return [`${name}: removido`];
+      if (oldEffect.enabled !== newEffect.enabled) return [`${name}: ${newEffect.enabled ? "ativado" : "desativado"}`];
+      if (oldEffect.duration?.remaining !== newEffect.duration?.remaining) return [`${name}: duração ${oldEffect.duration.remaining} → ${newEffect.duration.remaining}`];
+      return [`${name}: alterado`];
+    });
+    return [{ actorUuid: entry.actorUuid, actorName: entry.actorName, before: entry.effects, after: next.effects, details }];
+  });
+}
+
+async function restoreTemporalChanges(changes, side = "before") {
+  for (const change of changes) {
+    const actor = await fromUuid(change.actorUuid);
+    if (actor?.documentName === "Actor") await saveEffects(actor, foundry.utils.deepClone(change[side] || []));
+  }
+}
+
+async function runTemporalTransaction(meta, operation) {
+  if (!isPrimaryActiveGM()) throw new Error("Somente o Mestre ativo principal pode alterar o tempo.");
+  const before = captureEffectStates();
+  const worldBefore = worldTime();
+  temporalMutationDepth += 1;
+  try {
+    await operation();
+    await expireWorldTimeEffects(true);
+    const after = captureEffectStates();
+    const entry = {
+      id: foundry.utils.randomID(), type: "advance", source: meta.source, reference: meta.reference || "",
+      phase: meta.phase || "time", label: meta.label || "Avanço de tempo", fromRound: meta.fromRound ?? null, toRound: meta.toRound ?? null,
+      seconds: worldTime() - worldBefore, worldBefore, worldAfter: worldTime(), timestamp: Date.now(),
+      userId: game.user.id, reverted: false, changes: effectStateChanges(before, after)
+    };
+    await setTemporalLog([...temporalLog(), entry]);
+    return entry;
+  } catch (error) {
+    const delta = worldBefore - worldTime();
+    if (delta && typeof game.time?.advance === "function") await game.time.advance(delta);
+    await restoreTemporalChanges(effectStateChanges(before, captureEffectStates()), "before");
+    throw error;
+  } finally { temporalMutationDepth -= 1; }
+}
+
+async function rollbackTemporalTransaction(transactionId) {
+  if (!isPrimaryActiveGM()) return { ok: false, reason: "Somente o Mestre ativo principal pode desfazer o tempo." };
+  const log = temporalLog();
+  const applied = log.filter((entry) => entry.type === "advance" && !entry.reverted);
+  const latest = applied.at(-1);
+  if (!latest || latest.id !== transactionId) return { ok: false, reason: "Desfaça primeiro os avanços de tempo posteriores." };
+  for (const change of latest.changes) {
+    const actor = await fromUuid(change.actorUuid);
+    if (actor && JSON.stringify(effectsFor(actor)) !== JSON.stringify(change.after)) {
+      return { ok: false, reason: `Os efeitos de ${change.actorName} foram alterados depois deste avanço. Reverta essas alterações primeiro.` };
+    }
+  }
+  temporalMutationDepth += 1;
+  try {
+    const delta = latest.worldBefore - worldTime();
+    if (delta && typeof game.time?.advance === "function") await game.time.advance(delta);
+    await restoreTemporalChanges(latest.changes, "before");
+    latest.reverted = true;
+    latest.revertedAt = Date.now();
+    latest.revertedBy = game.user.id;
+    await setTemporalLog(log);
+    return { ok: true, entry: latest };
+  } finally { temporalMutationDepth -= 1; }
+}
+
+function temporalHistoryContent() {
+  const rows = temporalLog().slice().reverse().map((entry) => {
+    const status = entry.reverted ? "Desfeito" : "Aplicado";
+    const changes = entry.changes.flatMap((change) => change.details.map((detail) => `${escapeHtml(change.actorName)} — ${escapeHtml(detail)}`));
+    return `<tr><td>${new Date(entry.timestamp).toLocaleString()}</td><td>${escapeHtml(entry.label)}</td><td>${entry.seconds >= 0 ? "+" : ""}${entry.seconds}s</td><td>${status}</td><td>${changes.join("<br>") || "Nenhum efeito alterado"}</td></tr>`;
+  }).join("") || '<tr><td colspan="5">Nenhuma atividade temporal registrada.</td></tr>';
+  return `<div class="od2qdv-time-history"><table><thead><tr><th>Data</th><th>Origem</th><th>Tempo</th><th>Estado</th><th>Alterações nos efeitos</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function openTemporalHistory() {
+  const V2 = dialogV2();
+  if (V2) return V2.wait({ window: { title: "Histórico temporal dos efeitos" }, content: temporalHistoryContent(), position: { width: 900 }, buttons: [{ action: "close", label: "Fechar" }] });
+  new Dialog({ title: "Histórico temporal dos efeitos", content: temporalHistoryContent(), buttons: { close: { label: "Fechar" } } }, { width: 900 }).render(true);
 }
 
 function modifier(actor, key, base = 0, context = {}) {
@@ -120,9 +239,10 @@ function durationLabel(effect) {
   const duration = effect.duration;
   if (duration.type === "permanent") return "Permanente";
   if (duration.type === "rest") return "Até o descanso";
-  if (["minutes", "hours"].includes(duration.type)) {
+  if (["turns", "minutes", "hours"].includes(duration.type)) {
     const remaining = Math.max(0, duration.expiresAt - worldTime());
-    return `${Math.ceil(remaining / (duration.type === "hours" ? 3600 : 60))} ${DURATION_TYPES[duration.type].toLowerCase()}`;
+    const unit = duration.type === "hours" ? 3600 : duration.type === "turns" ? OD2_TIME.TURN_SECONDS : 60;
+    return `${Math.ceil(remaining / unit)} ${DURATION_TYPES[duration.type].toLowerCase()}`;
   }
   return `${duration.remaining} ${DURATION_TYPES[duration.type].toLowerCase()}`;
 }
@@ -256,7 +376,9 @@ function readEffectForm(form, existing) {
   const rows = [...form.querySelectorAll(".od2qdv-effect-modifier")];
   const durationType = form.elements.effectKind.value === "permanent" ? "permanent" : form.elements.durationType.value;
   const durationValue = Math.max(0, Math.trunc(Number(form.elements.durationValue.value) || 0));
-  const seconds = durationType === "hours" ? durationValue * 3600 : durationType === "minutes" ? durationValue * 60 : 0;
+  const seconds = durationType === "hours" ? durationValue * 3600
+    : durationType === "minutes" ? durationValue * 60
+      : durationType === "turns" ? durationValue * OD2_TIME.TURN_SECONDS : 0;
   return normalizeEffect({
     ...existing,
     name: form.elements.name.value,
@@ -675,7 +797,7 @@ function managerContent(actor) {
   const temporary = effects.filter((effect) => effect.enabled && effect.duration.type !== "permanent");
   const passive = effects.filter((effect) => effect.enabled && effect.duration.type === "permanent");
   const inactive = effects.filter((effect) => !effect.enabled);
-  return `<div class="od2qdv-effect-manager"><div class="od2qdv-effect-toolbar"><button type="button" data-effect-rest><i class="fas fa-bed"></i> Concluir descanso</button></div><table>${effectGroup("Efeitos Temporários", "temporary", temporary)}${effectGroup("Efeitos Passivos", "passive", passive)}${effectGroup("Efeitos Inativos", "inactive", inactive)}</table></div>`;
+  return `<div class="od2qdv-effect-manager"><div class="od2qdv-effect-toolbar"><button type="button" data-effect-rest><i class="fas fa-bed"></i> Concluir descanso</button>${game.user.isGM ? '<button type="button" data-effect-history><i class="fas fa-history"></i> Histórico temporal</button>' : ""}</div><table>${effectGroup("Efeitos Temporários", "temporary", temporary)}${effectGroup("Efeitos Passivos", "passive", passive)}${effectGroup("Efeitos Inativos", "inactive", inactive)}</table></div>`;
 }
 
 async function openManager(actor) {
@@ -683,6 +805,7 @@ async function openManager(actor) {
   const V2 = dialogV2();
   const bind = (root, close) => {
     root.querySelector("[data-effect-rest]")?.addEventListener("click", async () => { await completeActorRest(actor); close(); openManager(actor); });
+    root.querySelector("[data-effect-history]")?.addEventListener("click", openTemporalHistory);
     root.querySelectorAll("[data-effect-create]").forEach((button) => button.addEventListener("click", async () => { if (await editEffect(actor, newEffectForCategory(button.dataset.effectCreate))) { close(); openManager(actor); } }));
     root.querySelector(".od2qdv-effect-manager table")?.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-effect-action]");
@@ -760,6 +883,8 @@ function enhanceEffectTab(app, html) {
       event.preventDefault(); activateEffectTab(app, root); return;
     }
     if (event.target.closest('nav.tabs[data-group="primary-tabs"] .item')) app._od2QdvEffectTabActive = false;
+    const history = event.target.closest("[data-effect-history]");
+    if (history) { event.preventDefault(); event.stopPropagation(); await openTemporalHistory(); return; }
     const rest = event.target.closest("[data-effect-rest]");
     if (rest) {
       event.preventDefault(); event.stopPropagation();
@@ -835,18 +960,85 @@ function installGetterIntegrations() {
 }
 
 async function advanceCombatEffects(combat, changed) {
-  if (!enabled() || !game.user.isGM) return;
+  if (!enabled() || !isPrimaryActiveGM() || correctingCombats.has(combat)) return;
   const roundChanged = Object.prototype.hasOwnProperty.call(changed, "round");
-  const turnChanged = roundChanged || Object.prototype.hasOwnProperty.call(changed, "turn");
+  const previousRound = previousCombatRounds.get(combat) ?? (Number(combat.round) || 0);
+  previousCombatRounds.delete(combat);
+  const nextRound = Number(changed.round ?? combat.round) || 0;
+  const roundStarted = roundChanged && nextRound > previousRound;
+  const turnChanged = roundStarted || Object.prototype.hasOwnProperty.call(changed, "turn");
   if (!roundChanged && !turnChanged) return;
   const actors = [...new Set(combat.combatants.map((combatant) => combatant.actor).filter(Boolean))];
-  for (const actor of actors) {
-    const before = effectsFor(actor);
-    const after = advanceDurations(before, { roundChanged, turnChanged });
-    if (JSON.stringify(before) !== JSON.stringify(after)) await saveEffects(actor, after);
+  if (roundChanged && nextRound < previousRound) {
+    let cursor = previousRound;
+    while (cursor > nextRound) {
+      const latest = temporalLog().filter((entry) => entry.type === "advance" && !entry.reverted).at(-1);
+      if (!latest || latest.source !== "combat" || latest.reference !== combat.uuid || latest.toRound !== cursor) {
+        ui.notifications.error("Não é possível voltar esta rodada: existem alterações posteriores no histórico temporal.");
+        correctingCombats.add(combat);
+        try { await combat.update({ round: previousRound }); } finally { correctingCombats.delete(combat); }
+        return;
+      }
+      const rollback = await rollbackTemporalTransaction(latest.id);
+      if (!rollback.ok) {
+        ui.notifications.error(rollback.reason);
+        correctingCombats.add(combat);
+        try { await combat.update({ round: previousRound }); } finally { correctingCombats.delete(combat); }
+        return;
+      }
+      if (latest.phase === "round") cursor -= 1;
+    }
+    ui.notifications.info(`Rodada retornada para ${nextRound}; alterações temporais dos efeitos foram restauradas.`);
+    return;
   }
-  if (roundChanged) for (const actor of actors) await executeActorConditionals(actor, "roundStart");
-  if (turnChanged && combat.combatant?.actor) await executeActorConditionals(combat.combatant.actor, "turnStart");
+  if (roundStarted) {
+    for (let round = previousRound + 1; round <= nextRound; round += 1) {
+      const elapsed = round > 1 ? 1 : 0;
+      await runTemporalTransaction({ source: "combat", phase: "round", reference: combat.uuid, label: `Combat Tracker: rodada ${round}`, fromRound: round - 1, toRound: round }, async () => {
+        for (const actor of actors) {
+          const before = effectsFor(actor);
+          const after = advanceDurations(before, { roundsElapsed: elapsed });
+          if (JSON.stringify(before) !== JSON.stringify(after)) await saveEffects(actor, after);
+        }
+        for (const actor of actors) await executeActorConditionals(actor, "roundStart");
+        if (round === nextRound && combat.combatant?.actor) await executeActorConditionals(combat.combatant.actor, "turnStart");
+        if (elapsed && typeof game.time?.advance === "function") await game.time.advance(OD2_TIME.ROUND_SECONDS);
+      });
+    }
+  }
+  if (turnChanged && !roundStarted && combat.combatant?.actor) {
+    await runTemporalTransaction({ source: "combat", phase: "turn", reference: combat.uuid, label: `Combat Tracker: vez de ${combat.combatant.actor.name}`, fromRound: nextRound, toRound: nextRound }, async () => {
+      await executeActorConditionals(combat.combatant.actor, "turnStart");
+    });
+  }
+}
+
+async function expireWorldTimeEffects(force = false) {
+  if (!enabled() || !isPrimaryActiveGM() || (temporalMutationDepth && !force)) return;
+  for (const actor of game.actors ?? []) {
+    const effects = effectsFor(actor);
+    let changed = false;
+    for (const effect of effects) {
+      if (!effect.enabled || !["turns", "minutes", "hours"].includes(effect.duration.type)) continue;
+      if (effect.duration.expiresAt > 0 && worldTime() >= effect.duration.expiresAt) { effect.enabled = false; changed = true; }
+    }
+    if (changed) await saveEffects(actor, effects);
+  }
+}
+
+async function migrateLegacyTurnDurations() {
+  if (!enabled() || !isPrimaryActiveGM()) return;
+  for (const actor of game.actors ?? []) {
+    const effects = effectsFor(actor);
+    let changed = false;
+    for (const effect of effects) {
+      if (effect.enabled && effect.duration.type === "turns" && effect.duration.expiresAt <= 0) {
+        effect.duration.expiresAt = worldTime() + Math.max(0, effect.duration.remaining) * OD2_TIME.TURN_SECONDS;
+        changed = true;
+      }
+    }
+    if (changed) await saveEffects(actor, effects);
+  }
 }
 
 async function actorChanged(actor, changed) {
@@ -888,6 +1080,10 @@ Hooks.on("renderOD2CharacterSheet", enhanceEffectTab);
 Hooks.on("renderOD2MonsterSheet", enhanceEffectTab);
 Hooks.on("renderOD2RetainerSheet", enhanceEffectTab);
 Hooks.on("updateCombat", advanceCombatEffects);
+Hooks.on("preUpdateCombat", (combat, changed) => {
+  if (Object.prototype.hasOwnProperty.call(changed, "round")) previousCombatRounds.set(combat, Number(combat.round) || 0);
+});
+Hooks.on("updateWorldTime", () => expireWorldTimeEffects(false));
 Hooks.on("preUpdateActor", (actor, changed) => {
   if (changed.system && Object.prototype.hasOwnProperty.call(changed.system, "level")) previousLevels.set(actor, Number(actor.system.level) || 0);
 });
@@ -903,5 +1099,10 @@ Hooks.once("ready", () => {
   if (!enabled()) return;
   installGetterIntegrations();
   game.od2Qdv ??= {};
-  game.od2Qdv.effects = { open: openManager, get: effectsFor, active: (actor) => activeEffects(effectsFor(actor), worldTime()), modifier, modifierDelta, execute: executeConditional, trigger: triggerActorEffects, rest: completeActorRest };
+  game.od2Qdv.effects = {
+    open: openManager, get: effectsFor, active: (actor) => activeEffects(effectsFor(actor), worldTime()), modifier, modifierDelta,
+    execute: executeConditional, trigger: triggerActorEffects, rest: completeActorRest,
+    transactTime: runTemporalTransaction, rollbackTime: rollbackTemporalTransaction, history: temporalLog, openHistory: openTemporalHistory
+  };
+  migrateLegacyTurnDurations();
 });

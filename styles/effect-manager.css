@@ -30,3 +30,9 @@
 .od2qdv-conditional-action { display: grid; grid-template-columns: .55fr 1.1fr 1fr 1fr 1.35fr; align-items: center; gap: .35rem; margin: .45rem 0; }
 .od2qdv-conditional-action label { display: flex; align-items: center; gap: .25rem; }
 .od2qdv-effect-message p { margin: .25rem 0; }
+.od2qdv-effect-toolbar { display: flex; justify-content: flex-end; gap: .4rem; margin-bottom: .4rem; }
+.od2qdv-time-history { max-height: 620px; overflow: auto; }
+.od2qdv-time-history table { width: 100%; border-collapse: collapse; }
+.od2qdv-time-history th { position: sticky; top: 0; background: #7d1d1d; color: #fff; text-align: left; }
+.od2qdv-time-history th, .od2qdv-time-history td { padding: 6px 8px; border-bottom: 1px solid #8a8177; vertical-align: top; }
+.od2qdv-time-history td:nth-child(1), .od2qdv-time-history td:nth-child(3), .od2qdv-time-history td:nth-child(4) { white-space: nowrap; }

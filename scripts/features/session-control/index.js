@@ -1,6 +1,9 @@
+import { OD2_TIME } from "../effect-manager/model.js";
+import { seedAdvancedTurns, updateTurnState } from "./model.js";
+
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const LEGACY_ID = "carta-de-controle-de-sessao-od2";
-const KEYS = { enabled: "sessionControlEnabled", turns: "sessionControlTurns", public: "sessionControlPublicNotes", private: "sessionControlPrivateNotes" };
+const KEYS = { enabled: "sessionControlEnabled", turns: "sessionControlTurns", advanced: "sessionControlAdvancedTurns", public: "sessionControlPublicNotes", private: "sessionControlPrivateNotes" };
 const LAYOUT = Array.from({ length: 4 }, (_, hour) => Array.from({ length: 6 }, (_, index) => ({
   n: index + 1,
   events: index === 1 || index === 3 ? ["E"] : index === 5 ? ["D", "T", "E", ...(hour === 3 ? ["L"] : [])] : []
@@ -43,6 +46,7 @@ async function createJournal() {
   await entry.update({
     [`flags.${MODULE_ID}.${KEYS.enabled}`]: true,
     [`flags.${MODULE_ID}.${KEYS.turns}`]: {},
+    [`flags.${MODULE_ID}.${KEYS.advanced}`]: {},
     [`flags.${MODULE_ID}.${KEYS.public}`]: "",
     [`flags.${MODULE_ID}.${KEYS.private}`]: ""
   });
@@ -54,6 +58,9 @@ function renderCard(app, html) {
   const document = app.document;
   const entry = document?.documentName === "JournalEntry" ? document : document?.parent;
   if (!entry || !(value(entry, "enabled", false))) return;
+  if (entry.getFlag(MODULE_ID, KEYS.advanced) === undefined && game.user.isGM) {
+    entry.setFlag(MODULE_ID, KEYS.advanced, seedAdvancedTurns(value(entry, "turns", {}), undefined));
+  }
   const root = rootOf(html); if (!root) return;
   const card = documentFromHtml(cardHtml(entry));
   const current = root.querySelector(".od2sc-card, .od2sc-placeholder");
@@ -75,10 +82,51 @@ function cardHtml(entry) {
 function bindCard(card, entry) {
   card.addEventListener("change", async event => {
     const select = event.target.closest("[data-od2sc-turn]"); if (!select || !game.user.isGM) return;
-    const turns = foundry.utils.deepClone(value(entry, "turns", {})), previous = turns[select.dataset.od2scTurn];
-    if (select.value) turns[select.dataset.od2scTurn] = select.value; else delete turns[select.dataset.od2scTurn];
-    await entry.setFlag(MODULE_ID, KEYS.turns, turns);
-    if (previous !== "passed" && select.value === "passed") await triggerEvents(select.dataset.od2scTurn);
+    const key = select.dataset.od2scTurn;
+    const currentTurns = foundry.utils.deepClone(value(entry, "turns", {}));
+    const currentAdvanced = seedAdvancedTurns(currentTurns, entry.getFlag(MODULE_ID, KEYS.advanced));
+    const update = updateTurnState(currentTurns, currentAdvanced, key, select.value === "passed", "pending");
+    if (update.shouldRollback) {
+      try {
+        await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: update.turns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: update.advanced });
+        const rollback = await game.od2Qdv?.effects?.rollbackTime?.(update.transactionId);
+        if (!rollback?.ok) throw new Error(rollback?.reason || "O histórico temporal deste turno não está disponível.");
+        ui.notifications.info("Turno desfeito: o relógio e os efeitos foram restaurados.");
+      } catch (error) {
+        select.value = "passed";
+        await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: currentTurns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: currentAdvanced });
+        ui.notifications.error(`Não foi possível desfazer o turno: ${error.message}`);
+      }
+      return;
+    }
+    let transaction;
+    try {
+      await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: update.turns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: update.advanced });
+      if (update.shouldAdvance) {
+        if (typeof game.time?.advance !== "function") throw new Error("O relógio do mundo não está disponível.");
+        transaction = await game.od2Qdv?.effects?.transactTime?.({ source: "session", reference: `${entry.uuid}:${key}`, label: `Carta de Sessão: turno ${key}` }, async () => {
+          await game.time.advance(OD2_TIME.TURN_SECONDS);
+        });
+        if (!transaction?.id) throw new Error("O Gerenciador de Efeitos não iniciou a transação temporal.");
+        update.advanced[key] = transaction.id;
+        await entry.update({ [`flags.${MODULE_ID}.${KEYS.advanced}`]: update.advanced });
+      }
+    } catch (error) {
+      if (transaction?.id) await game.od2Qdv?.effects?.rollbackTime?.(transaction.id);
+      select.value = update.previous === "passed" ? "passed" : "";
+      await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: currentTurns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: currentAdvanced });
+      console.error(`${MODULE_ID} | Falha ao avançar turno da carta`, error);
+      ui.notifications.error(`Não foi possível avançar o turno: ${error.message}`);
+      return;
+    }
+    if (update.shouldAdvance) {
+      ui.notifications.info("1 turno transcorrido: o relógio avançou 10 minutos.");
+      try { await triggerEvents(key); }
+      catch (error) {
+        console.error(`${MODULE_ID} | Falha nos eventos do turno ${key}`, error);
+        ui.notifications.error(`O turno avançou, mas um evento falhou: ${error.message}`);
+      }
+    }
   });
   card.addEventListener("click", async event => {
     const action = event.target.closest("[data-action]")?.dataset.action; if (!action || !game.user.isGM) return;
