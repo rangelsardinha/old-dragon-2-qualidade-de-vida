@@ -10,9 +10,6 @@ export function updateTurnState(turnsSource = {}, advancedSource = {}, key, pass
   if (passed) turns[key] = "passed";
   else delete turns[key];
   const shouldAdvance = passed && previous !== "passed" && !advanced[key];
-  const transactionId = advanced[key];
-  const shouldRollback = !passed && previous === "passed" && Boolean(transactionId) && transactionId !== "legacy";
   if (shouldAdvance) advanced[key] = stamp;
-  if (shouldRollback) delete advanced[key];
-  return { turns, advanced, previous, shouldAdvance, shouldRollback, transactionId };
+  return { turns, advanced, previous, shouldAdvance };
 }

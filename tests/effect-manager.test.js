@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  activeEffects, advanceDurations, applyHpAction, applyModifiers, conditionalEffectApplies, conditionalMatches, conditionalValueType, normalizeEffect,
+  activeEffects, advanceDurations, applyHpAction, applyModifiers, conditionalEffectApplies, conditionalMatches, conditionalValueType, effectAssociatedWithItem, effectForCategory, normalizeEffect,
   effectExpired, OD2_TIME, shiftDamageDice, shiftDifficulty
 } from "../scripts/features/effect-manager/model.js";
 
@@ -9,6 +9,13 @@ test("normaliza efeitos e descarta modificadores inválidos", () => {
   const effect = normalizeEffect({ name: "Aura", modifiers: [{ key: "ac", mode: "add", value: 2 }, { key: "x", value: 5 }] }, () => "abc");
   assert.equal(effect.id, "abc");
   assert.deepEqual(effect.modifiers, [{ key: "ac", mode: "add", value: "2", resolvedValue: null }]);
+});
+
+test("preserva modificador fixo depois de salvar e carregar novamente", () => {
+  const saved = normalizeEffect({ name: "Inimigos", modifiers: [{ key: "attack", mode: "add", value: 2 }] });
+  const loaded = normalizeEffect(saved);
+  assert.equal(loaded.modifiers[0].resolvedValue, null);
+  assert.equal(applyModifiers(0, [loaded], "attack"), 2);
 });
 
 test("migra o modificador antigo de PV para PV máximos", () => {
@@ -41,6 +48,12 @@ test("expira efeitos temporizados e avança rodadas", () => {
   assert.equal(twice[0].enabled, false);
 });
 
+test("apaga efeito temporário quando a duração termina", () => {
+  const effect = normalizeEffect({ deleteOnExpire: true, duration: { type: "rounds", value: 1, remaining: 1 } });
+  assert.equal(advanceDurations([effect], { roundsElapsed: 1 }).length, 0);
+  assert.equal(normalizeEffect({ deleteOnExpire: true }).deleteOnExpire, true);
+});
+
 test("usa as unidades de tempo oficiais do Old Dragon", () => {
   assert.equal(OD2_TIME.ROUND_SECONDS, 10);
   assert.equal(OD2_TIME.TURN_SECONDS, 600);
@@ -61,10 +74,12 @@ test("compara PV, atributos e condições", () => {
 });
 
 test("compara condições de verdadeiro ou falso", () => {
-  const snapshot = { values: { "item.armorEquipped": true, "movement.canFly": false } };
+  const snapshot = { values: { "item.armorEquipped": true, "movement.canFly": false, "source.itemEquipped": true } };
   assert.equal(conditionalValueType("item.armorEquipped"), "boolean");
   assert.equal(conditionalMatches({ left: "item.armorEquipped", operator: "eq", right: "boolean.true" }, snapshot), true);
   assert.equal(conditionalMatches({ left: "movement.canFly", operator: "eq", right: "boolean.false" }, snapshot), true);
+  assert.equal(conditionalValueType("source.itemEquipped"), "boolean");
+  assert.equal(conditionalMatches({ left: "source.itemEquipped", operator: "eq", right: "boolean.true" }, snapshot), true);
 });
 
 test("a condição controla a aplicação dos modificadores do efeito", () => {
@@ -77,6 +92,15 @@ test("a condição controla a aplicação dos modificadores do efeito", () => {
   } });
   assert.equal(conditionalEffectApplies(active, snapshot), true);
   assert.equal(conditionalEffectApplies(noAction, snapshot), false);
+});
+
+test("aplica Inimigos quando o alvo é um Ogro", () => {
+  const effect = normalizeEffect({
+    modifiers: [{ key: "attack", mode: "add", value: 2 }],
+    conditional: { enabled: true, left: "target.speciesNamed", operator: "eq", right: "boolean.true", conditionName: "orc|ogro|hobgoblin", resultAction: "applyEffect" }
+  });
+  assert.equal(conditionalEffectApplies(effect, { values: {}, targetSpecies: ["Ogro"] }), true);
+  assert.equal(applyModifiers(0, [effect], "attack"), 2);
 });
 
 test("compara arma, tipo de ataque e munição do ataque atual", () => {
@@ -107,6 +131,7 @@ test("compara espécie, alinhamento, condição e DV do alvo", () => {
     sceneEnvironments: ["Ermos abertos"]
   };
   assert.equal(conditionalMatches({ left: "target.speciesNamed", operator: "eq", right: "boolean.true", conditionName: "orc" }, snapshot), true);
+  assert.equal(conditionalMatches({ left: "target.speciesNamed", operator: "eq", right: "boolean.true", conditionName: "ogro|orc|hobgoblin" }, snapshot), true);
   assert.equal(conditionalMatches({ left: "target.conceptNamed", operator: "eq", right: "boolean.true", conditionName: "humanoide" }, snapshot), true);
   assert.equal(conditionalMatches({ left: "target.alignmentNamed", operator: "eq", right: "boolean.true", conditionName: "caotico" }, snapshot), true);
   assert.equal(conditionalMatches({ left: "target.conditionNamed", operator: "eq", right: "boolean.true", conditionName: "Envenenado" }, snapshot), true);
@@ -138,9 +163,32 @@ test("normaliza usos limitados e recuperação no descanso", () => {
   const effect = normalizeEffect({ uses: { max: 3, remaining: 2, resetOnRest: true } });
   assert.deepEqual(effect.uses, { max: 3, remaining: 2, resetOnRest: true });
   assert.deepEqual(normalizeEffect({ uses: { max: 2 } }).uses, { max: 2, remaining: 2, resetOnRest: true });
+  assert.deepEqual(
+    normalizeEffect({ association: { type: "equipment", id: "item1", name: "Anel", effectId: "efeito1" } }).association,
+    { type: "equipment", id: "item1", name: "Anel", effectId: "efeito1" }
+  );
 });
 
 test("aceita ataques extras como modificador", () => {
   const effect = normalizeEffect({ modifiers: [{ key: "attacks.extra", mode: "add", value: 1 }] });
   assert.equal(applyModifiers(0, [effect], "attacks.extra"), 1);
+});
+
+test("adapta um modelo do compêndio para a categoria onde foi solto", () => {
+  const template = normalizeEffect({ name: "Bênção", duration: { type: "permanent" }, modifiers: [{ key: "ba", mode: "add", value: 1 }] }, () => "modelo");
+  const temporary = effectForCategory(template, "temporary", () => "temporario");
+  const passive = effectForCategory({ ...template, duration: { type: "rounds", value: 4, remaining: 4 } }, "passive", () => "passivo");
+  const inactive = effectForCategory(template, "inactive", () => "inativo");
+  assert.deepEqual({ id: temporary.id, enabled: temporary.enabled, type: temporary.duration.type, remaining: temporary.duration.remaining }, { id: "temporario", enabled: true, type: "rounds", remaining: 1 });
+  assert.deepEqual({ id: passive.id, enabled: passive.enabled, type: passive.duration.type }, { id: "passivo", enabled: true, type: "permanent" });
+  assert.deepEqual({ id: inactive.id, enabled: inactive.enabled }, { id: "inativo", enabled: false });
+});
+
+test("reconhece efeitos associados a classe, raça ou habilidade dependente", () => {
+  const academic = { id: "classe1", type: "class", name: "Acadêmico" };
+  assert.equal(effectAssociatedWithItem({ origin: "Acadêmico" }, academic), true);
+  assert.equal(effectAssociatedWithItem({ origin: "Conhecimento Acadêmico" }, academic, ["Conhecimento Acadêmico"]), true);
+  assert.equal(effectAssociatedWithItem({ origin: "Manual" }, academic, ["Conhecimento Acadêmico"]), false);
+  assert.equal(effectAssociatedWithItem({ association: { type: "class", id: "classe1", name: "Outra" } }, academic), true);
+  assert.equal(effectAssociatedWithItem({ association: { type: "race", name: "Anão" } }, academic), false);
 });

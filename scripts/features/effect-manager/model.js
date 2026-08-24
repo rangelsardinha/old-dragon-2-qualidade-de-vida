@@ -10,6 +10,7 @@ export const EFFECT_KEYS = Object.freeze({
   jps: "Jogada de Proteção de Sabedoria",
   attack: "Ataques",
   damage: "Dano",
+  "incoming.attack": "Ataque realizado contra este ator",
   "test.difficulty": "Níveis de facilidade do teste",
   "damage.dieStep": "Passos do dado de dano",
   "attacks.extra": "Ataques extras",
@@ -79,6 +80,7 @@ export const CONDITIONAL_VALUE_DEFINITIONS = Object.freeze([
   ["item.armorEquipped", "Possui armadura equipada", "Equipamentos", "character,retainer"], ["item.shieldEquipped", "Possui escudo equipado", "Equipamentos", "character,retainer"],
   ["item.ammunitionEquipped", "Possui munição equipada", "Equipamentos", "character,retainer"], ["item.container", "Possui recipiente", "Equipamentos", "all"],
   ["item.magic", "Possui item mágico", "Equipamentos", "all"],
+  ["source.itemEquipped", "Item associado está equipado", "Equipamentos", "all"],
   ["attack.itemNamed", "Ataque usa a arma/item informado", "Ataque atual", "all"],
   ["attack.weaponMelee", "Ataque com arma corpo a corpo", "Ataque atual", "all"],
   ["attack.weaponRanged", "Ataque com arma à distância", "Ataque atual", "all"],
@@ -130,6 +132,7 @@ const BOOLEAN_CONDITIONAL_VALUES = new Set([
   "class.named", "race.named", "classAbility.named",
   "raceAbility.named", "rogue.has", "spell.named", "scroll.has", "condition", "effect.inactive",
   "effect.temporary", "effect.passive", "monster.variant", "retainer.heroicUsed",
+  "source.itemEquipped",
   "boolean.true", "boolean.false"
 ]);
 
@@ -141,7 +144,7 @@ export const CONDITIONAL_ACTIONS = Object.freeze({
 });
 export const EFFECT_EVENT_ACTIONS = Object.freeze({
   none: "Não executar ação", roll: "Rolar um teste", heal: "Aplicar cura", damage: "Aplicar dano",
-  consumeItem: "Consumir um item/recurso", summon: "Invocar ator pelo nome",
+  consumeItem: "Consumir um item/recurso", applyEffect: "Aplicar este efeito aos alvos", summon: "Invocar ator pelo nome",
   transform: "Assumir aparência de ator", revertTransform: "Restaurar aparência original",
   prepareSpell: "Preparar magia pelo nome"
 });
@@ -197,8 +200,15 @@ export function normalizeEffect(source = {}, randomId = () => "effect") {
     icon: String(source.icon || "icons/svg/aura.svg"),
     enabled: source.enabled !== false,
     origin: String(source.origin || "Manual"),
+    association: {
+      type: ["class", "race", "class_ability", "race_ability", "spell", "equipment"].includes(source.association?.type) ? source.association.type : "",
+      id: String(source.association?.id || ""),
+      name: String(source.association?.name || "").trim(),
+      effectId: String(source.association?.effectId || "")
+    },
     description: String(source.description || ""),
     gmNotes: String(source.gmNotes || ""),
+    deleteOnExpire: source.deleteOnExpire === true,
     duration: {
       type: durationType,
       value: durationValue,
@@ -217,11 +227,38 @@ export function normalizeEffect(source = {}, randomId = () => "effect") {
       const key = originalKey === "hp" ? "hp.max" : originalKey;
       const mode = String(modifier?.mode || "add");
       const value = String(modifier?.value ?? "").trim();
-      const resolvedValue = Number(modifier?.resolvedValue);
+      const hasResolvedValue = modifier?.resolvedValue !== null && modifier?.resolvedValue !== undefined && String(modifier.resolvedValue).trim() !== "";
+      const resolvedValue = hasResolvedValue ? Number(modifier.resolvedValue) : Number.NaN;
       if (!EFFECT_KEYS[key] || !EFFECT_MODES[mode] || !value) return [];
       return [{ key, mode, value, resolvedValue: Number.isFinite(resolvedValue) ? resolvedValue : null }];
     })
   };
+}
+
+export function effectAssociatedWithItem(effect, item, dependentNames = []) {
+  const normalized = normalizeEffect(effect);
+  const simplify = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+  const names = [item?.name, ...dependentNames].map(simplify).filter(Boolean);
+  const association = normalized.association;
+  if (association.id && [item?.id, item?._id, item?.uuid].filter(Boolean).includes(association.id)) return true;
+  if (association.type === item?.type && names.includes(simplify(association.name))) return true;
+  return names.includes(simplify(normalized.origin));
+}
+
+export function effectForCategory(source = {}, category = "passive", randomId = () => "effect") {
+  const effect = normalizeEffect({ ...source, id: randomId() }, randomId);
+  if (category === "temporary") {
+    effect.enabled = true;
+    if (effect.duration.type === "permanent") {
+      effect.duration = { type: "rounds", value: 1, remaining: 1, expiresAt: 0 };
+    }
+  } else if (category === "passive") {
+    effect.enabled = true;
+    effect.duration = { type: "permanent", value: 0, remaining: 0, expiresAt: 0 };
+  } else if (category === "inactive") {
+    effect.enabled = false;
+  }
+  return effect;
 }
 
 function normalizedText(value) {
@@ -243,10 +280,10 @@ export function conditionalValue(snapshot, operand, rule = {}) {
     "target.conditionNamed": snapshot.targetConditions, "scene.environmentNamed": snapshot.sceneEnvironments
   };
   if (namedCollections[operand]) {
-    const expected = normalizedText(rule.conditionName);
+    const expectedValues = String(rule.conditionName || "").split(/[|,;]/).map(normalizedText).filter(Boolean);
     const count = namedCollections[operand].filter((name) => {
       const actual = normalizedText(name);
-      return ["target.speciesNamed", "scene.environmentNamed"].includes(operand) ? actual === expected || actual.includes(expected) : actual === expected;
+      return expectedValues.some((expected) => ["target.speciesNamed", "scene.environmentNamed", "attack.itemNamed", "attack.ammunitionNamed"].includes(operand) ? actual === expected || actual.includes(expected) : actual === expected);
     }).length;
     return operand === "item.count" ? count : count > 0;
   }
@@ -323,7 +360,7 @@ export function applyModifiers(base, effects, key, worldTime = 0) {
   for (const effect of activeEffects(effects, worldTime)) {
     for (const modifier of effect.modifiers || []) {
       if (modifier.key !== key) continue;
-      const value = modifier.resolvedValue !== null && modifier.resolvedValue !== undefined && Number.isFinite(Number(modifier.resolvedValue))
+      const value = modifier.resolvedValue !== null && modifier.resolvedValue !== undefined && String(modifier.resolvedValue).trim() !== "" && Number.isFinite(Number(modifier.resolvedValue))
         ? Number(modifier.resolvedValue) : Number(modifier.value) || 0;
       if (modifier.mode === "override") result = value;
       else if (modifier.mode === "multiply") result *= value;
@@ -336,12 +373,13 @@ export function applyModifiers(base, effects, key, worldTime = 0) {
 }
 
 export function advanceDurations(effects, { roundChanged = false, roundsElapsed = roundChanged ? 1 : 0 } = {}) {
-  return (Array.isArray(effects) ? effects : []).map((effect) => {
+  return (Array.isArray(effects) ? effects : []).flatMap((effect) => {
     const normalized = normalizeEffect(effect, () => effect.id);
     if (roundsElapsed > 0 && normalized.duration.type === "rounds" && normalized.enabled && normalized.duration.remaining > 0) {
       normalized.duration.remaining = Math.max(0, normalized.duration.remaining - Math.trunc(roundsElapsed));
       if (normalized.duration.remaining <= 0) normalized.enabled = false;
     }
-    return normalized;
+    if (!normalized.enabled && normalized.duration.type === "rounds" && normalized.deleteOnExpire) return [];
+    return [normalized];
   });
 }

@@ -13,6 +13,8 @@
   "OD2QDV.Settings.enableSessionControl.hint": "Adiciona aos Diários uma carta para controlar turnos, encontros, descanso, tochas, lanternas e notas da sessão.",
   "OD2QDV.Settings.enableCharacterGenerator.name": "Gerador de personagens",
   "OD2QDV.Settings.enableCharacterGenerator.hint": "Adiciona ao diretório de Atores um assistente para criar personagens usando raças, classes e progressão do SRD.",
+  "OD2QDV.Settings.enableClassAbilities.name": "Automações de habilidades de classe e raça",
+  "OD2QDV.Settings.enableClassAbilities.hint": "Adiciona testes e automações às habilidades de classe e raça, incluindo Acadêmico, Anão e Anão Aventureiro.",
   "OD2CA.Settings.combatAutoDamage.name": "Aplicar dano automatico",
   "OD2CA.Settings.combatAutoDamage.hint": "Quando um ataque acertar, rola o dano da arma e desconta automaticamente do alvo.",
   "OD2CA.Settings.combatRequireOneTarget.name": "Exigir exatamente um alvo",

@@ -1,20 +1,21 @@
 import {
   CONDITIONAL_ACTIONS, CONDITIONAL_FLOWS, CONDITIONAL_OPERATORS, CONDITIONAL_TRIGGERS, CONDITIONAL_VALUE_DEFINITIONS,
   DURATION_TYPES, EFFECT_ACTION_TARGETS, EFFECT_EVENT_ACTIONS, EFFECT_KEYS, EFFECT_MODES, activeEffects, advanceDurations, applyHpAction, applyModifiers,
-  conditionalEffectApplies, conditionalMatches, conditionalValueType, normalizeEffect, OD2_TIME
+  conditionalEffectApplies, conditionalMatches, conditionalValueType, effectAssociatedWithItem, effectForCategory, normalizeEffect, OD2_TIME
 } from "./model.js";
 import { actorCoins } from "../equipment-containers/index.js";
 import { carriedLoad } from "../equipment-containers/model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const FLAG = "effects";
+const LIBRARY_FLAG = "effectTemplate";
+const EFFECTS_PACK = `${MODULE_ID}.effects`;
 const boundSheets = new WeakSet();
+const boundItemEffectSheets = new WeakSet();
 const executingConditionals = new Set();
 const evaluatingModifiers = new WeakSet();
 const previousLevels = new WeakMap();
 const previousCombatRounds = new WeakMap();
-const correctingCombats = new WeakSet();
-let temporalMutationDepth = 0;
 const STORED_MODIFIERS = Object.freeze({
   forca: "system.forca", destreza: "system.destreza", constituicao: "system.constituicao",
   inteligencia: "system.inteligencia", sabedoria: "system.sabedoria", carisma: "system.carisma",
@@ -28,6 +29,16 @@ function enabled() {
 
 function effectsFor(actor) {
   return (actor?.getFlag(MODULE_ID, FLAG) || []).map((effect) => normalizeEffect(effect, () => foundry.utils.randomID()));
+}
+
+const EQUIPMENT_TYPES = new Set(["weapon", "armor", "shield", "misc", "container", "vehicle"]);
+
+function effectDocumentsForActor(actor) {
+  return [actor];
+}
+
+function associatedEquipment(actor, effect) {
+  return effect?.association?.type === "equipment" ? actor?.items?.get?.(effect.association.id) ?? null : null;
 }
 
 async function saveEffects(actor, effects) {
@@ -59,114 +70,6 @@ function isPrimaryActiveGM() {
   return !first || first.id === game.user.id;
 }
 
-function temporalLog() {
-  return foundry.utils.deepClone(game.settings.get(MODULE_ID, "effectTimeLog") || []);
-}
-
-async function setTemporalLog(entries) {
-  await game.settings.set(MODULE_ID, "effectTimeLog", entries.slice(-100));
-}
-
-function captureEffectStates() {
-  return [...(game.actors ?? [])].map((actor) => ({
-    actorUuid: actor.uuid, actorName: actor.name,
-    effects: foundry.utils.deepClone(effectsFor(actor))
-  }));
-}
-
-function effectStateChanges(before, after) {
-  const afterByActor = new Map(after.map((entry) => [entry.actorUuid, entry]));
-  return before.flatMap((entry) => {
-    const next = afterByActor.get(entry.actorUuid) ?? { actorUuid: entry.actorUuid, actorName: entry.actorName, effects: [] };
-    if (JSON.stringify(entry.effects) === JSON.stringify(next.effects)) return [];
-    const oldById = new Map(entry.effects.map((effect) => [effect.id, effect]));
-    const newById = new Map(next.effects.map((effect) => [effect.id, effect]));
-    const details = [...new Set([...oldById.keys(), ...newById.keys()])].flatMap((id) => {
-      const oldEffect = oldById.get(id), newEffect = newById.get(id);
-      if (JSON.stringify(oldEffect) === JSON.stringify(newEffect)) return [];
-      const name = newEffect?.name ?? oldEffect?.name ?? "Efeito";
-      if (!oldEffect) return [`${name}: criado/ativado`];
-      if (!newEffect) return [`${name}: removido`];
-      if (oldEffect.enabled !== newEffect.enabled) return [`${name}: ${newEffect.enabled ? "ativado" : "desativado"}`];
-      if (oldEffect.duration?.remaining !== newEffect.duration?.remaining) return [`${name}: duração ${oldEffect.duration.remaining} → ${newEffect.duration.remaining}`];
-      return [`${name}: alterado`];
-    });
-    return [{ actorUuid: entry.actorUuid, actorName: entry.actorName, before: entry.effects, after: next.effects, details }];
-  });
-}
-
-async function restoreTemporalChanges(changes, side = "before") {
-  for (const change of changes) {
-    const actor = await fromUuid(change.actorUuid);
-    if (actor?.documentName === "Actor") await saveEffects(actor, foundry.utils.deepClone(change[side] || []));
-  }
-}
-
-async function runTemporalTransaction(meta, operation) {
-  if (!isPrimaryActiveGM()) throw new Error("Somente o Mestre ativo principal pode alterar o tempo.");
-  const before = captureEffectStates();
-  const worldBefore = worldTime();
-  temporalMutationDepth += 1;
-  try {
-    await operation();
-    await expireWorldTimeEffects(true);
-    const after = captureEffectStates();
-    const entry = {
-      id: foundry.utils.randomID(), type: "advance", source: meta.source, reference: meta.reference || "",
-      phase: meta.phase || "time", label: meta.label || "Avanço de tempo", fromRound: meta.fromRound ?? null, toRound: meta.toRound ?? null,
-      seconds: worldTime() - worldBefore, worldBefore, worldAfter: worldTime(), timestamp: Date.now(),
-      userId: game.user.id, reverted: false, changes: effectStateChanges(before, after)
-    };
-    await setTemporalLog([...temporalLog(), entry]);
-    return entry;
-  } catch (error) {
-    const delta = worldBefore - worldTime();
-    if (delta && typeof game.time?.advance === "function") await game.time.advance(delta);
-    await restoreTemporalChanges(effectStateChanges(before, captureEffectStates()), "before");
-    throw error;
-  } finally { temporalMutationDepth -= 1; }
-}
-
-async function rollbackTemporalTransaction(transactionId) {
-  if (!isPrimaryActiveGM()) return { ok: false, reason: "Somente o Mestre ativo principal pode desfazer o tempo." };
-  const log = temporalLog();
-  const applied = log.filter((entry) => entry.type === "advance" && !entry.reverted);
-  const latest = applied.at(-1);
-  if (!latest || latest.id !== transactionId) return { ok: false, reason: "Desfaça primeiro os avanços de tempo posteriores." };
-  for (const change of latest.changes) {
-    const actor = await fromUuid(change.actorUuid);
-    if (actor && JSON.stringify(effectsFor(actor)) !== JSON.stringify(change.after)) {
-      return { ok: false, reason: `Os efeitos de ${change.actorName} foram alterados depois deste avanço. Reverta essas alterações primeiro.` };
-    }
-  }
-  temporalMutationDepth += 1;
-  try {
-    const delta = latest.worldBefore - worldTime();
-    if (delta && typeof game.time?.advance === "function") await game.time.advance(delta);
-    await restoreTemporalChanges(latest.changes, "before");
-    latest.reverted = true;
-    latest.revertedAt = Date.now();
-    latest.revertedBy = game.user.id;
-    await setTemporalLog(log);
-    return { ok: true, entry: latest };
-  } finally { temporalMutationDepth -= 1; }
-}
-
-function temporalHistoryContent() {
-  const rows = temporalLog().slice().reverse().map((entry) => {
-    const status = entry.reverted ? "Desfeito" : "Aplicado";
-    const changes = entry.changes.flatMap((change) => change.details.map((detail) => `${escapeHtml(change.actorName)} — ${escapeHtml(detail)}`));
-    return `<tr><td>${new Date(entry.timestamp).toLocaleString()}</td><td>${escapeHtml(entry.label)}</td><td>${entry.seconds >= 0 ? "+" : ""}${entry.seconds}s</td><td>${status}</td><td>${changes.join("<br>") || "Nenhum efeito alterado"}</td></tr>`;
-  }).join("") || '<tr><td colspan="5">Nenhuma atividade temporal registrada.</td></tr>';
-  return `<div class="od2qdv-time-history"><table><thead><tr><th>Data</th><th>Origem</th><th>Tempo</th><th>Estado</th><th>Alterações nos efeitos</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-
-async function openTemporalHistory() {
-  const V2 = dialogV2();
-  if (V2) return V2.wait({ window: { title: "Histórico temporal dos efeitos" }, content: temporalHistoryContent(), position: { width: 900 }, buttons: [{ action: "close", label: "Fechar" }] });
-  new Dialog({ title: "Histórico temporal dos efeitos", content: temporalHistoryContent(), buttons: { close: { label: "Fechar" } } }, { width: 900 }).render(true);
-}
-
 function modifier(actor, key, base = 0, context = {}) {
   if (!actor || evaluatingModifiers.has(actor)) return base;
   evaluatingModifiers.add(actor);
@@ -176,6 +79,16 @@ function modifier(actor, key, base = 0, context = {}) {
 
 function modifierDelta(actor, key, context = {}) {
   return modifier(actor, key, 0, context);
+}
+
+function modifierDeltaExcluding(actor, key, excludedNames = [], context = {}) {
+  if (!actor || evaluatingModifiers.has(actor)) return 0;
+  const excluded = new Set(excludedNames.map((name) => String(name)));
+  evaluatingModifiers.add(actor);
+  try {
+    const effects = applicableEffects(actor, effectsFor(actor), context).filter((effect) => !excluded.has(effect.name));
+    return applyModifiers(0, effects, key, worldTime());
+  } finally { evaluatingModifiers.delete(actor); }
 }
 
 async function resolveEffectRolls(effect) {
@@ -262,7 +175,7 @@ function effectEditorContent(effect, actor) {
     <div class="form-group"><label>Origem</label><input name="origin" value="${escapeHtml(effect.origin)}" placeholder="Habilidade, magia ou item"></div>
     <div class="form-group"><label>Ícone</label><input name="icon" value="${escapeHtml(effect.icon)}"></div>
     <div class="form-group"><label>Tipo do efeito</label><select name="effectKind"><option value="permanent" ${effectKind === "permanent" ? "selected" : ""}>Permanente</option><option value="temporary" ${effectKind === "temporary" ? "selected" : ""}>Temporário</option></select></div>
-    <div class="form-group" data-effect-duration><label>Duração do temporário</label><select name="durationType">${Object.entries(DURATION_TYPES).filter(([key]) => key !== "permanent").map(([key, label]) => `<option value="${key}" ${effect.duration.type === key ? "selected" : ""}>${label}</option>`).join("")}</select><input name="durationValue" type="number" min="0" value="${effect.duration.value}"></div>
+    <div class="form-group" data-effect-duration><label>Duração do temporário</label><select name="durationType">${Object.entries(DURATION_TYPES).filter(([key]) => key !== "permanent").map(([key, label]) => `<option value="${key}" ${effect.duration.type === key ? "selected" : ""}>${label}</option>`).join("")}</select><input name="durationValue" type="number" min="0" value="${effect.duration.value}"><label class="checkbox"><input name="deleteOnExpire" type="checkbox" ${effect.deleteOnExpire ? "checked" : ""}> Apagar do ator ao expirar</label></div>
     <div class="form-group"><label>Usos disponíveis</label><input name="usesRemaining" type="number" min="0" value="${effect.uses.remaining}"><span>de</span><input name="usesMax" type="number" min="0" value="${effect.uses.max}"><label class="checkbox"><input name="usesReset" type="checkbox" ${effect.uses.resetOnRest ? "checked" : ""}> Recuperar no descanso</label></div>
     <div class="form-group stacked"><label>Descrição</label><textarea name="description">${escapeHtml(effect.description)}</textarea></div>
     <fieldset><legend>Modificadores</legend><div data-effect-modifiers>${modifiers.map((entry) => modifierRow(entry)).join("")}</div><button type="button" data-add-modifier><i class="fas fa-plus"></i> Modificador</button></fieldset>
@@ -280,7 +193,7 @@ function eventActionEditor(action) {
     <div class="form-group"><label>Item/recurso a consumir</label><input name="eventActionResource" value="${escapeHtml(action.resourceName)}" placeholder="Nome exato do item"></div>
     <div class="form-group"><label>Raio da aura</label><input name="eventActionRadius" type="number" min="0" step="1" value="${action.radius}"></div>
     <label class="checkbox"><input name="eventActionPrivate" type="checkbox" ${action.privateResult ? "checked" : ""}> Enviar resultado somente ao Mestre</label>
-    <p class="hint">O gatilho é escolhido no campo “Quando” da condicional. Cura e dano usam a fórmula; consumir reduz a quantidade do item informado.</p>
+    <p class="hint">O gatilho é escolhido no campo “Quando” da condicional. “Aplicar este efeito” copia seus modificadores e duração para os atores selecionados, sem copiar a ação para evitar repetição.</p>
   </fieldset>`;
 }
 
@@ -305,7 +218,7 @@ function conditionalEditor(rule, actor) {
   const right = rightType === "boolean" && conditionalValueType(rule.right) !== "boolean" ? "boolean.true" : rule.right;
   const namedOperands = new Set(["item.named", "item.count", "class.named", "race.named", "classAbility.named", "raceAbility.named", "spell.named", "condition", "effect.inactive", "attack.itemNamed", "attack.ammunitionNamed", "target.speciesNamed", "target.conceptNamed", "target.alignmentNamed", "target.conditionNamed", "scene.environmentNamed"]);
   const systemConfig = CONFIG.olddragon2e ?? CONFIG.OLDDRAGON2E ?? {};
-  const suggestions = [...actor.items].map((item) => item.name);
+  const suggestions = [...(actor.items ?? [])].map((item) => item.name);
   suggestions.push(...Object.keys(systemConfig.monster_concepts ?? {}), ...Object.keys(systemConfig.alignment ?? {}));
   const itemNames = [...new Set(suggestions.filter(Boolean))].sort((a, b) => a.localeCompare(b));
   return `<fieldset class="od2qdv-conditional"><legend>Condicional</legend>
@@ -386,6 +299,7 @@ function readEffectForm(form, existing) {
     icon: form.elements.icon.value,
     description: form.elements.description.value,
     gmNotes: form.elements.gmNotes?.value || existing.gmNotes,
+    deleteOnExpire: durationType !== "permanent" && form.elements.deleteOnExpire.checked,
     duration: { type: durationType, value: durationValue, remaining: durationValue, expiresAt: seconds ? worldTime() + seconds : 0 },
     conditional: {
       enabled: form.elements.conditionalEnabled.checked,
@@ -416,7 +330,7 @@ function readEffectForm(form, existing) {
   }, () => existing.id || foundry.utils.randomID());
 }
 
-async function editEffect(actor, existing = normalizeEffect({}, () => foundry.utils.randomID())) {
+async function editEffect(actor, existing = normalizeEffect({}, () => foundry.utils.randomID()), { libraryTemplate = false } = {}) {
   const V2 = dialogV2();
   let result;
   if (V2) {
@@ -445,8 +359,28 @@ async function editEffect(actor, existing = normalizeEffect({}, () => foundry.ut
     });
   }
   if (!result || typeof result !== "object" || !Array.isArray(result.modifiers)) return false;
+  if (!libraryTemplate && actor?.documentName === "Item" && EQUIPMENT_TYPES.has(actor.type)) {
+    result.association = { type: "equipment", id: actor.id, name: actor.name };
+    result.origin = result.origin === "Manual" ? actor.name : result.origin;
+  }
   try { await resolveEffectRolls(result); }
   catch (error) { ui.notifications.error(`Não foi possível rolar o modificador: ${error.message}`); return false; }
+  if (libraryTemplate) {
+    const pack = actor.pack ? game.packs.get(actor.pack) : null;
+    const wasLocked = pack?.locked;
+    if (pack && wasLocked) await pack.configure({ locked: false });
+    try {
+      await actor.update({
+        name: result.name,
+        img: result.icon,
+        "system.description": result.description,
+        [`flags.${MODULE_ID}.${LIBRARY_FLAG}`]: result
+      });
+    } finally {
+      if (pack && wasLocked) await pack.configure({ locked: true });
+    }
+    return true;
+  }
   const effects = effectsFor(actor);
   const index = effects.findIndex((effect) => effect.id === result.id);
   if (index >= 0) effects[index] = result;
@@ -533,6 +467,7 @@ function actorSnapshot(actor, context = {}) {
       "item.armorEquipped": items.some((item) => item.type === "armor" && item.system.is_equipped), "item.shieldEquipped": items.some((item) => item.type === "shield" && item.system.is_equipped),
       "item.ammunitionEquipped": items.some((item) => item.type === "weapon" && item.system.type === "ammunition" && item.system.is_equipped),
       "item.container": items.some((item) => item.type === "container"), "item.magic": equipment.some((item) => item.system.magic_item),
+      "source.itemEquipped": Boolean(context.sourceItem?.system?.is_equipped),
       "attack.itemNamed": Boolean(attackItem), "attack.weaponMelee": attackMode === "melee",
       "attack.weaponRanged": attackMode === "ranged", "attack.weaponThrowing": attackMode === "throwing",
       "attack.usesBAC": attackBasis === "bac" || attackMode === "melee",
@@ -558,7 +493,7 @@ function actorSnapshot(actor, context = {}) {
     raceAbilities: items.filter((item) => item.type === "race_ability").map((item) => item.name),
     spells: items.filter((item) => item.type === "spell").map((item) => item.name),
     attackItems: attackItem ? [attackItem.name] : [], ammunitionItems: ammunition ? [ammunition.name] : [],
-    targetSpecies: targetActor ? [targetActor.name, ...targetRaceNames] : [],
+    targetSpecies: targetActor ? [context.targetName, targetActor.name, targetConcept, ...targetRaceNames].filter(Boolean) : [],
     targetConcepts: targetConcept ? [targetConcept] : [], targetAlignments: targetAlignment ? [targetAlignment] : [],
     targetConditions,
     sceneEnvironments: [sceneEnvironment, scene?.name].filter(Boolean),
@@ -572,17 +507,30 @@ function actorSnapshot(actor, context = {}) {
 }
 
 function applicableEffects(actor, effects, context = {}) {
-  const current = activeEffects(effects, worldTime());
-  const conditional = current.filter((effect) => effect.conditional.enabled);
-  if (!conditional.length) return current;
+  const current = activeEffects(effects, worldTime()).filter((effect) => effect.eventAction?.type !== "applyEffect");
+  if (!current.some((effect) => effect.conditional.enabled)) return current;
   const alreadyEvaluating = evaluatingModifiers.has(actor);
   if (!alreadyEvaluating) evaluatingModifiers.add(actor);
   try {
-    const snapshot = actorSnapshot(actor, context);
-    return current.filter((effect) => conditionalEffectApplies(effect, snapshot));
+    return current.filter((effect) => !effect.conditional.enabled || conditionalEffectApplies(effect, actorSnapshot(actor, { ...context, sourceItem: associatedEquipment(actor, effect) ?? context.sourceItem })));
   } finally {
     if (!alreadyEvaluating) evaluatingModifiers.delete(actor);
   }
+}
+
+function appliedEffectCopy(effect, sourceActor) {
+  const duration = foundry.utils.deepClone(effect.duration);
+  duration.remaining = duration.value;
+  const seconds = duration.type === "hours" ? duration.value * 3600
+    : duration.type === "minutes" ? duration.value * 60
+      : duration.type === "turns" ? duration.value * OD2_TIME.TURN_SECONDS : 0;
+  duration.expiresAt = seconds ? worldTime() + seconds : 0;
+  return normalizeEffect({
+    ...foundry.utils.deepClone(effect), id: foundry.utils.randomID(), enabled: true,
+    origin: `${effect.origin || effect.name} — ${sourceActor.name}`, duration,
+    conditional: { enabled: false }, eventAction: { type: "none" },
+    uses: { max: 0, remaining: 0, resetOnRest: false }
+  }, () => foundry.utils.randomID());
 }
 
 async function rollConditionalValue(formula, actor) {
@@ -669,6 +617,18 @@ async function executeEventAction(actor, effect, context = {}) {
     await item.update({ [path]: after });
     detail = `${escapeHtml(item.name)}: <strong>${before} → ${after}</strong>`;
   }
+  if (action.type === "applyEffect") {
+    const results = [];
+    for (const recipient of recipients) {
+      if (!recipient.isOwner) { results.push(`${escapeHtml(recipient.name)}: sem permissão`); continue; }
+      const applied = appliedEffectCopy(effect, actor);
+      await resolveEffectRolls(applied);
+      await saveEffects(recipient, [...effectsFor(recipient), applied]);
+      results.push(`${escapeHtml(recipient.name)}: <strong>${escapeHtml(applied.name)}</strong>`);
+    }
+    if (!results.length) return false;
+    detail = `Efeito aplicado:<br>${results.join("<br>")}`;
+  }
   if (action.type === "prepareSpell") {
     const spell = [...actor.items].find((entry) => entry.type === "spell" && sameName(entry.name, action.resourceName));
     if (!spell) { ui.notifications.warn(`Magia “${action.resourceName}” não encontrada em ${actor.name}.`); return false; }
@@ -716,11 +676,13 @@ async function executeEventAction(actor, effect, context = {}) {
 
 async function executeConditional(actor, effect, trigger = "manual") {
   const rule = effect?.conditional;
-  if (!effect?.enabled || !rule?.enabled || (trigger !== "manual" && rule.trigger !== trigger)) return false;
+  if (!effect?.enabled) return false;
+  if (trigger === "manual" && !rule?.enabled && effect.eventAction?.type !== "none") return executeEventAction(actor, effect);
+  if (!rule?.enabled || (trigger !== "manual" && rule.trigger !== trigger)) return false;
   if (executingConditionals.has(actor.id)) return false;
   executingConditionals.add(actor.id);
   try {
-    const matches = () => conditionalMatches(rule, actorSnapshot(actor));
+    const matches = () => conditionalMatches(rule, actorSnapshot(actor, { sourceItem: associatedEquipment(actor, effect) }));
     if (effect.eventAction?.type !== "none") return matches() ? executeEventAction(actor, effect) : false;
     if (rule.flow !== "while") return executeConditionalAction(actor, matches() ? rule.thenAction : rule.elseAction, effect);
     if (!matches()) return executeConditionalAction(actor, rule.elseAction, effect);
@@ -743,7 +705,7 @@ async function triggerActorEffects(actor, trigger, context = {}) {
   let changed = false;
   for (const effect of activeEffects(effectsFor(actor), worldTime())) {
     if (!effect.conditional.enabled || effect.conditional.trigger !== trigger) continue;
-    if (!conditionalEffectApplies(effect, actorSnapshot(actor, context))) continue;
+    if (!conditionalEffectApplies(effect, actorSnapshot(actor, { ...context, sourceItem: associatedEquipment(actor, effect) ?? context.sourceItem }))) continue;
     try { changed = (await executeEventAction(actor, effect, context)) || changed; }
     catch (error) {
       console.error(`${MODULE_ID} | Falha na ação do efeito “${effect.name}”`, error);
@@ -756,14 +718,23 @@ async function triggerActorEffects(actor, trigger, context = {}) {
 async function completeActorRest(actor) {
   if (!actor) return false;
   await triggerActorEffects(actor, "rest", {});
-  const effects = effectsFor(actor);
-  let changed = false;
-  for (const effect of effects) {
-    if (effect.uses.resetOnRest && effect.uses.remaining !== effect.uses.max) { effect.uses.remaining = effect.uses.max; changed = true; }
-    if (effect.enabled && effect.duration.type === "rest") { effect.enabled = false; changed = true; }
+  let anyChanged = false;
+  for (const owner of effectDocumentsForActor(actor)) {
+    const effects = effectsFor(owner);
+    let changed = false;
+    const retained = [];
+    for (const effect of effects) {
+      if (effect.uses.resetOnRest && effect.uses.remaining !== effect.uses.max) { effect.uses.remaining = effect.uses.max; changed = true; }
+      if (effect.enabled && effect.duration.type === "rest") {
+        changed = true;
+        if (effect.deleteOnExpire) continue;
+        effect.enabled = false;
+      }
+      retained.push(effect);
+    }
+    if (changed) { await saveEffects(owner, retained); anyChanged = true; }
   }
-  if (changed) await saveEffects(actor, effects);
-  return changed;
+  return anyChanged;
 }
 
 async function executeActorConditionals(actor, trigger) {
@@ -773,8 +744,74 @@ async function executeActorConditionals(actor, trigger) {
 
 function newEffectForCategory(category) {
   const source = { enabled: category !== "inactive" };
-  if (category === "temporary") source.duration = { type: "rounds", value: 1, remaining: 1 };
+  if (category === "temporary") {
+    source.duration = { type: "rounds", value: 1, remaining: 1 };
+    source.deleteOnExpire = true;
+  }
   return normalizeEffect(source, () => foundry.utils.randomID());
+}
+
+async function effectTemplateFromDrop(event) {
+  const Editor = globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
+  const data = Editor?.getDragEventData?.(event) ?? {};
+  let document = data.uuid ? await fromUuid(data.uuid) : null;
+  if (!document && data.type === "Item" && globalThis.Item?.implementation?.fromDropData) {
+    document = await Item.implementation.fromDropData(data);
+  }
+  if (document?.documentName !== "Item") return null;
+  const template = document.getFlag?.(MODULE_ID, LIBRARY_FLAG) ?? document.flags?.[MODULE_ID]?.[LIBRARY_FLAG] ?? null;
+  return template ? { template, document } : null;
+}
+
+async function importEffectTemplate(actor, event, category) {
+  const dropped = await effectTemplateFromDrop(event);
+  if (!dropped) {
+    ui.notifications.warn("Este item não é um efeito da biblioteca do QdV.");
+    return false;
+  }
+  const { template, document } = dropped;
+  const effect = effectForCategory(foundry.utils.deepClone(template), category, () => foundry.utils.randomID());
+  const folderName = document.folder?.name ?? "";
+  const associationType = folderName === "Classe" ? "class" : folderName === "Raça" ? "race" : folderName === "Magia" ? "spell" : folderName === "Equipamentos" ? "equipment" : "";
+  if (!effect.association.type && associationType && effect.origin !== "Manual") {
+    effect.association = { type: associationType, id: "", name: effect.origin };
+  }
+  if (actor?.documentName === "Item" && EQUIPMENT_TYPES.has(actor.type)) {
+    effect.association = { type: "equipment", id: actor.id, name: actor.name };
+    if (effect.origin === "Manual") effect.origin = actor.name;
+  }
+  if (category === "temporary" && ["turns", "minutes", "hours"].includes(effect.duration.type)) {
+    const unit = effect.duration.type === "hours" ? 3600 : effect.duration.type === "minutes" ? 60 : OD2_TIME.TURN_SECONDS;
+    effect.duration.expiresAt = worldTime() + effect.duration.value * unit;
+  }
+  try { await resolveEffectRolls(effect); }
+  catch (error) { ui.notifications.error(`Não foi possível rolar o modificador: ${error.message}`); return false; }
+  await saveEffects(actor, [...effectsFor(actor), effect]);
+  ui.notifications.info(`${effect.name} adicionado a ${actor.name}.`);
+  return true;
+}
+
+function bindEffectLibraryDrop(root, actor, refresh) {
+  const manager = root.querySelector?.(".od2qdv-effect-manager");
+  if (!manager || manager.dataset.libraryDropBound === "true") return;
+  manager.dataset.libraryDropBound = "true";
+  manager.addEventListener("dragover", (event) => {
+    const group = event.target.closest?.("[data-effect-group]");
+    if (!group) return;
+    event.preventDefault(); event.stopPropagation();
+    group.classList.add("is-drop-target");
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  }, true);
+  manager.addEventListener("dragleave", (event) => {
+    event.target.closest?.("[data-effect-group]")?.classList.remove("is-drop-target");
+  }, true);
+  manager.addEventListener("drop", async (event) => {
+    const group = event.target.closest?.("[data-effect-group]");
+    if (!group) return;
+    event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+    group.classList.remove("is-drop-target");
+    if (await importEffectTemplate(actor, event, group.dataset.effectGroup)) refresh();
+  }, true);
 }
 
 function effectRow(effect) {
@@ -783,7 +820,7 @@ function effectRow(effect) {
     <td class="effect-icon"><img src="${escapeHtml(effect.icon)}" alt="" width="32" height="32"></td>
     <td class="effect-name"><strong>${escapeHtml(effect.name)}</strong>${summary ? `<small>${escapeHtml(summary)}</small>` : ""}</td>
     <td class="effect-source">${escapeHtml(effect.origin)}</td><td class="effect-duration">${durationLabel(effect)}</td>
-    <td class="actions">${effect.conditional.enabled ? '<button type="button" data-effect-action="execute" title="Executar condicional"><i class="fas fa-play"></i></button>' : ""}<button type="button" data-effect-action="toggle-conditional" class="${effect.conditional.enabled ? "conditional-active" : ""}" title="${effect.conditional.enabled ? "Desabilitar condicional" : "Habilitar condicional"}"><i class="fas fa-code-branch"></i></button><button type="button" data-effect-action="toggle" title="${effect.enabled ? "Desativar efeito" : "Ativar efeito"}"><i class="fas fa-${effect.enabled ? "toggle-on" : "toggle-off"}"></i></button><button type="button" data-effect-action="edit" title="Editar"><i class="fas fa-edit"></i></button><button type="button" data-effect-action="delete" title="Excluir"><i class="fas fa-trash"></i></button></td>
+    <td class="actions">${effect.conditional.enabled || effect.eventAction?.type !== "none" ? '<button type="button" data-effect-action="execute" title="Executar ação do efeito"><i class="fas fa-play"></i></button>' : ""}<button type="button" data-effect-action="toggle-conditional" class="${effect.conditional.enabled ? "conditional-active" : ""}" title="${effect.conditional.enabled ? "Desabilitar condicional" : "Habilitar condicional"}"><i class="fas fa-code-branch"></i></button><button type="button" data-effect-action="toggle" title="${effect.enabled ? "Desativar efeito" : "Ativar efeito"}"><i class="fas fa-${effect.enabled ? "toggle-on" : "toggle-off"}"></i></button><button type="button" data-effect-action="edit" title="Editar"><i class="fas fa-edit"></i></button><button type="button" data-effect-action="delete" title="Excluir"><i class="fas fa-trash"></i></button></td>
   </tr>`;
 }
 
@@ -797,15 +834,15 @@ function managerContent(actor) {
   const temporary = effects.filter((effect) => effect.enabled && effect.duration.type !== "permanent");
   const passive = effects.filter((effect) => effect.enabled && effect.duration.type === "permanent");
   const inactive = effects.filter((effect) => !effect.enabled);
-  return `<div class="od2qdv-effect-manager"><div class="od2qdv-effect-toolbar"><button type="button" data-effect-rest><i class="fas fa-bed"></i> Concluir descanso</button>${game.user.isGM ? '<button type="button" data-effect-history><i class="fas fa-history"></i> Histórico temporal</button>' : ""}</div><table>${effectGroup("Efeitos Temporários", "temporary", temporary)}${effectGroup("Efeitos Passivos", "passive", passive)}${effectGroup("Efeitos Inativos", "inactive", inactive)}</table></div>`;
+  return `<div class="od2qdv-effect-manager"><div class="od2qdv-effect-toolbar"><button type="button" data-effect-rest><i class="fas fa-bed"></i> Concluir descanso</button></div><table>${effectGroup("Efeitos Temporários", "temporary", temporary)}${effectGroup("Efeitos Passivos", "passive", passive)}${effectGroup("Efeitos Inativos", "inactive", inactive)}</table></div>`;
 }
 
 async function openManager(actor) {
   if (!actor?.isOwner) return ui.notifications.warn("Você não possui permissão para alterar os efeitos deste ator.");
   const V2 = dialogV2();
   const bind = (root, close) => {
+    bindEffectLibraryDrop(root, actor, () => { close(); openManager(actor); });
     root.querySelector("[data-effect-rest]")?.addEventListener("click", async () => { await completeActorRest(actor); close(); openManager(actor); });
-    root.querySelector("[data-effect-history]")?.addEventListener("click", openTemporalHistory);
     root.querySelectorAll("[data-effect-create]").forEach((button) => button.addEventListener("click", async () => { if (await editEffect(actor, newEffectForCategory(button.dataset.effectCreate))) { close(); openManager(actor); } }));
     root.querySelector(".od2qdv-effect-manager table")?.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-effect-action]");
@@ -876,6 +913,7 @@ function enhanceEffectTab(app, html) {
     else section.insertAdjacentHTML("beforeend", tab);
   }
   if (app._od2QdvEffectTabActive) activateEffectTab(app, root);
+  bindEffectLibraryDrop(root, actor, () => { app._od2QdvEffectTabActive = true; app.render(false); });
   if (boundSheets.has(root)) return;
   boundSheets.add(root);
   root.addEventListener("click", async (event) => {
@@ -883,8 +921,6 @@ function enhanceEffectTab(app, html) {
       event.preventDefault(); activateEffectTab(app, root); return;
     }
     if (event.target.closest('nav.tabs[data-group="primary-tabs"] .item')) app._od2QdvEffectTabActive = false;
-    const history = event.target.closest("[data-effect-history]");
-    if (history) { event.preventDefault(); event.stopPropagation(); await openTemporalHistory(); return; }
     const rest = event.target.closest("[data-effect-rest]");
     if (rest) {
       event.preventDefault(); event.stopPropagation();
@@ -933,6 +969,144 @@ function enhanceEffectTab(app, html) {
   }, true);
 }
 
+function enhanceEquipmentEffectSheet(app, html) {
+  if (!enabled()) return;
+  const item = app.item ?? app.document;
+  if (item?.documentName !== "Item" || !EQUIPMENT_TYPES.has(item.type) || !item.isOwner) return;
+  const root = rootElement(html);
+  const form = root?.matches?.("form") ? root : root?.querySelector?.("form");
+  if (!form) return;
+  const libraryTemplate = item.getFlag?.(MODULE_ID, LIBRARY_FLAG);
+  if (libraryTemplate) {
+    form.classList.add("od2qdv-library-effect-sheet");
+    let libraryPanel = form.querySelector(".od2qdv-library-effect-panel");
+    if (!libraryPanel) {
+      const effect = normalizeEffect(libraryTemplate, () => foundry.utils.randomID());
+      libraryPanel = document.createElement("section");
+      libraryPanel.className = "od2qdv-library-effect-panel";
+      libraryPanel.innerHTML = `<label class="tab-title"><i class="fas fa-wand-magic-sparkles"></i> Modelo de efeito QdV</label>
+        <div class="od2qdv-library-effect-summary"><img src="${escapeHtml(effect.icon)}" width="48" height="48" alt=""><div><strong>${escapeHtml(effect.name)}</strong><p>${escapeHtml(effect.origin)} · ${durationLabel(effect)}</p><small>${escapeHtml(effect.description || "Sem descrição.")}</small></div></div>
+        <button type="button" data-edit-library-effect ${game.user?.isGM ? "" : "disabled"}><i class="fas fa-edit"></i> Editar modelo de efeito</button>`;
+      form.append(libraryPanel);
+    }
+    if (boundItemEffectSheets.has(root)) return;
+    boundItemEffectSheets.add(root);
+    root.addEventListener("click", async (event) => {
+      const button = event.target.closest?.("[data-edit-library-effect]");
+      if (!button || !game.user?.isGM) return;
+      event.preventDefault(); event.stopPropagation();
+      if (await editEffect(item, normalizeEffect(item.getFlag(MODULE_ID, LIBRARY_FLAG)), { libraryTemplate: true })) app.render(false);
+    }, true);
+    return;
+  }
+  let panel = form.querySelector(".od2qdv-item-effect-panel");
+  if (!panel) {
+    panel = document.createElement("section");
+    panel.className = "od2qdv-item-effect-panel";
+    panel.innerHTML = `<label class="tab-title"><i class="fas fa-wand-magic-sparkles"></i> Efeitos</label>${managerContent(item)}`;
+    (form.querySelector(`.${item.type}`) ?? form).append(panel);
+  }
+  bindEffectLibraryDrop(panel, item, () => app.render(false));
+  if (boundItemEffectSheets.has(root)) return;
+  boundItemEffectSheets.add(root);
+  root.addEventListener("click", async (event) => {
+    const panelRoot = event.target.closest?.(".od2qdv-item-effect-panel");
+    if (!panelRoot) return;
+    const create = event.target.closest("[data-effect-create]");
+    const button = event.target.closest("[data-effect-action]");
+    if (!create && !button) return;
+    event.preventDefault(); event.stopPropagation();
+    if (create) {
+      if (await editEffect(item, newEffectForCategory(create.dataset.effectCreate))) app.render(false);
+      return;
+    }
+    const effects = effectsFor(item);
+    const effect = effects.find((entry) => entry.id === button.closest("[data-effect-id]")?.dataset.effectId);
+    if (!effect) return;
+    const action = button.dataset.effectAction;
+    if (action === "edit") { if (await editEffect(item, effect)) app.render(false); return; }
+    if (action === "delete" && !(await confirmDelete(effect))) return;
+    if (action === "delete") effects.splice(effects.indexOf(effect), 1);
+    if (action === "toggle") effect.enabled = !effect.enabled;
+    if (action === "toggle-conditional") effect.conditional.enabled = !effect.conditional.enabled;
+    await saveEffects(item, effects);
+    app.render(false);
+  }, true);
+}
+
+function libraryItemData(effect, folder = null) {
+  const template = normalizeEffect(effect, () => foundry.utils.randomID());
+  return {
+    name: template.name,
+    type: "misc",
+    img: template.icon,
+    folder,
+    system: { description: template.description },
+    flags: { [MODULE_ID]: { [LIBRARY_FLAG]: template } }
+  };
+}
+
+let effectLibraryPreparation = null;
+
+function effectPackFolders(pack) {
+  const direct = pack.folders?.contents ?? (pack.folders ? [...pack.folders] : []);
+  const registered = [...(game.folders ?? [])].filter((folder) => folder.pack === pack.collection);
+  return [...new Map([...direct, ...registered].map((folder) => [folder.id, folder])).values()];
+}
+
+async function prepareEffectLibraryFolders() {
+  if (!enabled() || !isPrimaryActiveGM()) return;
+  const pack = game.packs.get(EFFECTS_PACK);
+  if (!pack) return console.warn(`${MODULE_ID} | Compêndio de efeitos não encontrado.`);
+  const documents = await pack.getDocuments();
+  const wasLocked = pack.locked;
+  await pack.configure({ locked: false });
+  try {
+    const folders = effectPackFolders(pack);
+    const duplicates = [];
+    for (const name of ["Raça", "Classe", "Magia", "Equipamentos"]) {
+      const matches = folders.filter((folder) => folder.name === name).sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0));
+      const canonical = matches[0];
+      for (const duplicate of matches.slice(1)) {
+        const updates = documents.filter((document) => document.folder?.id === duplicate.id || document.folder === duplicate.id)
+          .map((document) => ({ _id: document.id, folder: canonical.id }));
+        if (updates.length) await Item.updateDocuments(updates, { pack: pack.collection });
+        duplicates.push(duplicate.id);
+      }
+    }
+    if (duplicates.length) await Folder.deleteDocuments(duplicates, { pack: pack.collection });
+    const remaining = effectPackFolders(pack).filter((folder) => !duplicates.includes(folder.id));
+    const missing = ["Raça", "Classe", "Magia", "Equipamentos"].filter((name) => !remaining.some((folder) => folder.name === name));
+    if (missing.length) await Folder.createDocuments(missing.map((name, index) => ({
+      name, type: "Item", folder: null, sorting: "a", sort: (index + 1) * 1000,
+      flags: { [MODULE_ID]: { generated: true, effectLibrary: true } }
+    })), { pack: pack.collection });
+  } finally {
+    await pack.configure({ locked: wasLocked });
+  }
+}
+
+function ensureEffectLibraryFolders() {
+  if (!effectLibraryPreparation) effectLibraryPreparation = prepareEffectLibraryFolders().finally(() => { effectLibraryPreparation = null; });
+  return effectLibraryPreparation;
+}
+
+async function createLibraryEntry(effect, folderName = null) {
+  if (!game.user?.isGM) throw new Error("Somente o Mestre pode adicionar modelos ao compêndio de efeitos.");
+  await ensureEffectLibraryFolders();
+  const pack = game.packs.get(EFFECTS_PACK);
+  if (!pack) throw new Error("Compêndio de efeitos do QdV não encontrado.");
+  const folders = effectPackFolders(pack);
+  const folder = folderName ? folders.find((entry) => entry.name === folderName) : null;
+  const wasLocked = pack.locked;
+  await pack.configure({ locked: false });
+  try {
+    return await Item.create(libraryItemData(effect, folder?.id ?? null), { pack: pack.collection });
+  } finally {
+    await pack.configure({ locked: wasLocked });
+  }
+}
+
 function wrapActorGetter(type, getter, key) {
   const prototype = CONFIG.Actor.dataModels?.[type]?.prototype;
   if (!prototype || Object.prototype.hasOwnProperty.call(prototype, `__od2QdvEffect_${getter}`)) return;
@@ -960,7 +1134,7 @@ function installGetterIntegrations() {
 }
 
 async function advanceCombatEffects(combat, changed) {
-  if (!enabled() || !isPrimaryActiveGM() || correctingCombats.has(combat)) return;
+  if (!enabled() || !isPrimaryActiveGM()) return;
   const roundChanged = Object.prototype.hasOwnProperty.call(changed, "round");
   const previousRound = previousCombatRounds.get(combat) ?? (Number(combat.round) || 0);
   previousCombatRounds.delete(combat);
@@ -968,61 +1142,43 @@ async function advanceCombatEffects(combat, changed) {
   const roundStarted = roundChanged && nextRound > previousRound;
   const turnChanged = roundStarted || Object.prototype.hasOwnProperty.call(changed, "turn");
   if (!roundChanged && !turnChanged) return;
+  if (roundChanged && !roundStarted) return;
   const actors = [...new Set(combat.combatants.map((combatant) => combatant.actor).filter(Boolean))];
-  if (roundChanged && nextRound < previousRound) {
-    let cursor = previousRound;
-    while (cursor > nextRound) {
-      const latest = temporalLog().filter((entry) => entry.type === "advance" && !entry.reverted).at(-1);
-      if (!latest || latest.source !== "combat" || latest.reference !== combat.uuid || latest.toRound !== cursor) {
-        ui.notifications.error("Não é possível voltar esta rodada: existem alterações posteriores no histórico temporal.");
-        correctingCombats.add(combat);
-        try { await combat.update({ round: previousRound }); } finally { correctingCombats.delete(combat); }
-        return;
-      }
-      const rollback = await rollbackTemporalTransaction(latest.id);
-      if (!rollback.ok) {
-        ui.notifications.error(rollback.reason);
-        correctingCombats.add(combat);
-        try { await combat.update({ round: previousRound }); } finally { correctingCombats.delete(combat); }
-        return;
-      }
-      if (latest.phase === "round") cursor -= 1;
-    }
-    ui.notifications.info(`Rodada retornada para ${nextRound}; alterações temporais dos efeitos foram restauradas.`);
-    return;
-  }
   if (roundStarted) {
     for (let round = previousRound + 1; round <= nextRound; round += 1) {
       const elapsed = round > 1 ? 1 : 0;
-      await runTemporalTransaction({ source: "combat", phase: "round", reference: combat.uuid, label: `Combat Tracker: rodada ${round}`, fromRound: round - 1, toRound: round }, async () => {
-        for (const actor of actors) {
-          const before = effectsFor(actor);
+      for (const actor of actors) {
+        for (const owner of effectDocumentsForActor(actor)) {
+          const before = effectsFor(owner);
           const after = advanceDurations(before, { roundsElapsed: elapsed });
-          if (JSON.stringify(before) !== JSON.stringify(after)) await saveEffects(actor, after);
+          if (JSON.stringify(before) !== JSON.stringify(after)) await saveEffects(owner, after);
         }
-        for (const actor of actors) await executeActorConditionals(actor, "roundStart");
-        if (round === nextRound && combat.combatant?.actor) await executeActorConditionals(combat.combatant.actor, "turnStart");
-        if (elapsed && typeof game.time?.advance === "function") await game.time.advance(OD2_TIME.ROUND_SECONDS);
-      });
+      }
+      for (const actor of actors) await executeActorConditionals(actor, "roundStart");
+      if (elapsed && typeof game.time?.advance === "function") await game.time.advance(OD2_TIME.ROUND_SECONDS);
     }
   }
-  if (turnChanged && !roundStarted && combat.combatant?.actor) {
-    await runTemporalTransaction({ source: "combat", phase: "turn", reference: combat.uuid, label: `Combat Tracker: vez de ${combat.combatant.actor.name}`, fromRound: nextRound, toRound: nextRound }, async () => {
-      await executeActorConditionals(combat.combatant.actor, "turnStart");
-    });
-  }
+  if (turnChanged && combat.combatant?.actor) await executeActorConditionals(combat.combatant.actor, "turnStart");
 }
 
-async function expireWorldTimeEffects(force = false) {
-  if (!enabled() || !isPrimaryActiveGM() || (temporalMutationDepth && !force)) return;
+async function expireWorldTimeEffects() {
+  if (!enabled() || !isPrimaryActiveGM()) return;
   for (const actor of game.actors ?? []) {
-    const effects = effectsFor(actor);
-    let changed = false;
-    for (const effect of effects) {
-      if (!effect.enabled || !["turns", "minutes", "hours"].includes(effect.duration.type)) continue;
-      if (effect.duration.expiresAt > 0 && worldTime() >= effect.duration.expiresAt) { effect.enabled = false; changed = true; }
+    for (const owner of effectDocumentsForActor(actor)) {
+      const effects = effectsFor(owner);
+      let changed = false;
+      const retained = [];
+      for (const effect of effects) {
+        if (!effect.enabled || !["turns", "minutes", "hours"].includes(effect.duration.type)) { retained.push(effect); continue; }
+        if (effect.duration.expiresAt > 0 && worldTime() >= effect.duration.expiresAt) {
+          changed = true;
+          if (effect.deleteOnExpire) continue;
+          effect.enabled = false;
+        }
+        retained.push(effect);
+      }
+      if (changed) await saveEffects(owner, retained);
     }
-    if (changed) await saveEffects(actor, effects);
   }
 }
 
@@ -1058,6 +1214,89 @@ async function actorEffectChanged(document) {
   if (actor?.documentName === "Actor") await executeActorConditionals(actor, "conditionChange");
 }
 
+async function copyEquipmentEffect(template, item) {
+  const effect = normalizeEffect({
+    ...foundry.utils.deepClone(template), id: foundry.utils.randomID(),
+    association: { type: "equipment", id: item.id, name: item.name, effectId: template.id }
+  }, () => foundry.utils.randomID());
+  effect.duration.remaining = effect.duration.value;
+  if (["turns", "minutes", "hours"].includes(effect.duration.type)) {
+    const unit = effect.duration.type === "hours" ? 3600 : effect.duration.type === "minutes" ? 60 : OD2_TIME.TURN_SECONDS;
+    effect.duration.expiresAt = worldTime() + effect.duration.value * unit;
+  } else effect.duration.expiresAt = 0;
+  if (effect.enabled) await resolveEffectRolls(effect);
+  return effect;
+}
+
+async function syncEquipmentEffects(item, { preserveUses = false } = {}) {
+  const actor = item?.parent;
+  if (actor?.documentName !== "Actor") return false;
+  const current = effectsFor(actor);
+  const linked = current.filter((effect) => effect.association.type === "equipment" && effect.association.id === item.id);
+  let templates = effectsFor(item);
+  if (preserveUses && linked.length) {
+    let usesChanged = false;
+    for (const copy of linked) {
+      const template = templates.find((effect) => effect.id === copy.association.effectId)
+        ?? templates.find((effect) => effect.name === copy.name);
+      if (!template || template.uses.remaining === copy.uses.remaining) continue;
+      template.uses.remaining = copy.uses.remaining;
+      usesChanged = true;
+    }
+    if (usesChanged) await item.setFlag(MODULE_ID, FLAG, templates);
+  }
+  const retained = current.filter((effect) => !(effect.association.type === "equipment" && effect.association.id === item.id));
+  if (item.system?.is_equipped) {
+    templates = effectsFor(item);
+    for (const template of templates) retained.push(await copyEquipmentEffect(template, item));
+  }
+  if (JSON.stringify(current) === JSON.stringify(retained)) return false;
+  await saveEffects(actor, retained);
+  return true;
+}
+
+async function equipmentEffectChanged(item, changed, _options, userId) {
+  if (!enabled() || (userId && game.user?.id !== userId) || !EQUIPMENT_TYPES.has(item?.type) || item.parent?.documentName !== "Actor") return;
+  const equippedChanged = Boolean(changed?.system && Object.prototype.hasOwnProperty.call(changed.system, "is_equipped"));
+  const effectsChanged = Boolean(changed?.flags?.[MODULE_ID]?.[FLAG]);
+  if (!equippedChanged && !effectsChanged) return;
+  try {
+    if (await syncEquipmentEffects(item, { preserveUses: equippedChanged && !item.system?.is_equipped })) await executeActorConditionals(item.parent, "conditionChange");
+  } catch (error) {
+    console.error(`${MODULE_ID} | Falha ao sincronizar efeitos de ${item.name}`, error);
+    ui.notifications.error(`Não foi possível sincronizar os efeitos de ${item.name}: ${error.message}`);
+  }
+}
+
+async function ensureEquippedItemEffects() {
+  if (!isPrimaryActiveGM()) return;
+  for (const actor of game.actors ?? []) {
+    const actorEffects = effectsFor(actor);
+    for (const item of [...(actor.items ?? [])].filter((entry) => EQUIPMENT_TYPES.has(entry.type) && entry.system?.is_equipped && effectsFor(entry).length)) {
+      if (!actorEffects.some((effect) => effect.association.type === "equipment" && effect.association.id === item.id)) await syncEquipmentEffects(item);
+    }
+  }
+}
+
+async function removeEffectsForDeletedClassOrRace(item, _options, userId) {
+  if (!enabled() || (userId && game.user?.id !== userId)) return;
+  const actor = item?.parent;
+  if (actor?.documentName !== "Actor" || !["class", "race", "class_ability", "race_ability", ...EQUIPMENT_TYPES].includes(item.type)) return;
+  const dependencyType = item.type === "class" ? "class_ability" : item.type === "race" ? "race_ability" : null;
+  const systemDependencies = item.type === "class" ? actor.system?.class_abilities : item.type === "race" ? actor.system?.race_abilities : [];
+  const dependentNames = dependencyType
+    ? [...new Set([
+        ...[...(actor.items ?? [])].filter((entry) => entry.type === dependencyType).map((entry) => entry.name),
+        ...[...(systemDependencies ?? [])].map((entry) => entry.name)
+      ].filter(Boolean))]
+    : [];
+  const effects = effectsFor(actor);
+  const retained = effects.filter((effect) => !effectAssociatedWithItem(effect, item, dependentNames));
+  if (retained.length === effects.length) return;
+  await saveEffects(actor, retained);
+  ui.notifications.info(`${effects.length - retained.length} efeito(s) associado(s) a ${item.name} removido(s) de ${actor.name}.`);
+}
+
 async function chatMessageCreated(message) {
   if (!enabled() || !String(message.content || "").includes('class="spell"')) return;
   const actor = game.actors.get(message.speaker?.actor);
@@ -1079,18 +1318,22 @@ Hooks.on("renderActorSheetV2", enhanceEffectTab);
 Hooks.on("renderOD2CharacterSheet", enhanceEffectTab);
 Hooks.on("renderOD2MonsterSheet", enhanceEffectTab);
 Hooks.on("renderOD2RetainerSheet", enhanceEffectTab);
+Hooks.on("renderItemSheet", enhanceEquipmentEffectSheet);
+Hooks.on("renderOD2ItemSheet", enhanceEquipmentEffectSheet);
 Hooks.on("updateCombat", advanceCombatEffects);
 Hooks.on("preUpdateCombat", (combat, changed) => {
   if (Object.prototype.hasOwnProperty.call(changed, "round")) previousCombatRounds.set(combat, Number(combat.round) || 0);
 });
-Hooks.on("updateWorldTime", () => expireWorldTimeEffects(false));
+Hooks.on("updateWorldTime", expireWorldTimeEffects);
 Hooks.on("preUpdateActor", (actor, changed) => {
   if (changed.system && Object.prototype.hasOwnProperty.call(changed.system, "level")) previousLevels.set(actor, Number(actor.system.level) || 0);
 });
 Hooks.on("updateActor", actorChanged);
+Hooks.on("updateItem", equipmentEffectChanged);
 Hooks.on("createActiveEffect", actorEffectChanged);
 Hooks.on("updateActiveEffect", actorEffectChanged);
 Hooks.on("deleteActiveEffect", actorEffectChanged);
+Hooks.on("deleteItem", removeEffectsForDeletedClassOrRace);
 Hooks.on("createChatMessage", chatMessageCreated);
 Hooks.on("od2QdvRestCompleted", completeActorRest);
 Hooks.on("renderSceneConfig", enhanceSceneConfig);
@@ -1100,9 +1343,14 @@ Hooks.once("ready", () => {
   installGetterIntegrations();
   game.od2Qdv ??= {};
   game.od2Qdv.effects = {
-    open: openManager, get: effectsFor, active: (actor) => activeEffects(effectsFor(actor), worldTime()), modifier, modifierDelta,
+    open: openManager, get: effectsFor, active: (actor) => activeEffects(effectsFor(actor), worldTime()), modifier, modifierDelta, modifierDeltaExcluding,
     execute: executeConditional, trigger: triggerActorEffects, rest: completeActorRest,
-    transactTime: runTemporalTransaction, rollbackTime: rollbackTemporalTransaction, history: temporalLog, openHistory: openTemporalHistory
+    createLibraryEntry, libraryItemData
   };
   migrateLegacyTurnDurations();
+  ensureEquippedItemEffects().catch((error) => console.error(`${MODULE_ID} | Falha ao restaurar efeitos de equipamentos`, error));
+  ensureEffectLibraryFolders().catch((error) => {
+    console.error(`${MODULE_ID} | Falha ao preparar o compêndio de efeitos`, error);
+    if (game.user?.isGM) ui.notifications.error("Não foi possível preparar o compêndio de efeitos do QdV. Consulte o console.");
+  });
 });

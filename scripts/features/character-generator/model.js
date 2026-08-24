@@ -65,6 +65,11 @@ export function hitDieForClass(characterClass) {
   return 4;
 }
 
+export function hitDieForClassLevel(characterClass, level) {
+  if (normalizeName(characterClass?.name) === "anao aventureiro" && Number(level) >= 3) return 12;
+  return hitDieForClass(characterClass);
+}
+
 export function hitPointBonusForClass(characterClass) {
   return CLASS_HIT_POINT_BONUSES.get(normalizeName(characterClass?.name)) ?? 0;
 }

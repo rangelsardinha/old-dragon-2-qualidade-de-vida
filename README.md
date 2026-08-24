@@ -11,6 +11,10 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 ### Gerenciador de efeitos OD2
 
 - Cria efeitos persistentes ou temporários diretamente nos atores.
+- Inclui o compêndio **QdV: Efeitos**, organizado nas pastas Raça, Classe, Magia e Equipamentos; seus modelos podem ser arrastados para as listas de efeitos Temporários, Passivos ou Inativos.
+- Equipamentos possuem uma seção própria de efeitos; ao equipar, novas cópias vinculadas são adicionadas ao ator e, ao desequipar, essas cópias são apagadas. Equipar novamente recria os efeitos com duração e rolagens reiniciadas, preservando os usos já consumidos.
+- Automatiza **Inimigos** do Anão, **Arma Racial** e **Bastião Racial** do Anão Aventureiro, incluindo inclusão e remoção conforme raça, classe e nível.
+- Adiciona as rolagens públicas de **Mineradores** e **Reputação** e usa d12 nos PV do Anão Aventureiro a partir do 3º nível no gerador de personagens.
 - Modifica CA, BAC, BAD, JPD, JPC, JPS, ataques e dano sem depender do DAE.
 - Controla efeitos por rodadas, turnos, tempo do mundo ou até o próximo descanso.
 - Mantém origem, descrição e notas exclusivas do Mestre para cada efeito.
@@ -18,8 +22,8 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - Executa ações de PV com fórmulas de dados, mensagens no chat ou ativação e desativação de outros efeitos pelo nome.
 - Oferece gatilhos de ataque, dano, magia, descanso, 20 natural e subida de nível, com seleção de alvos, distância, aura e ambiente.
 - Controla usos, recuperação no descanso, ataques extras, preparação de magia, invocações e transformações visuais reversíveis.
+- Pode copiar um efeito para os atores selecionados — como alvos de uma magia — e apagá-lo automaticamente ao terminar sua duração.
 - Usa as medidas oficiais de tempo do Old Dragon: rodadas de 10 segundos no combate e turnos de 10 minutos fora dele; o Combat Tracker avança o relógio do mundo a cada rodada.
-- Mantém histórico reversível dos avanços temporais: voltar uma rodada ou desmarcar o último turno restaura ativações, desativações e durações dos efeitos, respeitando a ordem das alterações.
 
 ### Automação de combate
 
@@ -78,7 +82,6 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Adiciona **Nova Carta de Controle** ao diretório de Diários para o Mestre.
 - Organiza quatro horas de exploração em turnos de 10 minutos.
 - Ao marcar um turno, avança 10 minutos no relógio do mundo e atualiza automaticamente a duração dos efeitos temporários.
-- Ao desmarcar o último turno aplicado, retorna o relógio e restaura os efeitos registrados naquele avanço.
 - Automatiza rolagens secretas de encontro e avisos de descanso, tochas e lanternas.
 - Mantém notas públicas e notas privadas exclusivas do Mestre.
 - Reconhece cartas criadas pelo antigo módulo independente `carta-de-controle-de-sessao-od2`.

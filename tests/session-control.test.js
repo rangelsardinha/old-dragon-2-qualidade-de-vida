@@ -11,13 +11,11 @@ test("marca um turno uma única vez para avanço do relógio", () => {
   assert.equal(reopened.shouldAdvance, false);
 });
 
-test("desmarcar solicita reversão e permite reaplicar o turno", () => {
+test("desmarcar e remarcar não duplica o tempo transcorrido", () => {
   const initial = updateTurnState({}, {}, "2-3", true, 1000);
   const cleared = updateTurnState(initial.turns, initial.advanced, "2-3", false, 1100);
   const remarked = updateTurnState(cleared.turns, cleared.advanced, "2-3", true, 1200);
-  assert.equal(cleared.shouldRollback, true);
-  assert.equal(cleared.transactionId, 1000);
-  assert.equal(remarked.shouldAdvance, true);
+  assert.equal(remarked.shouldAdvance, false);
 });
 
 test("cartas antigas preservam turnos já marcados sem avanço retroativo", () => {

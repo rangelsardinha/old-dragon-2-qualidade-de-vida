@@ -13,6 +13,8 @@
   "OD2QDV.Settings.enableSessionControl.hint": "Adds a Journal card to track turns, encounters, rests, torches, lanterns, and session notes.",
   "OD2QDV.Settings.enableCharacterGenerator.name": "Character generator",
   "OD2QDV.Settings.enableCharacterGenerator.hint": "Adds an Actor-directory wizard for creating characters from the SRD races, classes, and progression.",
+  "OD2QDV.Settings.enableClassAbilities.name": "Class ability automation",
+  "OD2QDV.Settings.enableClassAbilities.hint": "Adds tests and automation to class abilities, starting with the Academic class.",
   "OD2CA.Settings.combatAutoDamage.name": "Aplicar dano automatico",
   "OD2CA.Settings.combatAutoDamage.hint": "Quando um ataque acertar, rola o dano da arma e desconta automaticamente do alvo.",
   "OD2CA.Settings.combatRequireOneTarget.name": "Exigir exatamente um alvo",

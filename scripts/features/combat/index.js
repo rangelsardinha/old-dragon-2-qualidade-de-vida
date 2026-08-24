@@ -1,4 +1,4 @@
-import { shiftDamageDice, shiftDifficulty } from '../effect-manager/model.js';
+import { applyModifiers, shiftDamageDice, shiftDifficulty } from '../effect-manager/model.js';
 
 const MODULE_ID = 'old-dragon-2-qualidade-de-vida';
 
@@ -491,6 +491,7 @@ async function handleAttack(actor, button) {
   if (!attackData) return;
   attackData.ammunition = ammunition.item;
   attackData.targetActor = target.actor;
+  attackData.targetName = target.name ?? target.document?.name ?? target.actor?.name;
 
   if (ammunition.item) {
     const quantity = Math.max(0, Math.trunc(Number(ammunition.item.system?.quantity) || 0));
@@ -745,8 +746,26 @@ async function requestAttackOptions(actor, item, button) {
 }
 
 function getAttackFormula(actor, item, source, bonus, adjustment) {
-  const effectContext = { item, weapon: item, ammunition: source?.ammunition ?? null, attackMode: source?.attackMode, attackBasis: source?.ba, targetActor: source?.targetActor ?? null };
-  const effectBonus = game.od2Qdv?.effects?.modifierDelta?.(actor, 'attack', effectContext) ?? 0;
+  const selectedTarget = Array.from(game.user?.targets ?? [])[0] ?? null;
+  const targetActor = source?.targetActor ?? selectedTarget?.actor ?? selectedTarget?.document?.actor ?? null;
+  const targetName = source?.targetName ?? selectedTarget?.name ?? selectedTarget?.document?.name ?? targetActor?.name ?? '';
+  const effectContext = { item, weapon: item, ammunition: source?.ammunition ?? null, attackMode: source?.attackMode, attackBasis: source?.ba, targetActor, targetName };
+  const api = game.od2Qdv?.effects;
+  const offensiveName = 'Anão: Inimigos';
+  const defensiveName = 'Anão Aventureiro: Bastião Racial(6)';
+  const offensiveBonus = (api?.modifierDeltaExcluding?.(actor, 'attack', [offensiveName], effectContext)
+    ?? api?.modifierDelta?.(actor, 'attack', effectContext) ?? 0)
+    + (isDwarfEnemy(targetActor, targetName) ? namedEffectModifier(actor, offensiveName, 'attack') : 0);
+  const defensiveContext = { targetActor: actor, targetName: actor?.name, item, weapon: item, attackMode: source?.attackMode, attackBasis: source?.ba };
+  const defensiveBonus = targetActor
+    ? (api?.modifierDeltaExcluding?.(targetActor, 'incoming.attack', [defensiveName], defensiveContext)
+      ?? api?.modifierDelta?.(targetActor, 'incoming.attack', defensiveContext) ?? 0)
+      + (isDwarfEnemy(actor, actor.name) ? namedEffectModifier(targetActor, defensiveName, 'incoming.attack') : 0)
+    : 0;
+  const effectBonus = offensiveBonus + defensiveBonus;
+  if (namedEffectPresent(actor, offensiveName) || namedEffectPresent(targetActor, defensiveName)) {
+    console.info(`${MODULE_ID} | Modificadores raciais`, { attacker: actor?.name, target: targetName, offensiveBonus, defensiveBonus, effectBonus });
+  }
   const difficultySteps = game.od2Qdv?.effects?.modifierDelta?.(actor, 'test.difficulty', effectContext) ?? 0;
   const adjustedDifficulty = shiftDifficulty(adjustment, difficultySteps);
   if (actor.type === 'monster') {
@@ -758,6 +777,35 @@ function getAttackFormula(actor, item, source, bonus, adjustment) {
   const baseAttack = ba === 'bad' ? actor.system.bad : actor.system.bac;
   const itemBonus = dataset.baBonus === '' || dataset.baBonus === true ? item.system.bonus_ba : 0;
   return joinFormulaTerms(['1d20', adjustmentValue(adjustedDifficulty), baseAttack, itemBonus, bonus, effectBonus]);
+}
+
+function normalizedCreatureName(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
+}
+
+function isDwarfEnemy(actor, displayedName = '') {
+  const raceNames = [...(actor?.items ?? [])].filter((entry) => entry.type === 'race').map((entry) => entry.name);
+  const names = [displayedName, actor?.name, actor?.system?.concept, actor?.system?.species, ...raceNames].map(normalizedCreatureName);
+  return names.some((name) => ['orc', 'ogro', 'hobgoblin'].some((enemy) => name === enemy || name.includes(enemy)));
+}
+
+function namedEffectModifier(actor, effectName, key) {
+  const effects = game.od2Qdv?.effects?.get?.(actor) ?? actor?.getFlag?.(MODULE_ID, 'effects') ?? [];
+  const wanted = normalizedCreatureName(effectName);
+  const effect = effects.find((entry) => entry.enabled !== false && normalizedCreatureName(entry.name) === wanted);
+  const modifier = effect?.modifiers?.find((entry) => entry.key === key);
+  if (!modifier) return 0;
+  const hasResolvedValue = modifier.resolvedValue !== null && modifier.resolvedValue !== undefined && String(modifier.resolvedValue).trim() !== '';
+  const value = Number(hasResolvedValue ? modifier.resolvedValue : modifier.value) || 0;
+  if (modifier.mode === 'reduce') return -value;
+  if (modifier.mode === 'divide' || modifier.mode === 'multiply' || modifier.mode === 'override') return applyModifiers(0, [effect], key);
+  return value;
+}
+
+function namedEffectPresent(actor, effectName) {
+  const effects = game.od2Qdv?.effects?.get?.(actor) ?? actor?.getFlag?.(MODULE_ID, 'effects') ?? [];
+  const wanted = normalizedCreatureName(effectName);
+  return effects.some((entry) => entry.enabled !== false && normalizedCreatureName(entry.name) === wanted);
 }
 
 async function rollAttack(actor, item, attackData) {

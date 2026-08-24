@@ -1,6 +1,6 @@
 import {
   ATTRIBUTES, ATTRIBUTE_LABELS, allocationFromDice, calculateHitPoints,
-  classAllowsRace, experienceForLevel, hitDieForClass, hitPointBonusForClass, jpcBonusForClass, racialAttributes
+  classAllowsRace, experienceForLevel, hitDieForClass, hitDieForClassLevel, hitPointBonusForClass, jpcBonusForClass, racialAttributes
 } from "./model.js";
 import { darkSunDocuments, darkSunEnabled } from "../../integrations/dark-sun.js";
 
@@ -309,15 +309,21 @@ async function hitPointRoll(characterClass, level, constitution) {
   const die = hitDieForClass(characterClass);
   const perLevelBonus = hitPointBonusForClass(characterClass);
   const rolls = [];
-  for (let current = 2; current <= level; current += 1) rolls.push((await roll(`1d${die}`)).total);
-  return { die, rolls, perLevelBonus, hp: calculateHitPoints(die, level, constitution, rolls, perLevelBonus) };
+  const dice = [];
+  for (let current = 2; current <= level; current += 1) {
+    const levelDie = hitDieForClassLevel(characterClass, current);
+    dice.push(levelDie);
+    rolls.push((await roll(`1d${levelDie}`)).total);
+  }
+  return { die, dice, rolls, perLevelBonus, hp: calculateHitPoints(die, level, constitution, rolls, perLevelBonus) };
 }
 
 async function hitPointsStep(characterClass, level, constitution, characterName) {
   let current = await hitPointRoll(characterClass, level, constitution);
   while (true) {
     const classBonus = current.perLevelBonus ? ` A classe acrescenta +${current.perLevelBonus} PV por nível.` : "";
-    const content = `<p>1º nível: máximo do d${current.die}. Demais níveis: ${current.rolls.length ? current.rolls.join(", ") : "nenhuma rolagem"}. O modificador de Constituição foi aplicado por nível.${classBonus}</p><div class="form-group"><label>PV total</label><input name="hp" type="number" min="1" value="${current.hp}"></div>`;
+    const rolledDescription = current.rolls.length ? current.rolls.map((value, index) => `d${current.dice[index]}: ${value}`).join(", ") : "nenhuma rolagem";
+    const content = `<p>1º nível: máximo do d${current.die}. Demais níveis: ${rolledDescription}. O modificador de Constituição foi aplicado por nível.${classBonus}</p><div class="form-group"><label>PV total</label><input name="hp" type="number" min="1" value="${current.hp}"></div>`;
     const decision = await hitPointDecision(content, current.hp, level > 1);
     if (!decision || decision.action === "cancel") return null;
     if (decision.action === "confirm") return decision.hp;

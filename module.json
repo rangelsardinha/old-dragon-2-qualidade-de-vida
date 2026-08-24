@@ -2,7 +2,7 @@
   "id": "old-dragon-2-qualidade-de-vida",
   "title": "Old Dragon 2: Qualidade de Vida",
   "description": "Automações modulares e configuráveis para o sistema Old Dragon 2ª Edição.",
-  "version": "0.9.1",
+  "version": "0.9.4",
   "license": "CC-BY-SA-4.0",
   "url": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida",
   "manifest": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/latest/download/module.json",
@@ -23,7 +23,8 @@
     "scripts/features/scroll-generator/index.js",
     "scripts/features/session-control/index.js",
     "scripts/features/character-generator/index.js",
-    "scripts/features/effect-manager/index.js"
+    "scripts/features/effect-manager/index.js",
+    "scripts/features/academic-abilities/index.js"
   ],
   "styles": [
     "styles/combat.css",
@@ -33,7 +34,8 @@
     "styles/scroll-generator.css",
     "styles/session-control.css",
     "styles/character-generator.css",
-    "styles/effect-manager.css"
+    "styles/effect-manager.css",
+    "styles/academic-abilities.css"
   ],
   "packs": [
     { "name": "arcane-spells", "label": "Tomo de Magia: Arcanas por Círculo", "path": "packs/arcane-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
@@ -44,7 +46,8 @@
     { "name": "mission-spells", "label": "Tomo de Magia: Magias de Missão", "path": "packs/mission-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
     { "name": "cooperative-spells", "label": "Tomo de Magia: Cooperativas por Círculo", "path": "packs/cooperative-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
     { "name": "tables", "label": "Tomo de Magia: Tabelas", "path": "packs/tables", "type": "RollTable" },
-    { "name": "rules", "label": "Tomo de Magia: Regras e PDFs", "path": "packs/rules", "type": "JournalEntry" }
+    { "name": "rules", "label": "Tomo de Magia: Regras e PDFs", "path": "packs/rules", "type": "JournalEntry" },
+    { "name": "effects", "label": "QdV: Efeitos", "path": "packs/effects", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/magic-items.webp" }
   ],
   "packFolders": [
     {
@@ -52,6 +55,12 @@
       "sorting": "m",
       "color": "#6f2138",
       "packs": ["arcane-spells", "arcane-spells-by-school", "divine-spells", "divine-spells-by-sphere", "wild-spells", "mission-spells", "cooperative-spells", "tables", "rules"]
+    },
+    {
+      "name": "Old Dragon 2: Qualidade de Vida",
+      "sorting": "m",
+      "color": "#7b1f32",
+      "packs": ["effects"]
     }
   ],
   "languages": [

@@ -33,6 +33,10 @@ Hooks.once("init", () => {
     enableEffectManager: {
       name: "Gerenciador de efeitos OD2",
       hint: "Permite criar efeitos persistentes ou temporários que modificam CA, ataques, dano e Jogadas de Proteção."
+    },
+    enableClassAbilities: {
+      name: "Automações de habilidades de classe e raça",
+      hint: "Adiciona testes e automações às habilidades de classe e raça, incluindo Acadêmico, Anão e Anão Aventureiro."
     }
   };
   const localized = (key, fallback) => {
@@ -57,15 +61,12 @@ Hooks.once("init", () => {
   worldToggle("enableSessionControl");
   worldToggle("enableCharacterGenerator");
   worldToggle("enableEffectManager");
+  worldToggle("enableClassAbilities");
 
   game.settings.register(MODULE_ID, "sessionEncounterDie", {
     name: "Dado de encontros aleatórios",
     hint: "Fórmula rolada em segredo para o Mestre nos turnos marcados com E.",
     scope: "world", config: true, type: String, default: "1d6"
-  });
-
-  game.settings.register(MODULE_ID, "effectTimeLog", {
-    scope: "world", config: false, type: Array, default: []
   });
 
   game.settings.register(MODULE_ID, "combatAutoDamage", {

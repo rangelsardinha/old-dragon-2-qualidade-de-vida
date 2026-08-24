@@ -85,34 +85,14 @@ function bindCard(card, entry) {
     const key = select.dataset.od2scTurn;
     const currentTurns = foundry.utils.deepClone(value(entry, "turns", {}));
     const currentAdvanced = seedAdvancedTurns(currentTurns, entry.getFlag(MODULE_ID, KEYS.advanced));
-    const update = updateTurnState(currentTurns, currentAdvanced, key, select.value === "passed", "pending");
-    if (update.shouldRollback) {
-      try {
-        await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: update.turns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: update.advanced });
-        const rollback = await game.od2Qdv?.effects?.rollbackTime?.(update.transactionId);
-        if (!rollback?.ok) throw new Error(rollback?.reason || "O histórico temporal deste turno não está disponível.");
-        ui.notifications.info("Turno desfeito: o relógio e os efeitos foram restaurados.");
-      } catch (error) {
-        select.value = "passed";
-        await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: currentTurns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: currentAdvanced });
-        ui.notifications.error(`Não foi possível desfazer o turno: ${error.message}`);
-      }
-      return;
-    }
-    let transaction;
+    const update = updateTurnState(currentTurns, currentAdvanced, key, select.value === "passed", Number(game.time?.worldTime) || true);
     try {
       await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: update.turns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: update.advanced });
       if (update.shouldAdvance) {
         if (typeof game.time?.advance !== "function") throw new Error("O relógio do mundo não está disponível.");
-        transaction = await game.od2Qdv?.effects?.transactTime?.({ source: "session", reference: `${entry.uuid}:${key}`, label: `Carta de Sessão: turno ${key}` }, async () => {
-          await game.time.advance(OD2_TIME.TURN_SECONDS);
-        });
-        if (!transaction?.id) throw new Error("O Gerenciador de Efeitos não iniciou a transação temporal.");
-        update.advanced[key] = transaction.id;
-        await entry.update({ [`flags.${MODULE_ID}.${KEYS.advanced}`]: update.advanced });
+        await game.time.advance(OD2_TIME.TURN_SECONDS);
       }
     } catch (error) {
-      if (transaction?.id) await game.od2Qdv?.effects?.rollbackTime?.(transaction.id);
       select.value = update.previous === "passed" ? "passed" : "";
       await entry.update({ [`flags.${MODULE_ID}.${KEYS.turns}`]: currentTurns, [`flags.${MODULE_ID}.${KEYS.advanced}`]: currentAdvanced });
       console.error(`${MODULE_ID} | Falha ao avançar turno da carta`, error);
