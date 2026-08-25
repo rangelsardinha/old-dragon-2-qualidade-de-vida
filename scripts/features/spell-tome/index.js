@@ -266,6 +266,29 @@ async function setPackLocked(pack, locked) {
   await pack.configure({ locked });
 }
 
+async function migrateLegacyPackLocks() {
+  const names = [...PACK_CONFIGS.map(({ name }) => name), "tables", "rules"];
+  const configurations = foundry.utils.deepClone(
+    game.settings.get("core", "compendiumConfiguration") ?? {}
+  );
+  let changed = false;
+  for (const name of names) {
+    const collection = `${MODULE_ID}.${name}`;
+    if (configurations[collection]?.locked === true) {
+      configurations[collection].locked = false;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await game.settings.set("core", "compendiumConfiguration", configurations);
+    for (const name of names) {
+      const pack = game.packs.get(`${MODULE_ID}.${name}`);
+      if (pack?.locked) await pack.configure({ locked: false });
+    }
+    console.info(`${MODULE_ID} | Configurações antigas de bloqueio dos compêndios migradas.`);
+  }
+}
+
 function specialistRequirementsDescription() {
   const rows = SPECIALIST_REQUIREMENTS.map(
     ([specialist, school, race, minimum, opposed]) =>
@@ -1051,12 +1074,14 @@ Hooks.once("ready", () => {
     return;
   }
   if (!enabled()) return;
-  ensureCompendiaPopulated().catch((error) => {
+  migrateLegacyPackLocks()
+    .then(() => ensureCompendiaPopulated())
+    .catch((error) => {
     console.error(`${MODULE_ID} | Falha ao popular compendios`, error);
     if (game.user.isGM) {
       ui.notifications.error("Tomo de Magia: nao foi possivel popular os compendios. Veja o console do Foundry.");
     }
-  });
+    });
 });
 
 Hooks.on("renderActorSheet", addWildSpellCastHandler);
