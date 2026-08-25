@@ -254,6 +254,18 @@ async function clearPack(pack, documentClass = Item) {
   }
 }
 
+async function setPackLocked(pack, locked) {
+  const configurations = foundry.utils.deepClone(
+    game.settings.get("core", "compendiumConfiguration") ?? {}
+  );
+  configurations[pack.collection] = {
+    ...(configurations[pack.collection] ?? {}),
+    locked,
+  };
+  await game.settings.set("core", "compendiumConfiguration", configurations);
+  await pack.configure({ locked });
+}
+
 function specialistRequirementsDescription() {
   const rows = SPECIALIST_REQUIREMENTS.map(
     ([specialist, school, race, minimum, opposed]) =>
@@ -608,7 +620,16 @@ async function populatePack(config, spells) {
   }
 
   const wasLocked = pack.locked;
-  await pack.configure({ locked: false });
+  // Foundry 14 may keep the cached compendium configuration locked even
+  // after configure().  Update the world configuration first, then ask the
+  // collection to refresh its local state before attempting document writes.
+  if (wasLocked) {
+    await setPackLocked(pack, false);
+  }
+  if (pack.locked) {
+    console.warn(`${MODULE_ID} | Compendio bloqueado; população ignorada: ${pack.collection}`);
+    return;
+  }
   await clearPack(pack);
   await createFolders(pack, folderSpecs);
 
@@ -619,7 +640,9 @@ async function populatePack(config, spells) {
   }
 
   await game.settings.set(MODULE_ID, `${packName}Version`, PACK_VERSION);
-  await pack.configure({ locked: wasLocked });
+  if (wasLocked) {
+    await setPackLocked(pack, true);
+  }
 }
 
 async function ensureCompendiaPopulated() {
@@ -659,11 +682,15 @@ async function populateTablesPack() {
   }
 
   const wasLocked = pack.locked;
-  await pack.configure({ locked: false });
+  await setPackLocked(pack, false);
+  if (pack.locked) {
+    console.warn(`${MODULE_ID} | Compendio bloqueado; população ignorada: ${pack.collection}`);
+    return;
+  }
   await clearPack(pack, RollTable);
   await RollTable.createDocuments(tables, { pack: pack.collection, keepId: true });
   await game.settings.set(MODULE_ID, `${packName}Version`, PACK_VERSION);
-  await pack.configure({ locked: wasLocked });
+  if (wasLocked) await setPackLocked(pack, true);
 }
 
 async function populateRulesPack() {
@@ -684,11 +711,15 @@ async function populateRulesPack() {
   }
 
   const wasLocked = pack.locked;
-  await pack.configure({ locked: false });
+  await setPackLocked(pack, false);
+  if (pack.locked) {
+    console.warn(`${MODULE_ID} | Compendio bloqueado; população ignorada: ${pack.collection}`);
+    return;
+  }
   await clearPack(pack, JournalEntry);
   await JournalEntry.createDocuments(journals, { pack: pack.collection, keepId: true });
   await game.settings.set(MODULE_ID, `${packName}Version`, PACK_VERSION);
-  await pack.configure({ locked: wasLocked });
+  if (wasLocked) await setPackLocked(pack, true);
 }
 
 async function ensurePublicRulesJournals() {
