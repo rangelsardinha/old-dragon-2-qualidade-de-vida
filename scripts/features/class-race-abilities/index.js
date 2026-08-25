@@ -1,4 +1,4 @@
-import { ACADEMIC_ABILITIES, academicAbilityKey, academicAbilityScore, academicRollSucceeded, isAarakocraName, isArcherName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName, normalizeAcademicName } from "./model.js";
+import { CLASS_RACE_ABILITIES, abilityKey, abilityScore, rollSucceeded, isAarakocraName, isArcherName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName, normalizeAbilityName } from "./model.js";
 import { normalizeEffect } from "../effect-manager/model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
@@ -24,30 +24,44 @@ function escapeHtml(value) {
   return div.innerHTML;
 }
 function abilityRollHtml(key, level) {
-  const ability = ACADEMIC_ABILITIES[key];
-  const score = academicAbilityScore(key, level);
+  const ability = CLASS_RACE_ABILITIES[key];
+  const score = abilityScore(key, level);
   return `<div class="od2qdv-academic-roll"><a class="od2qdv-academic-roll-button" data-academic-ability="${key}" title="Rolar teste de ${escapeHtml(ability.label)}"><i class="fa-light fa-dice-d6 fa-sm"></i>&nbsp;1-${score} em 1d6</a></div>`;
 }
 
-async function rollAcademicAbility(actor, key) {
-  const ability = ACADEMIC_ABILITIES[key];
+async function promptAssassinationDV() {
+  const content = '<form><div class="form-group"><label>DV do alvo</label><input name="dv" type="number" min="0" step="1" value="1"></div></form>';
+  if (Number(game.release?.generation ?? 13) >= 14) return foundry.applications.api.DialogV2.prompt({ window: { title: "Assassinato" }, content, ok: { label: "Rolar", callback: (_event, button) => Number(button.form.elements.dv.value) } });
+  return Dialog.prompt({ title: "Assassinato", content, label: "Rolar", callback: (html) => Number(html[0].querySelector('[name="dv"]').value), rejectClose: false });
+}
+
+async function rollAbility(actor, key) {
+  const ability = CLASS_RACE_ABILITIES[key];
   if (!ability) return;
-  const score = academicAbilityScore(key, actor.system?.level);
+  let score = abilityScore(key, actor.system?.level);
+  if (key === "assassination") {
+    if (!game.user.isGM) return ui.notifications.warn("A rolagem de Assassinato deve ser feita pelo Mestre.");
+    const targetDV = await promptAssassinationDV();
+    if (targetDV === null || targetDV === undefined || Number.isNaN(targetDV)) return;
+    const assassinDV = Number(actor.system?.attributes?.dv ?? actor.system?.dv ?? 0) || 0;
+    if (targetDV >= assassinDV) score = Math.max(0, score - (targetDV - assassinDV + 1));
+  }
   const roll = new Roll("1d6");
   if (Number(game.release?.generation ?? 13) >= 14) await roll.evaluate();
   else await roll.roll({ async: true });
-  const success = academicRollSucceeded(roll.total, score);
+  const success = rollSucceeded(roll.total, score);
   const resultKey = success ? "olddragon2e.chat.success" : "olddragon2e.chat.failure";
   const result = `<strong class="${success ? "success" : "failure"}">${escapeHtml(game.i18n.localize(resultKey))}</strong>`;
   const special = key === "evaluators" && roll.total === 5 ? "A avaliação se dará 25% abaixo do valor real." : key === "evaluators" && roll.total === 6 ? "A avaliação será 25% acima do valor real." : "";
   const flavor = `<div class="title">${escapeHtml(game.i18n.localize("olddragon2e.chat.test"))} <strong>${escapeHtml(ability.label)}</strong> (${score})</div><p class="result">${result}</p>${special ? `<p>${escapeHtml(special)}</p>` : ""}`;
   // Habilidades de raça e classe são testes reservados ao Mestre.
-  await roll.toMessage({ flavor, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: "blindroll" });
+  await roll.toMessage({ flavor, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: key === "assassination" ? "publicroll" : "blindroll" });
+  if (key === "assassination" && !success) await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), whisper: (game.users ?? []).filter((user) => user.isGM).map((user) => user.id), content: "O alvo não recebe dano e fica imune a um novo Assassinato até o Assassino evoluir para o próximo nível." });
 }
 
 function effectTemplate({ name, origin, association, key, mode, value, condition }) {
   return normalizeEffect({
-    id: `auto-${normalizeAcademicName(name).replace(/[^a-z0-9]+/g, "-")}`, name, origin, association, icon: "icons/svg/aura.svg", enabled: true,
+    id: `auto-${normalizeAbilityName(name).replace(/[^a-z0-9]+/g, "-")}`, name, origin, association, icon: "icons/svg/aura.svg", enabled: true,
     duration: { type: "permanent" }, modifiers: [{ key, mode, value }],
     conditional: condition ? { enabled: true, trigger: "manual", flow: "if", left: condition.left, operator: condition.operator || "eq", right: condition.right || "boolean.true", number: condition.number || 0, conditionName: condition.name, resultAction: "applyEffect" } : { enabled: false }
   });
@@ -171,15 +185,16 @@ function enhanceAcademicAbilities(app, html) {
   if (!root) return;
   const level = Number(actor.system?.level) || 1;
   for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id], .character-tab-race .race-abilities li.item[data-item-id]")) {
-    const key = academicAbilityKey(actor.items?.get?.(row.dataset.itemId)?.name);
+    const key = abilityKey(actor.items?.get?.(row.dataset.itemId)?.name);
     const isRaceAbility = Boolean(row.closest(".character-tab-race"));
     if (key === "reputation" && isRaceAbility) continue;
+    if (key === "assassination" && isRaceAbility) continue;
     if (!key) continue;
     const current = row.querySelector(`[data-academic-ability="${key}"]`);
     if (current) {
-      const score = academicAbilityScore(key, level);
+      const score = abilityScore(key, level);
       current.innerHTML = `<i class="fa-light fa-dice-d6 fa-sm"></i>&nbsp;1-${score} em 1d6`;
-      current.title = `Rolar teste de ${ACADEMIC_ABILITIES[key].label}`;
+      current.title = `Rolar teste de ${CLASS_RACE_ABILITIES[key].label}`;
       continue;
     }
     (row.querySelector(":scope > .ability, :scope > .ability-header") ?? row.firstElementChild ?? row).insertAdjacentHTML("afterend", abilityRollHtml(key, level));
@@ -187,7 +202,7 @@ function enhanceAcademicAbilities(app, html) {
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
-      if (normalizeAcademicName(ability?.name) !== "arma racial" || row.querySelector("[data-racial-weapon-choice]")) continue;
+      if (normalizeAbilityName(ability?.name) !== "arma racial" || row.querySelector("[data-racial-weapon-choice]")) continue;
       const selected = actor.getFlag(MODULE_ID, "dwarfRacialWeapon") || "Não escolhida";
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-racial-weapon-choice><i class="fas fa-hammer"></i> Arma racial: ${escapeHtml(selected)}</a></div>`);
     }
@@ -195,7 +210,7 @@ function enhanceAcademicAbilities(app, html) {
   if (isArcherName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
-      if (normalizeAcademicName(ability?.name) !== "maestria em armas" || row.querySelector("[data-archer-mastery-choice]")) continue;
+      if (normalizeAbilityName(ability?.name) !== "maestria em armas" || row.querySelector("[data-archer-mastery-choice]")) continue;
       const selected = actor.getFlag(MODULE_ID, "archerMasteryWeapon") || "Não escolhida";
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-archer-mastery-choice><i class="fas fa-bow-arrow"></i> Arma de maestria: ${escapeHtml(selected)}</a></div>`);
     }
@@ -211,7 +226,7 @@ function enhanceAcademicAbilities(app, html) {
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (masteryChoice) { await chooseArcherMastery(actor); app.render(false); return; }
     button.classList.add("rolling");
-    try { await rollAcademicAbility(actor, button.dataset.academicAbility); } finally { button.classList.remove("rolling"); }
+    try { await rollAbility(actor, button.dataset.academicAbility); } finally { button.classList.remove("rolling"); }
   }, true);
   syncDwarfEffects(actor).catch((error) => console.error(`${MODULE_ID} | Falha ao sincronizar habilidades de anão`, error));
 }
