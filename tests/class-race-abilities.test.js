@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { academicAbilityKey, academicAbilityScore, academicRollSucceeded, dwarfAdventurerHitDieForLevel, isAcademicClassName, isDwarfAdventurerName, isDwarfName } from "../scripts/features/academic-abilities/model.js";
+import { academicAbilityKey, academicAbilityScore, academicRollSucceeded, dwarfAdventurerHitDieForLevel, isAarakocraName, isAcademicClassName, isArcherName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName } from "../scripts/features/class-race-abilities/model.js";
 
 test("reconhece a classe e as habilidades do Acadêmico ignorando acentos", () => {
   assert.equal(isAcademicClassName("Acadêmico"), true);
@@ -33,4 +33,20 @@ test("reconhece as habilidades de anão e Anão Aventureiro", () => {
   assert.equal(academicAbilityScore("miners", 15), 2);
   assert.equal(dwarfAdventurerHitDieForLevel(2), 10);
   assert.equal(dwarfAdventurerHitDieForLevel(3), 12);
+});
+
+test("reconhece habilidades de Elfo e Arqueiro", () => {
+  assert.equal(isElfName("Elfo"), true);
+  assert.equal(isElfName("Elfo Aventureiro"), true);
+  assert.equal(isHalfElfName("Meio-Elfo"), true);
+  assert.equal(isHalfGiantName("Meio-Gigante Athasiano"), true);
+  assert.equal(isAarakocraName("Aarakocra"), true);
+  assert.equal(isArcherName("Arqueiro"), true);
+  assert.equal(academicAbilityKey("Percepção Natural"), "naturalPerception");
+  assert.equal(academicAbilityKey("Reputação (Dark Sun)"), "reputation");
+  assert.equal(academicAbilityScore("naturalPerception", 10), 2);
+  assert.equal(isGnomeName("Gnomo"), true);
+  assert.equal(isHalflingName("Halfling"), true);
+  assert.equal(academicAbilityKey("Avaliadores"), "evaluators");
+  assert.equal(academicAbilityScore("evaluators", 1), 4);
 });

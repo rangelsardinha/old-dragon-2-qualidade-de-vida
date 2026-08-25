@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   allocationFromDice, attributeModifier, calculateHitPoints,
-  classAllowsRace, experienceForLevel, hitDieForClass, hitDieForClassLevel, hitPointBonusForClass, jpcBonusForClass, racialAttributes
+  classAllowsRace, experienceForLevel, hitDieForClass, hitDieForClassLevel, hitPointBonusForClass, hitPointBonusForRace, jpcBonusForClass, racialAttributes
 } from "../scripts/features/character-generator/model.js";
 
 test("usa a tabela oficial de modificadores de atributos", () => {
@@ -62,6 +62,10 @@ test("Anão Aventureiro passa a usar d12 a partir do 3º nível", () => {
   assert.equal(hitDieForClassLevel(characterClass, 2), 10);
   assert.equal(hitDieForClassLevel(characterClass, 3), 12);
   assert.equal(hitDieForClassLevel(characterClass, 15), 12);
+});
+test("aplica bônus de PV de Mul e Meio-Gigante", () => {
+  assert.equal(hitPointBonusForRace({ name: "Mul" }), 1);
+  assert.equal(hitPointBonusForRace({ name: "Meio-Gigante Athasiano" }), 2);
 });
 
 test("distribui sete dados sobre atributos com base oito", () => {

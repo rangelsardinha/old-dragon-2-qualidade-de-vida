@@ -430,6 +430,9 @@ function actorSnapshot(actor, context = {}) {
   const targetQdvEffects = targetActor ? effectsFor(targetActor) : [];
   const targetRaceNames = targetItems.filter((item) => item.type === "race").map((item) => item.name);
   const targetConcept = String(targetSystem.concept ?? targetSystem.species ?? "").trim();
+  const targetSizeName = String(targetSystem.size ?? targetSystem.tamanho ?? "").trim();
+  const targetSizeValue = { minuscule: 0, minusculo: 0, pequeno: 1, medio: 2, médio: 2, grande: 3, enorme: 4, colossal: 5 }[targetSizeName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR")];
+  const targetSize = targetSizeValue ?? (Number(targetSystem.size) || 0);
   const targetAlignment = String(targetSystem.alignment ?? targetSystem.details?.alignment ?? "").trim();
   const dvMatch = String(targetSystem.dv ?? "").match(/\d+(?:[.,]\d+)?/);
   const targetDv = dvMatch ? Number(dvMatch[0].replace(",", ".")) : 0;
@@ -470,11 +473,13 @@ function actorSnapshot(actor, context = {}) {
       "source.itemEquipped": Boolean(context.sourceItem?.system?.is_equipped),
       "attack.itemNamed": Boolean(attackItem), "attack.weaponMelee": attackMode === "melee",
       "attack.weaponRanged": attackMode === "ranged", "attack.weaponThrowing": attackMode === "throwing",
+      "attack.throwingBad": attackMode === "throwing" && (attackBasis === "bad" || attackBasis === ""),
       "attack.usesBAC": attackBasis === "bac" || attackMode === "melee",
       "attack.usesBAD": attackBasis === "bad" || ["ranged", "throwing"].includes(attackMode),
       "attack.usesAmmunition": Boolean(ammunition), "attack.ammunitionNamed": Boolean(ammunition),
       "attack.itemMagic": isMagic(attackItem), "attack.ammunitionMagic": isMagic(ammunition),
       "target.speciesNamed": Boolean(targetActor), "target.conceptNamed": Boolean(targetConcept),
+      "target.size": targetSize,
       "target.alignmentNamed": Boolean(targetAlignment), "target.conditionNamed": targetConditions.length > 0,
       "target.isMonster": targetActor?.type === "monster", "target.dv": targetDv,
       "target.selected": Boolean(targetActor), "target.distance": targetDistance,

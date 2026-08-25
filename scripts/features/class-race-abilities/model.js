@@ -5,6 +5,8 @@ export const ACADEMIC_ABILITIES = Object.freeze({
   identifyItems: { label: "Identificar Itens", names: ["identificar itens"] },
   reputation: { label: "Reputação", names: ["reputacao"] },
   miners: { label: "Mineradores", names: ["mineradores"] }
+  , naturalPerception: { label: "Percepção Natural", names: ["percepcao natural"] },
+  evaluators: { label: "Avaliadores", names: ["avaliadores"] }
 });
 
 export function normalizeAcademicName(value) {
@@ -13,6 +15,7 @@ export function normalizeAcademicName(value) {
 
 export function academicAbilityKey(name) {
   const normalized = normalizeAcademicName(name);
+  if (normalized === "reputacao" || normalized.startsWith("reputacao ") || normalized.startsWith("reputacao:")) return "reputation";
   return Object.entries(ACADEMIC_ABILITIES).find(([, ability]) => ability.names.includes(normalized))?.[0] ?? null;
 }
 
@@ -25,6 +28,8 @@ export function academicAbilityScore(key, level) {
     case "identifyItems": return 2;
     case "reputation": return currentLevel >= 15 ? 5 : currentLevel >= 14 ? 4 : currentLevel >= 12 ? 3 : 2;
     case "miners": return 2;
+    case "naturalPerception": return 2;
+    case "evaluators": return 4;
     default: return 0;
   }
 }
@@ -33,8 +38,15 @@ export function isAcademicClassName(name) {
   return normalizeAcademicName(name) === "academico";
 }
 
-export function isDwarfName(name) { return normalizeAcademicName(name) === "anao"; }
+export function isDwarfName(name) { const value = normalizeAcademicName(name); return value === "anao" || value.startsWith("anao athasiano"); }
 export function isDwarfAdventurerName(name) { return normalizeAcademicName(name) === "anao aventureiro"; }
+export function isElfName(name) { const value = normalizeAcademicName(name); return ["elfo", "elfo aventureiro", "elfo athasiano", "elfo aventureiro athasiano"].includes(value); }
+export function isHalfElfName(name) { const value = normalizeAcademicName(name); return ["meio elfo", "meio-elfo", "meio elfo aventureiro", "meio-elfo aventureiro", "meio elfo athasiano", "meio-elfo athasiano"].includes(value); }
+export function isArcherName(name) { return normalizeAcademicName(name) === "arqueiro"; }
+export function isGnomeName(name) { return normalizeAcademicName(name) === "gnomo"; }
+export function isHalflingName(name) { const value = normalizeAcademicName(name); return ["halfling", "halfling aventureiro", "halfling athasiano", "halfling aventureiro athasiano"].includes(value); }
+export function isHalfGiantName(name) { const value = normalizeAcademicName(name); return ["meio gigante", "meio-gigante", "meio gigante athasiano", "meio-gigante athasiano"].includes(value); }
+export function isAarakocraName(name) { const value = normalizeAcademicName(name); return value === "aarakocra" || value === "aarakocra athasiano"; }
 export function dwarfAdventurerHitDieForLevel(level) { return Number(level) >= 3 ? 12 : 10; }
 
 export function academicRollSucceeded(total, score) {

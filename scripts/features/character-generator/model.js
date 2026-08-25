@@ -56,6 +56,7 @@ const CLASS_HIT_DICE = new Map([
 
 const CLASS_HIT_POINT_BONUSES = new Map([["barbaro", 2]]);
 const CLASS_JPC_BONUSES = new Map([["barbaro", 2]]);
+const RACE_HIT_POINT_BONUSES = new Map([["mul", 1], ["meio gigante", 2], ["meio-gigante", 2]]);
 
 export function hitDieForClass(characterClass) {
   const byName = CLASS_HIT_DICE.get(normalizeName(characterClass?.name));
@@ -76,6 +77,12 @@ export function hitPointBonusForClass(characterClass) {
 
 export function jpcBonusForClass(characterClass) {
   return CLASS_JPC_BONUSES.get(normalizeName(characterClass?.name)) ?? 0;
+}
+
+export function hitPointBonusForRace(race) {
+  const name = normalizeName(race?.name);
+  for (const [key, bonus] of RACE_HIT_POINT_BONUSES) if (name === key || name.startsWith(`${key} `) || name.startsWith(`${key}-`)) return bonus;
+  return 0;
 }
 
 export function calculateHitPoints(hitDie, level, constitution, rolls = [], perLevelBonus = 0) {

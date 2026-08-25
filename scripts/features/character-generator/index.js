@@ -1,6 +1,6 @@
 import {
   ATTRIBUTES, ATTRIBUTE_LABELS, allocationFromDice, calculateHitPoints,
-  classAllowsRace, experienceForLevel, hitDieForClass, hitDieForClassLevel, hitPointBonusForClass, jpcBonusForClass, racialAttributes
+  classAllowsRace, experienceForLevel, hitDieForClass, hitDieForClassLevel, hitPointBonusForClass, hitPointBonusForRace, jpcBonusForClass, racialAttributes
 } from "./model.js";
 import { darkSunDocuments, darkSunEnabled } from "../../integrations/dark-sun.js";
 
@@ -305,9 +305,9 @@ async function classAndLevelStep(classes, race, fixedLevel = null) {
   });
 }
 
-async function hitPointRoll(characterClass, level, constitution) {
+async function hitPointRoll(characterClass, race, level, constitution) {
   const die = hitDieForClass(characterClass);
-  const perLevelBonus = hitPointBonusForClass(characterClass);
+  const perLevelBonus = hitPointBonusForClass(characterClass) + hitPointBonusForRace(race);
   const rolls = [];
   const dice = [];
   for (let current = 2; current <= level; current += 1) {
@@ -318,8 +318,8 @@ async function hitPointRoll(characterClass, level, constitution) {
   return { die, dice, rolls, perLevelBonus, hp: calculateHitPoints(die, level, constitution, rolls, perLevelBonus) };
 }
 
-async function hitPointsStep(characterClass, level, constitution, characterName) {
-  let current = await hitPointRoll(characterClass, level, constitution);
+async function hitPointsStep(characterClass, race, level, constitution, characterName) {
+  let current = await hitPointRoll(characterClass, race, level, constitution);
   while (true) {
     const classBonus = current.perLevelBonus ? ` A classe acrescenta +${current.perLevelBonus} PV por nível.` : "";
     const rolledDescription = current.rolls.length ? current.rolls.map((value, index) => `d${current.dice[index]}: ${value}`).join(", ") : "nenhuma rolagem";
@@ -327,7 +327,7 @@ async function hitPointsStep(characterClass, level, constitution, characterName)
     const decision = await hitPointDecision(content, current.hp, level > 1);
     if (!decision || decision.action === "cancel") return null;
     if (decision.action === "confirm") return decision.hp;
-    const proposed = await hitPointRoll(characterClass, level, constitution);
+    const proposed = await hitPointRoll(characterClass, race, level, constitution);
     const response = await requestGmApproval("hp", {
       characterName,
       currentHitPoints: current.hp, currentRolls: current.rolls,
@@ -463,7 +463,7 @@ async function generateCharacter() {
     const characterClass = classes.find((entry) => entry.uuid === selection.classUuid);
     if (!characterClass) throw new Error("Classe não encontrada.");
     const xp = experienceForLevel(characterClass, selection.level);
-    const hp = await hitPointsStep(characterClass, selection.level, attributes.constituicao, identity.name);
+    const hp = await hitPointsStep(characterClass, race, selection.level, attributes.constituicao, identity.name);
     if (hp == null) return;
     const income = await incomeStep();
     if (income == null) return;

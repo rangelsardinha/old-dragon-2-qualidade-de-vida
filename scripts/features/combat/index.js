@@ -839,6 +839,7 @@ function getDamageFormula(actor, item, attackMode, context = {}) {
   if (!damage) return '';
 
   const effectBonus = game.od2Qdv?.effects?.modifierDelta?.(actor, 'damage', { ...context, attackMode }) ?? 0;
+  const strengthEffect = game.od2Qdv?.effects?.modifierDelta?.(actor, 'damage.strength', { ...context, attackMode }) ?? 0;
   const dieSteps = game.od2Qdv?.effects?.modifierDelta?.(actor, 'damage.dieStep', { ...context, attackMode }) ?? 0;
   if (actor.type === 'monster') {
     return shiftDamageDice(joinFormulaTerms([damage, item.system.damage_bonus, effectBonus]), dieSteps);
@@ -846,6 +847,7 @@ function getDamageFormula(actor, item, attackMode, context = {}) {
 
   const terms = [damage];
   if (attackMode === 'melee' || attackMode === 'throwing') terms.push(actor.system.mod_forca);
+  if (strengthEffect && (attackMode === 'ranged' || attackMode === '')) terms.push(actor.system.mod_forca);
   terms.push(item.system.bonus_damage);
 
   const raceBonus = Number(actor.system.raceBonusDamage?.(item) ?? 0);
