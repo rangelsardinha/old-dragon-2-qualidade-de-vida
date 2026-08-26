@@ -267,6 +267,7 @@ async function setPackLocked(pack, locked) {
 }
 
 async function migrateLegacyPackLocks() {
+  if (!game.user?.isGM) return;
   const names = [...PACK_CONFIGS.map(({ name }) => name), "tables", "rules"];
   const configurations = foundry.utils.deepClone(
     game.settings.get("core", "compendiumConfiguration") ?? {}

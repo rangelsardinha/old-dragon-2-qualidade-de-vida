@@ -2,6 +2,8 @@ import { CLASS_RACE_ABILITIES, abilityKey, abilityScore, rollSucceeded, isAarako
 import { normalizeEffect } from "../effect-manager/model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
+const SOCKET = `module.${MODULE_ID}`;
+const handledAssassinationRequests = new Set();
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
 function isPrimaryActiveGM() {
@@ -18,6 +20,12 @@ function actorClassName(actor) {
   return actor?.system?.class?.name ?? actor?.items?.find?.((item) => item.type === "class")?.name ?? "";
 }
 function actorRaceName(actor) { return actor?.system?.race?.name ?? actor?.items?.find?.((item) => item.type === "race")?.name ?? ""; }
+function actorLevel(actor) {
+  const classItem = actor?.items?.find?.((item) => item.type === "class");
+  const candidates = [actor?.system?.level?.value, actor?.system?.level, actor?.system?.attributes?.level, actor?.system?.nivel, classItem?.system?.level, classItem?.system?.nivel]
+    .map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  return Math.max(1, ...candidates);
+}
 function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = String(value ?? "");
@@ -35,27 +43,45 @@ async function promptAssassinationDV() {
   return Dialog.prompt({ title: "Assassinato", content, label: "Rolar", callback: (html) => Number(html[0].querySelector('[name="dv"]').value), rejectClose: false });
 }
 
-async function rollAbility(actor, key) {
+async function rollAbility(actor, key, fromSocket = false, requestedLevel = null) {
   const ability = CLASS_RACE_ABILITIES[key];
   if (!ability) return;
-  let score = abilityScore(key, actor.system?.level);
+  const effectiveLevel = Number(requestedLevel) > 0 ? Number(requestedLevel) : actorLevel(actor);
+  let score = abilityScore(key, effectiveLevel);
+  let automaticFailure = false;
   if (key === "assassination") {
-    if (!game.user.isGM) return ui.notifications.warn("A rolagem de Assassinato deve ser feita pelo Mestre.");
+    if (!game.user.isGM && !fromSocket) {
+      const gm = [...(game.users ?? [])].find((user) => user.active && user.isGM);
+      if (!gm) return ui.notifications.warn("Não há Mestre ativo para realizar a rolagem de Assassinato.");
+      const requestId = foundry.utils.randomID();
+      const requestedLevel = actorLevel(actor);
+      console.log(`${MODULE_ID} | Assassinato solicitado pelo jogador`, { requestId, actor: actor.name, assassinLevel: requestedLevel });
+      game.socket.emit(SOCKET, { type: "assassinationRequest", requestId, actorId: actor.id, actorUuid: actor.uuid, assassinLevel: requestedLevel, userId: game.user.id });
+      ui.notifications.info("Solicitação de Assassinato enviada ao Mestre.");
+      return;
+    }
     const targetDV = await promptAssassinationDV();
     if (targetDV === null || targetDV === undefined || Number.isNaN(targetDV)) return;
-    const assassinDV = Number(actor.system?.attributes?.dv ?? actor.system?.dv ?? 0) || 0;
-    if (targetDV >= assassinDV) score = Math.max(0, score - (targetDV - assassinDV + 1));
+    const assassinDV = effectiveLevel;
+    const difference = Number(targetDV) - assassinDV;
+    console.log(`${MODULE_ID} | Cálculo de Assassinato`, { actor: actor.name, targetDV: Number(targetDV), assassinLevel: assassinDV, difference, baseChance: abilityScore(key, assassinDV) });
+    if (difference > 3) {
+      automaticFailure = true;
+      score = 0;
+    }
+    else if (difference > 0) score = Math.max(0, score - difference);
   }
   const roll = new Roll("1d6");
   if (Number(game.release?.generation ?? 13) >= 14) await roll.evaluate();
   else await roll.roll({ async: true });
-  const success = rollSucceeded(roll.total, score);
+  const success = !automaticFailure && rollSucceeded(roll.total, score);
+  if (key === "assassination") console.log(`${MODULE_ID} | Resultado de Assassinato`, { actor: actor.name, roll: roll.total, chance: score, automaticFailure, success });
   const resultKey = success ? "olddragon2e.chat.success" : "olddragon2e.chat.failure";
   const result = `<strong class="${success ? "success" : "failure"}">${escapeHtml(game.i18n.localize(resultKey))}</strong>`;
   const special = key === "evaluators" && roll.total === 5 ? "A avaliação se dará 25% abaixo do valor real." : key === "evaluators" && roll.total === 6 ? "A avaliação será 25% acima do valor real." : "";
   const flavor = `<div class="title">${escapeHtml(game.i18n.localize("olddragon2e.chat.test"))} <strong>${escapeHtml(ability.label)}</strong> (${score})</div><p class="result">${result}</p>${special ? `<p>${escapeHtml(special)}</p>` : ""}`;
   // Habilidades de raça e classe são testes reservados ao Mestre.
-  await roll.toMessage({ flavor, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: key === "assassination" ? "publicroll" : "blindroll" });
+  await roll.toMessage({ flavor, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: "blindroll" });
   if (key === "assassination" && !success) await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), whisper: (game.users ?? []).filter((user) => user.isGM).map((user) => user.id), content: "O alvo não recebe dano e fica imune a um novo Assassinato até o Assassino evoluir para o próximo nível." });
 }
 
@@ -183,7 +209,7 @@ function enhanceAcademicAbilities(app, html) {
   if (actor?.type !== "character" || !actor.isOwner) return;
   const root = rootElement(html);
   if (!root) return;
-  const level = Number(actor.system?.level) || 1;
+  const level = actorLevel(actor);
   for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id], .character-tab-race .race-abilities li.item[data-item-id]")) {
     const key = abilityKey(actor.items?.get?.(row.dataset.itemId)?.name);
     const isRaceAbility = Boolean(row.closest(".character-tab-race"));
@@ -245,6 +271,14 @@ for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (i
 Hooks.once("ready", () => {
   if (!enabled()) return;
   console.log(`${MODULE_ID} | Automações de habilidades de classe e raça ativas`);
+  game.socket.on(SOCKET, async (payload) => {
+    if (payload?.type !== "assassinationRequest" || !game.user.isGM) return;
+    if (payload.requestId && handledAssassinationRequests.has(payload.requestId)) return;
+    if (payload.requestId) handledAssassinationRequests.add(payload.requestId);
+    console.log(`${MODULE_ID} | Requisição de Assassinato recebida`, payload);
+    const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
+    if (actor) await rollAbility(actor, "assassination", true, payload.assassinLevel);
+  });
   if (isPrimaryActiveGM()) for (const actor of game.actors ?? []) if (actor.type === "character") syncDwarfEffects(actor);
   ensureDwarfEffectLibrary().catch((error) => console.error(`${MODULE_ID} | Falha ao criar efeitos de anão no compêndio`, error));
 });
