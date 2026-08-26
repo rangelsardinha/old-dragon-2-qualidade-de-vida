@@ -1,5 +1,6 @@
-import { CLASS_RACE_ABILITIES, abilityKey, abilityScore, rollSucceeded, isAarakocraName, isArcherName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName, normalizeAbilityName } from "./model.js";
+import { CLASS_RACE_ABILITIES, abilityKey, abilityScore, rollSucceeded, isAarakocraName, isArcherName, isBarbarianName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName, normalizeAbilityName } from "./model.js";
 import { normalizeEffect } from "../effect-manager/model.js";
+import { darkSunPacks } from "../../integrations/dark-sun.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const SOCKET = `module.${MODULE_ID}`;
@@ -31,10 +32,13 @@ function escapeHtml(value) {
   div.textContent = String(value ?? "");
   return div.innerHTML;
 }
+function isMagicalWeaponName(name) {
+  return /\+\s*\d|amaldi[cç]|matadora|cancelamento|mágic|magic/i.test(String(name ?? ""));
+}
 function abilityRollHtml(key, level) {
   const ability = CLASS_RACE_ABILITIES[key];
   const score = abilityScore(key, level);
-  return `<div class="od2qdv-academic-roll"><a class="od2qdv-academic-roll-button" data-academic-ability="${key}" title="Rolar teste de ${escapeHtml(ability.label)}"><i class="fa-light fa-dice-d6 fa-sm"></i>&nbsp;1-${score} em 1d6</a></div>`;
+  return `<div class="od2qdv-academic-roll"><span class="od2qdv-ability-label">${escapeHtml(ability.label)}:</span> <a class="od2qdv-academic-roll-button" data-academic-ability="${key}" title="Rolar teste de ${escapeHtml(ability.label)}"><i class="fa-light fa-dice-d6 fa-sm"></i>&nbsp;1-${score} em 1d6</a></div>`;
 }
 
 async function promptAssassinationDV() {
@@ -127,6 +131,13 @@ function elfAndArcherEffects(actor) {
   return effects;
 }
 
+function barbarianEffects(actor) {
+  const cls = actor.items?.find?.((item) => item.type === "class");
+  const weapon = actor.getFlag(MODULE_ID, "barbarianMasteryWeapon");
+  if (!isBarbarianName(actorClassName(actor)) || !weapon) return [];
+  return [effectTemplate({ name: "Bárbaro: Maestria em armas", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Bárbaro" }, key: "damage", mode: "add", value: 1, condition: { left: "attack.itemNamed", name: weapon } })];
+}
+
 function gnomeAndHalflingEffects(actor) {
   const race = actor.items?.find?.((item) => item.type === "race");
   const effects = [];
@@ -148,11 +159,11 @@ function gnomeAndHalflingEffects(actor) {
 
 async function syncDwarfEffects(actor) {
   if (!game.settings.get(MODULE_ID, "enableEffectManager")) return;
-  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)"]);
+  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas"]);
   const current = actor.getFlag(MODULE_ID, "effects") || [];
-  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor)];
+  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...barbarianEffects(actor)];
   const retained = current.filter((effect) => !managedNames.has(effect.name));
-  const next = [...retained, ...desired];
+  const next = [...retained, ...desired].filter((effect, index, list) => list.findIndex((entry) => entry.id === effect.id || (entry.name && entry.name === effect.name)) === index);
   if (JSON.stringify(current) !== JSON.stringify(next)) await actor.setFlag(MODULE_ID, "effects", next);
 }
 
@@ -169,19 +180,47 @@ async function chooseRacialWeapon(actor) {
   await syncDwarfEffects(actor);
 }
 
-async function chooseArcherMastery(actor) {
-  const names = [...(actor.items ?? [])].filter((item) => item.type === "weapon" && /arco|besta/i.test(item.name)).map((item) => item.name);
-  for (const pack of game.packs ?? []) {
-    if (pack.metadata?.name !== "equipment") continue;
-    const index = await pack.getIndex();
-    names.push(...index.filter((entry) => /arco|besta/i.test(entry.name)).map((entry) => entry.name));
+async function chooseArcherMastery(actor, allWeapons = false) {
+  const matches = (name) => allWeapons || /arco|besta/i.test(name);
+  const names = [...(actor.items ?? [])].filter((item) => item.type === "weapon" && matches(item.name)).map((item) => ({ name: item.name, label: item.name, source: 'srd' }));
+  const isWeaponPack = (pack) => {
+    const metadata = pack.metadata ?? {};
+    const text = `${metadata.name ?? ""} ${metadata.label ?? ""} ${metadata.path ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    return /(^|[^a-z])(armas|weapons)([^a-z]|$)/.test(text) && !/magia|magic|item.?magico/.test(text);
+  };
+  const packs = [...(game.packs ?? [])].filter((pack) => {
+    if (pack.documentName !== "Item") return false;
+    const packageName = pack.metadata?.packageName ?? pack.metadata?.package;
+    const meta = pack.metadata ?? {};
+    const packText = `${meta.name ?? ""} ${meta.label ?? ""} ${meta.path ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    // Somente o compêndio SRD Equipamentos/Armas; nunca itens mágicos ou outros packs.
+    const exactSrd = packageName === game.system.id
+      && (meta.name === 'equipment' || /equipamentos/.test(packText) || /(^|[^a-z])armas([^a-z]|$)/.test(packText))
+      && !/magia|magic|item.?magico/.test(packText);
+    return exactSrd;
+  });
+  // O módulo de Athas mantém compêndios separados (incluindo "Armas de Dark Sun"),
+  // mas nem sempre publica o nome da pasta no metadata. O tipo do documento
+  // será filtrado abaixo, portanto é seguro consultar todos os packs de itens dele.
+  // O módulo de Athas pode registrar a pasta "Armas de Dark Sun" apenas no
+  // índice interno; consultamos seus packs de itens e filtramos estritamente
+  // pelos documentos do tipo arma abaixo.
+  for (const pack of darkSunPacks("Item")) if (!packs.includes(pack)) packs.push(pack);
+  for (const pack of packs) {
+    const index = await pack.getIndex({ fields: ["type"] });
+    const documents = index.some((entry) => entry.type === "weapon") ? index : (await pack.getDocuments()).map((document) => ({ _id: document.id, name: document.name, type: document.type }));
+    const isDarkSun = /dark[- ]?sun|darksun/i.test(String(pack.metadata?.packageName ?? pack.metadata?.package ?? pack.metadata?.label ?? ""));
+    names.push(...documents.filter((entry) => entry.type === "weapon" && matches(entry.name) && !isMagicalWeaponName(entry.name)).map((entry) => ({ name: entry.name, label: entry.name, source: isDarkSun ? 'darkSun' : 'srd' })));
   }
-  const choices = [...new Set(names)].sort((a, b) => a.localeCompare(b));
-  if (!choices.length) return ui.notifications.warn("Nenhum arco ou besta foi encontrado no SRD.");
-  const content = `<div class="form-group"><label>Arma de maestria</label><select name="weapon">${choices.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}</select></div>`;
+  const choices = [...new Map(names.map((entry) => [`${entry.source}:${entry.name.toLocaleLowerCase("pt-BR")}`, entry])).values()].sort((a, b) => a.label.localeCompare(b.label));
+  if (!choices.length) return ui.notifications.warn(allWeapons ? "Nenhuma arma foi encontrada nos compêndios de equipamentos." : "Nenhum arco ou besta foi encontrado no SRD.");
+  const srd = choices.filter((entry) => entry.source === 'srd');
+  const dark = choices.filter((entry) => entry.source === 'darkSun');
+  const select = (name, label, list, other) => `<div class="form-group"><label>${label}</label><select name="${name}" onchange="if(this.value)this.form.elements.${other} && (this.form.elements.${other}.value='')"><option value="">— Nenhuma —</option>${list.map((entry) => `<option value="${escapeHtml(entry.name)}">${escapeHtml(entry.label)}</option>`).join('')}</select></div>`;
+  const content = `${select('srdWeapon', 'Armas SRD', srd, 'darkWeapon')}${dark.length && darkSunPacks('Item').length ? select('darkWeapon', 'Armas Dark Sun', dark, 'srdWeapon') : ''}`;
   const selected = Number(game.release?.generation ?? 13) >= 14
-    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Escolher arma de maestria" }, content, ok: { label: "Confirmar", callback: (_event, button) => button.form.elements.weapon.value } })
-    : await Dialog.prompt({ title: "Escolher arma de maestria", content: `<form>${content}</form>`, label: "Confirmar", callback: (html) => html[0].querySelector('[name="weapon"]').value, rejectClose: false });
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Escolher arma de maestria" }, content, ok: { label: "Confirmar", callback: (_event, button) => button.form.elements.srdWeapon.value || button.form.elements.darkWeapon?.value || '' } })
+    : await Dialog.prompt({ title: "Escolher arma de maestria", content: `<form>${content}</form>`, label: "Confirmar", callback: (html) => html[0].querySelector('[name="srdWeapon"]').value || html[0].querySelector('[name="darkWeapon"]')?.value || '', rejectClose: false });
   if (selected) { await actor.setFlag(MODULE_ID, "archerMasteryWeapon", selected); await syncDwarfEffects(actor); }
 }
 
@@ -225,6 +264,20 @@ function enhanceAcademicAbilities(app, html) {
     }
     (row.querySelector(":scope > .ability, :scope > .ability-header") ?? row.firstElementChild ?? row).insertAdjacentHTML("afterend", abilityRollHtml(key, level));
   }
+  if (isBarbarianName(actorClassName(actor))) {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      const name = normalizeAbilityName(ability?.name);
+      if (name.includes("talentos selvagens")) {
+        for (const key of ["climb", "naturalCamouflage"]) if (!row.querySelector(`[data-academic-ability="${key}"]`)) (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", abilityRollHtml(key, level));
+      }
+      if (name.includes("surpresa selvagem") && !row.querySelector('[data-academic-ability="wildSurprise"]')) (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", abilityRollHtml("wildSurprise", level));
+      if (name.includes("maestria em arma") && !row.querySelector("[data-barbarian-mastery-choice]")) {
+        const selected = actor.getFlag(MODULE_ID, "barbarianMasteryWeapon") || "Não escolhida";
+        (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-barbarian-mastery-choice><i class="fas fa-sword"></i> Arma de maestria: ${escapeHtml(selected)}</a></div>`);
+      }
+    }
+  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -247,10 +300,17 @@ function enhanceAcademicAbilities(app, html) {
     const button = event.target.closest?.("[data-academic-ability]");
     const weaponChoice = event.target.closest?.("[data-racial-weapon-choice]");
     const masteryChoice = event.target.closest?.("[data-archer-mastery-choice]");
-    if (!button && !weaponChoice && !masteryChoice) return;
+    const barbarianMasteryChoice = event.target.closest?.("[data-barbarian-mastery-choice]");
+    if (!button && !weaponChoice && !masteryChoice && !barbarianMasteryChoice) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (masteryChoice) { await chooseArcherMastery(actor); app.render(false); return; }
+    if (barbarianMasteryChoice) {
+      if (actor.getFlag(MODULE_ID, "barbarianMasteryWeapon") && !game.user.isGM) { ui.notifications.warn("A arma de maestria já foi escolhida. Somente o Mestre pode alterá-la."); return; }
+      await chooseArcherMastery(actor, true);
+      await actor.setFlag(MODULE_ID, "barbarianMasteryWeapon", actor.getFlag(MODULE_ID, "archerMasteryWeapon"));
+      app.render(false); return;
+    }
     button.classList.add("rolling");
     try { await rollAbility(actor, button.dataset.academicAbility); } finally { button.classList.remove("rolling"); }
   }, true);

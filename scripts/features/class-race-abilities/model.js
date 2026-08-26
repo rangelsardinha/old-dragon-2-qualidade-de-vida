@@ -7,7 +7,10 @@ export const CLASS_RACE_ABILITIES = Object.freeze({
   miners: { label: "Mineradores", names: ["mineradores"] }
   , naturalPerception: { label: "Percepção Natural", names: ["percepcao natural"] },
   evaluators: { label: "Avaliadores", names: ["avaliadores"] },
-  assassination: { label: "Assassinato", names: ["assassinato"] }
+  assassination: { label: "Assassinato", names: ["assassinato"] },
+  climb: { label: "Escalar", names: ["escalar"] },
+  naturalCamouflage: { label: "Camuflagem Natural", names: ["camuflagem natural"] },
+  wildSurprise: { label: "Surpresa Selvagem", names: ["surpresa selvagem"] }
 });
 
 export function normalizeAbilityName(value) {
@@ -31,7 +34,10 @@ export function abilityScore(key, level) {
     case "miners": return 2;
     case "naturalPerception": return 2;
     case "evaluators": return 4;
-    case "assassination": return currentLevel >= 10 ? 3 : 2;
+    case "assassination": return currentLevel >= 10 ? 3 : currentLevel >= 6 ? 2 : 0;
+    case "climb": return 3;
+    case "naturalCamouflage": return 2;
+    case "wildSurprise": return 4;
     default: return 0;
   }
 }
@@ -45,6 +51,7 @@ export function isDwarfAdventurerName(name) { return normalizeAbilityName(name) 
 export function isElfName(name) { const value = normalizeAbilityName(name); return ["elfo", "elfo aventureiro", "elfo athasiano", "elfo aventureiro athasiano"].includes(value); }
 export function isHalfElfName(name) { const value = normalizeAbilityName(name); return ["meio elfo", "meio-elfo", "meio elfo aventureiro", "meio-elfo aventureiro", "meio elfo athasiano", "meio-elfo athasiano"].includes(value); }
 export function isArcherName(name) { return normalizeAbilityName(name) === "arqueiro"; }
+export function isBarbarianName(name) { return normalizeAbilityName(name) === "barbaro"; }
 export function isGnomeName(name) { return normalizeAbilityName(name) === "gnomo"; }
 export function isHalflingName(name) { const value = normalizeAbilityName(name); return ["halfling", "halfling aventureiro", "halfling athasiano", "halfling aventureiro athasiano"].includes(value); }
 export function isHalfGiantName(name) { const value = normalizeAbilityName(name); return ["meio gigante", "meio-gigante", "meio gigante athasiano", "meio-gigante athasiano"].includes(value); }
