@@ -204,6 +204,33 @@ function onRenderChatMessage(message, html) {
   const root = html instanceof HTMLElement ? html : html[0];
   const damageButton = root?.querySelector?.('[data-od2ca-action="apply-gm-damage"]');
   const xpButton = root?.querySelector?.('[data-od2ca-action="distribute-xp"]');
+  root?.querySelectorAll?.('[data-od2ca-agonize]')?.forEach((button) => {
+    if (button.dataset.od2caBound === 'true') return;
+    button.dataset.od2caBound = 'true';
+    button.addEventListener('click', async () => {
+      const actor = await fromUuid(button.dataset.od2caAgonize);
+      if (!actor) return;
+      if (!game.user.isGM && !actor.testUserPermission?.(game.user, 'OWNER')) return;
+      const readSave = (key) => Number(actor[`${key}_total`] ?? foundry.utils.getProperty(actor, `system.${key}_total`) ?? foundry.utils.getProperty(actor, `system.${key}.total`) ?? foundry.utils.getProperty(actor, `system.attributes.${key}.total`) ?? 0) || 0;
+      const jpc = readSave('jpc');
+      const jps = readSave('jps');
+      const total = Math.max(jpc, jps);
+      const saveKey = jpc >= jps ? 'JPC' : 'JPS';
+      // Reutiliza a rotina de jogada de proteção do sistema quando disponível.
+      const systemRoller = ['rollJPC', 'rollJpc', 'rollJp', 'rollProtection', 'rollSavingThrow', 'rollSave'].find((name) => typeof actor[name] === 'function');
+      const roll = systemRoller ? await actor[systemRoller](saveKey.toLowerCase(), { chat: true, dialog: false }) : await new Roll('1d20').evaluate();
+      const result = Number(roll?.total ?? roll?.result ?? roll) || 0;
+      const success = result <= total;
+      if (!systemRoller) await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<div class="od2ca-card" style="text-align:center"><h2>Teste de ${saveKey}</h2><h2 class="${success ? 'od2ca-hit' : 'od2ca-miss'}">${success ? 'SUCESSO!' : 'FALHA'}</h2><div>1d20</div><h2>${result}</h2></div>` });
+      button.disabled = true;
+      await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: success
+        ? `<strong>${escapeHtml(actor.name)} passou no teste de agonização (JPC/JPS ${total}) e permanece vivo por mais uma rodada.</strong>`
+        : `<strong>${escapeHtml(actor.name)} falhou no teste de agonização (JPC/JPS ${total}) e morreu.</strong>` });
+      if (!success) {
+        await markTargetDead({ actor, document: button.dataset.od2caAgonizeToken ? (await fromUuid(button.dataset.od2caAgonizeToken)) : null, name: actor.name });
+      }
+    });
+  });
   root?.querySelectorAll?.('[data-od2ca-parry]')?.forEach((button) => {
     if (button.dataset.od2caBound === 'true') return;
     button.dataset.od2caBound = 'true';
@@ -234,6 +261,29 @@ Hooks.on('deleteCombat', (combat) => {
     ui.notifications.error(`OD2 Automacao: ${error.message}`);
   });
 });
+
+Hooks.on('updateCombat', (combat, changed) => {
+  if (!isEnabled() || !game.user?.isGM || !isPrimaryActiveGm() || !Object.prototype.hasOwnProperty.call(changed, 'round')) return;
+  processAgonizingActors(combat).catch((error) => console.error(`${MODULE_ID} | Falha ao processar agonização`, error));
+});
+
+Hooks.on('preUpdateToken', (token, changes) => {
+  if (!isEnabled() || (!('x' in changes) && !('y' in changes))) return;
+  if (Number(foundry.utils.getProperty(token.actor, 'system.hp.value')) <= 0) {
+    ui.notifications.warn('Personagem inconsciente não pode se mover.');
+    return false;
+  }
+});
+
+async function processAgonizingActors(combat) {
+  for (const combatant of combat?.combatants ?? []) {
+    const actor = combatant.actor;
+    if (!actor || Number(foundry.utils.getProperty(actor, 'system.hp.value')) !== 0) continue;
+    // Os totais oficiais já incluem classe, raça e modificador; não usar
+    // apenas o campo de bônus isolado.
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>${escapeHtml(actor.name)}</strong> está agonizando. Role JPC ou JPS (a maior) para permanecer vivo. <button type="button" data-od2ca-agonize="${escapeHtml(actor.uuid)}" data-od2ca-agonize-token="${escapeHtml(combatant.token?.document?.uuid ?? '')}">Rolar JPC/JPS</button>`, whisper: [...(game.users ?? [])].filter((u) => u.active && (u.isGM || actor.testUserPermission?.(u, 'OWNER'))).map((u) => u.id), flags: { [MODULE_ID]: { agonizeActorUuid: actor.uuid, agonizeTokenUuid: combatant.token?.document?.uuid } } });
+  }
+}
 
 function isPrimaryActiveGm() {
   const activeGms = game.users
@@ -512,6 +562,10 @@ async function onSheetClick(event, actor) {
 }
 
 async function handleAttack(actor, button) {
+  if (Number(foundry.utils.getProperty(actor, 'system.hp.value')) <= 0) {
+    ui.notifications.warn('Este personagem está inconsciente e não pode atacar. Deve realizar JPC ou JPS para agonizar.');
+    return;
+  }
   const target = getSingleTarget();
   if (!target) return;
 
@@ -1327,8 +1381,16 @@ async function applyDamage(target, damage, rollMode = 'public', context = {}) {
   await sendDamageAppliedMessage(target, adjustment, hp, nextHp, rollMode);
 
   if (hp > 0 && nextHp === 0) {
-    await confirmAndMarkDead(target);
+    await markTargetUnconscious(target);
   }
+}
+
+async function markTargetUnconscious(target) {
+  const token = target?.document ?? target;
+  const actor = target?.actor;
+  const id = (CONFIG.statusEffects ?? []).some((entry) => entry.id === 'unconscious') ? 'unconscious' : 'stunned';
+  if (actor?.toggleStatusEffect) await actor.toggleStatusEffect(id, { active: true, overlay: true });
+  else if (token?.toggleActiveEffect) await token.toggleActiveEffect(getStatusEffect(id), { active: true, overlay: true });
 }
 
 function isBarbarianActor(actor) {
@@ -1658,6 +1720,14 @@ async function markTargetDead(target) {
   const statusId = getDeadStatusId();
   const token = target?.document ?? target;
   const actor = target?.actor;
+
+  const unconsciousId = (CONFIG.statusEffects ?? []).some((effect) => effect.id === 'unconscious') ? 'unconscious' : null;
+  if (unconsciousId && actor?.toggleStatusEffect) {
+    const current = actor.effects?.find?.((effect) => effect.statuses?.has?.(unconsciousId) || effect.getFlag?.('core', 'statusId') === unconsciousId);
+    if (current) await actor.toggleStatusEffect(unconsciousId, { active: false, overlay: false });
+  } else if (unconsciousId && token?.toggleActiveEffect) {
+    await token.toggleActiveEffect(getStatusEffect(unconsciousId), { active: false, overlay: false });
+  }
 
   if (actor?.toggleStatusEffect) {
     await actor.toggleStatusEffect(statusId, { active: true, overlay: true });
