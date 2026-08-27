@@ -102,6 +102,17 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Ao concluir, abre a ficha e orienta o jogador a escolher equipamentos e magias.
 - Jogadores podem solicitar a criação; o Mestre autoriza o início, cada rerrolagem e o resumo final diretamente pelo chat.
 
+### Habilidades de raça e classe automatizadas
+
+- **Acadêmico:** Conhecimento Acadêmico, Decifrar Linguagens, Lendas e Tradições, Identificar Itens e Reputação, com progressão por nível e rolagens secretas quando aplicável.
+- **Anão:** Mineradores e Inimigos; **Anão Aventureiro:** Arma Racial, Bastião Racial, Duro na Queda e Reputação.
+- **Elfo e Meio-Elfo:** Imunidade a Sono e Paralisar; **Arqueiro:** Maestria em Armas e Puxada Aprimorada.
+- **Halfling:** Furtivos, Bons de Mira e Pequenos; versões Athasianas são reconhecidas quando o módulo Dark Sun está ativo.
+- **Meio-Gigante:** Força Descomunal e Resistência Corporal; **Aarakocra:** Nascidos dos Céus.
+- **Bárbaro:** Maestria em Armas, Talentos Selvagens e Surpresa Selvagem, além da reação de Aparar integrada ao combate.
+- **Assassino:** Assassinato com progressão por nível, cálculo de DV do alvo, redutores e falha automática conforme a diferença de DV.
+- Efeitos associados são sincronizados automaticamente conforme raça, classe e nível; ao remover ou reduzir a associação, os efeitos correspondentes também são removidos.
+
 ### Integração com Dark Sun
 
 - Detecta automaticamente módulos Dark Sun ativos na versão 1.0.4 ou superior.
