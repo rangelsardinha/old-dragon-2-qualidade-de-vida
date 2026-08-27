@@ -126,6 +126,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 
 - Foundry VTT mínimo 13, máximo 14 e verificado no Foundry VTT 14.
 - Sistema `olddragon2e` 2.0.0 ou mais recente.
+- O módulo `metric-ruler-labels` é requisito para as medições de distância e áreas em metros usadas pelo controle de aura e alcance.
 
 Para instalar localmente, copie a pasta para `Data/modules/old-dragon-2-qualidade-de-vida`, reinicie o Foundry e ative o módulo no mundo.
 
