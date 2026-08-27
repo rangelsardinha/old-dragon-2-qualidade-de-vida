@@ -31,6 +31,10 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - Compara o ataque com a CA do alvo e registra acerto ou erro no chat.
 - Rola e aplica dano, com ajustes de fraqueza e resistência.
 - Trata acertos e erros críticos pelas opções do LB1/LB2.
+- Automatiza **Aparar** do Bárbaro: Mestre e jogador recebem a decisão antes da divulgação do ataque e do dano; aceitar interrompe o golpe.
+- Ao chegar a 0 PV, personagens recebem o status **Inconsciente** e ficam impedidos de atacar ou mover o token.
+- No início das rodadas seguintes, solicita pelo chat uma jogada de agonização usando o maior total entre JPC e JPS.
+- A agonização usa a regra de Jogada de Proteção do OD2: resultado igual ou inferior ao valor da proteção é sucesso; falhar aplica o status **Morto**, remove Inconsciente e anuncia a morte.
 - Solicita confirmação do Mestre quando o jogador não pode alterar o alvo.
 - Resume criaturas derrotadas e distribui XP ao encerrar o combate.
 
@@ -105,6 +109,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Acrescenta magias Dark Sun às fontes do gerador de pergaminhos, isoladamente ou combinadas com SRD e Tomo de Magia.
 - Equipamentos, recipientes, munições, inventários de monstros e automação de combate funcionam com itens Dark Sun sem configuração adicional.
 - A integração só é carregada quando o módulo Dark Sun está ativado no mundo, pois módulos inativos não disponibilizam seus compêndios ao Foundry.
+- Seleções de maestria em armas apresentam listas separadas para armas do SRD e de Dark Sun; a lista de Athas só aparece quando o módulo correspondente está ativo.
 
 ## Compatibilidade
 
