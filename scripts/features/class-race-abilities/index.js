@@ -5,6 +5,7 @@ import { darkSunPacks } from "../../integrations/dark-sun.js";
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const SOCKET = `module.${MODULE_ID}`;
 const handledAssassinationRequests = new Set();
+const previousCombatants = new WeakMap();
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
 function isPrimaryActiveGM() {
@@ -20,6 +21,7 @@ function rootElement(html) {
 function actorClassName(actor) {
   return actor?.system?.class?.name ?? actor?.items?.find?.((item) => item.type === "class")?.name ?? "";
 }
+function isCleric(name) { return normalizeAbilityName(name) === "clerigo" || normalizeAbilityName(name) === "clérigo"; }
 function actorRaceName(actor) { return actor?.system?.race?.name ?? actor?.items?.find?.((item) => item.type === "race")?.name ?? ""; }
 function actorLevel(actor) {
   const classItem = actor?.items?.find?.((item) => item.type === "class");
@@ -51,6 +53,7 @@ async function rollAbility(actor, key, fromSocket = false, requestedLevel = null
   const ability = CLASS_RACE_ABILITIES[key];
   if (!ability) return;
   const effectiveLevel = Number(requestedLevel) > 0 ? Number(requestedLevel) : actorLevel(actor);
+  if (key === "turnUndead") return rollTurnUndead(actor, effectiveLevel);
   let score = abilityScore(key, effectiveLevel);
   let automaticFailure = false;
   if (key === "assassination") {
@@ -87,6 +90,68 @@ async function rollAbility(actor, key, fromSocket = false, requestedLevel = null
   // Habilidades de raça e classe são testes reservados ao Mestre.
   await roll.toMessage({ flavor, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: "blindroll" });
   if (key === "assassination" && !success) await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), whisper: (game.users ?? []).filter((user) => user.isGM).map((user) => user.id), content: "O alvo não recebe dano e fica imune a um novo Assassinato até o Assassino evoluir para o próximo nível." });
+}
+
+async function rollTurnUndead(actor, level) {
+  const origin = actor.getActiveTokens?.()[0] ?? null;
+  if (!origin || !canvas?.tokens) return ui.notifications.warn("O clérigo precisa estar representado por um token.");
+  // Exibe no mapa a área circular de 18 m, como um modelo medido pelo Foundry.
+  const sceneUnits = String(canvas.scene?.grid?.units ?? "").toLowerCase();
+  const range = /m|metro/.test(sceneUnits) ? 18 : 60; // 18 m ≈ 60 ft
+  if (canvas.scene?.createEmbeddedDocuments) {
+    await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [{
+      t: "circle", user: game.user.id, x: origin.center.x, y: origin.center.y,
+      distance: range, direction: 0, angle: 360, width: 0,
+      borderColor: "#e6a400", fillColor: "#43a047", flags: { [MODULE_ID]: { turnUndead: true } }
+    }]);
+  }
+  const distance = (token) => {
+    try {
+      const measured = Number(canvas.grid.measureDistance(origin.center, token.center));
+      if (Number.isFinite(measured)) return measured;
+    } catch { /* fallback abaixo */ }
+    const dx = Number(token.center?.x) - Number(origin.center?.x), dy = Number(token.center?.y) - Number(origin.center?.y);
+    const pixels = Math.hypot(dx, dy), gridSize = Number(canvas.grid.size) || 100, gridDistance = Number(canvas.scene?.grid?.distance) || 5;
+    return (pixels / gridSize) * gridDistance;
+  };
+  const targets = canvas.tokens.placeables.filter((token) => {
+    if (token === origin || distance(token) > range) return false;
+    const actorData = token.actor?.system ?? {};
+    const text = `${token.actor?.name ?? token.name ?? ""} ${JSON.stringify(actorData)}`;
+    return /morto.?vivo|undead|zumbi|m[uú]mia|lich|carni[cç]al|ghoul|esqueleto|vampiro/i.test(text);
+  });
+  const bonus = level >= 10 ? 2 : level >= 3 ? 1 : 0;
+  const rows = [];
+  for (const token of targets) {
+    const roll = await (async () => { const r = new Roll("2d6"); await r.evaluate(); return r; })();
+    const values = roll.dice?.flatMap((die) => (die.results ?? []).map((entry) => Number(entry.result ?? entry))) ?? [];
+    const double = values.length >= 2 && values[0] === values[1] && [4, 5, 6].includes(values[0]);
+    const morale = Number(token.actor?.system?.mo ?? token.actor?.system?.morale ?? token.actor?.system?.details?.morale ?? 0);
+    const diceDisplay = values.length ? `(${values.join("+")})` : String(roll.total);
+    const success = !double && (roll.total + bonus > morale);
+    if (double) {
+      await token.actor?.update({ "system.hp.value": 0 });
+      await token.actor?.setFlag?.(MODULE_ID, "turnUndeadDead", true);
+      const statuses = [...(game.system?.statusEffects ?? []), ...(CONFIG.statusEffects ?? [])];
+      const dead = statuses.find((effect) => /dead|death|morto|derrot/i.test(`${effect.id} ${effect.name ?? ""} ${effect.label ?? ""}`));
+      try {
+        if (dead && token.actor?.toggleStatusEffect) await token.actor.toggleStatusEffect(dead.id, { active: true, overlay: true });
+        else if (dead && token.toggleEffect) await token.toggleEffect(dead.img ?? dead.icon, { active: true, overlay: true });
+      } catch (error) { console.warn(`${MODULE_ID} | Não foi possível marcar ${token.name} como morto`, error); }
+      rows.push(`<li>${escapeHtml(token.name)}: virou pó (${diceDisplay})</li>`);
+      await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: token.actor }), content: `<strong>${escapeHtml(token.name)} virou pó e morreu.</strong>`, flags: { [MODULE_ID]: { turnUndeadResult: true } } });
+    } else if (success) {
+      const statuses = [...(game.system?.statusEffects ?? []), ...(CONFIG.statusEffects ?? [])];
+      const fear = statuses.find((effect) => /fright|fear|amedront|medo/i.test(`${effect.id} ${effect.name ?? ""} ${effect.label ?? ""}`));
+      await token.actor?.setFlag?.(MODULE_ID, "turnUndeadFrightened", true);
+      try {
+        if (fear && token.actor?.toggleStatusEffect) await token.actor.toggleStatusEffect(fear.id, { active: true, overlay: false });
+        else if (fear && token.toggleEffect) await token.toggleEffect(fear.img ?? fear.icon, { active: true, overlay: false });
+      } catch (error) { console.warn(`${MODULE_ID} | Não foi possível marcar ${token.name} como amedrontado`, error); }
+      rows.push(`<li>${escapeHtml(token.name)}: Afastado (amedrontado) — ${diceDisplay}+${bonus} contra Moral ${morale}</li>`);
+    } else rows.push(`<li>${escapeHtml(token.name)}: Resistiu — ${diceDisplay}+${bonus} contra Moral ${morale}</li>`);
+  }
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Afastar Mortos-vivos</strong><ul>${rows.join("") || "<li>Nenhum morto-vivo na área de 18 m.</li>"}</ul>`, flags: { [MODULE_ID]: { turnUndeadResult: true } } });
 }
 
 function effectTemplate({ name, origin, association, key, mode, value, condition }) {
@@ -255,6 +320,9 @@ function enhanceAcademicAbilities(app, html) {
     if (key === "reputation" && isRaceAbility) continue;
     if (key === "assassination" && isRaceAbility) continue;
     if (!key) continue;
+    // Afastar Mortos-vivos é disparado pelo registro de uso nativo da habilidade;
+    // não adicionar um botão extra na ficha.
+    if (key === "turnUndead") continue;
     const current = row.querySelector(`[data-academic-ability="${key}"]`);
     if (current) {
       const score = abilityScore(key, level);
@@ -324,6 +392,39 @@ Hooks.on("updateActor", (actor, changed, _options, userId) => {
   if (!enabled() || (userId && game.user?.id !== userId) || actor.type !== "character" || changed.flags?.[MODULE_ID]?.effects) return;
   if (changed.system && Object.prototype.hasOwnProperty.call(changed.system, "level")) syncDwarfEffects(actor);
 });
+Hooks.on("createChatMessage", (message) => {
+  if (!enabled()) return;
+  if (message?.getFlag?.(MODULE_ID, "turnUndeadResult")) return;
+  const text = String(message?.content ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  if (!text.includes("afastar mortos-vivos") && !text.includes("afastar mortos vivos")) return;
+  const actor = message?.speaker?.actor ? game.actors?.get(message.speaker.actor) : null;
+  if (actor && isCleric(actorClassName(actor))) rollTurnUndead(actor, actorLevel(actor));
+});
+Hooks.on("updateCombat", async (combat, changed) => {
+  if (!enabled() || !Object.prototype.hasOwnProperty.call(changed ?? {}, "round") || !isPrimaryActiveGM()) return;
+  if (Object.prototype.hasOwnProperty.call(changed ?? {}, "round")) {
+    const templates = [...(canvas?.scene?.getEmbeddedCollection?.("MeasuredTemplate") ?? [])].filter((template) => template.flags?.[MODULE_ID]?.turnUndead);
+    if (templates.length) await canvas.scene.deleteEmbeddedDocuments("MeasuredTemplate", templates.map((template) => template.id));
+  }
+  previousCombatants.set(combat, combat.combatant?.actor?.id ?? null);
+  const candidates = [...(combat.combatants ?? [])].map((combatant) => combatant.actor).filter((actor, index, list) => actor && list.indexOf(actor) === index);
+  for (const actor of candidates) {
+    if (!actor.getFlag?.(MODULE_ID, "turnUndeadFrightened")) continue;
+    const roll = new Roll("2d6"); await roll.evaluate();
+    const morale = Number(actor.system?.mo ?? actor.system?.morale ?? actor.system?.details?.morale ?? 0);
+    if (roll.total <= morale) {
+      const statuses = [...(game.system?.statusEffects ?? []), ...(CONFIG.statusEffects ?? [])];
+      const fear = statuses.find((effect) => /fright|fear|amedront|medo/i.test(`${effect.id} ${effect.name ?? ""} ${effect.label ?? ""}`));
+      if (fear) await actor.toggleStatusEffect?.(fear.id, { active: false, overlay: false });
+      await actor.unsetFlag(MODULE_ID, "turnUndeadFrightened");
+      await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `${escapeHtml(actor.name)} passou no teste de Moral e deixou de estar amedrontado.` });
+    } else {
+      await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `${escapeHtml(actor.name)} falhou no teste de Moral e permanece amedrontado.` });
+    }
+  }
+});
+// O sistema registra o uso da habilidade atualizando o Item (sem depender de combate
+// ou de um botão customizado). Esse caminho também cobre mensagens sem speaker.actor.
 for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (item, ...args) => {
   const userId = [...args].reverse().find((value) => typeof value === "string");
   if (enabled() && (!userId || game.user?.id === userId) && item.parent?.type === "character" && ["class", "race"].includes(item.type)) syncDwarfEffects(item.parent);
@@ -331,6 +432,7 @@ for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (i
 Hooks.once("ready", () => {
   if (!enabled()) return;
   console.log(`${MODULE_ID} | Automações de habilidades de classe e raça ativas`);
+  for (const combat of game.combats ?? []) previousCombatants.set(combat, combat.combatant?.actor?.id ?? null);
   game.socket.on(SOCKET, async (payload) => {
     if (payload?.type !== "assassinationRequest" || !game.user.isGM) return;
     if (payload.requestId && handledAssassinationRequests.has(payload.requestId)) return;

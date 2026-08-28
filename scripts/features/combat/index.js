@@ -278,7 +278,8 @@ Hooks.on('preUpdateToken', (token, changes) => {
 async function processAgonizingActors(combat) {
   for (const combatant of combat?.combatants ?? []) {
     const actor = combatant.actor;
-    if (!actor || Number(foundry.utils.getProperty(actor, 'system.hp.value')) !== 0) continue;
+    if (!actor || actor.type !== 'character' || Number(foundry.utils.getProperty(actor, 'system.hp.value')) !== 0) continue;
+    if (actor.getFlag?.('old-dragon-2-qualidade-de-vida', 'turnUndeadFrightened') || actor.getFlag?.('old-dragon-2-qualidade-de-vida', 'turnUndeadDead')) continue;
     // Os totais oficiais já incluem classe, raça e modificador; não usar
     // apenas o campo de bônus isolado.
     await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>${escapeHtml(actor.name)}</strong> está agonizando. Role JPC ou JPS (a maior) para permanecer vivo. <button type="button" data-od2ca-agonize="${escapeHtml(actor.uuid)}" data-od2ca-agonize-token="${escapeHtml(combatant.token?.document?.uuid ?? '')}">Rolar JPC/JPS</button>`, whisper: [...(game.users ?? [])].filter((u) => u.active && (u.isGM || actor.testUserPermission?.(u, 'OWNER'))).map((u) => u.id), flags: { [MODULE_ID]: { agonizeActorUuid: actor.uuid, agonizeTokenUuid: combatant.token?.document?.uuid } } });

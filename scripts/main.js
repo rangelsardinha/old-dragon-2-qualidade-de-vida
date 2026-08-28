@@ -37,6 +37,10 @@ Hooks.once("init", () => {
     enableClassAbilities: {
       name: "Automações de habilidades de classe e raça",
       hint: "Adiciona testes e automações às habilidades de classe e raça, incluindo Acadêmico, Anão e Anão Aventureiro."
+    },
+    enableAlignmentAxis: {
+      name: "Eixo moral de alinhamento",
+      hint: "Adiciona o eixo Bom, Neutro ou Mal ao alinhamento de todos os atores."
     }
   };
   const localized = (key, fallback) => {
@@ -62,6 +66,7 @@ Hooks.once("init", () => {
   worldToggle("enableCharacterGenerator");
   worldToggle("enableEffectManager");
   worldToggle("enableClassAbilities");
+  worldToggle("enableAlignmentAxis");
 
   game.settings.register(MODULE_ID, "sessionEncounterDie", {
     name: "Dado de encontros aleatórios",

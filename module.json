@@ -2,12 +2,16 @@
   "id": "old-dragon-2-qualidade-de-vida",
   "title": "Old Dragon 2: Qualidade de Vida",
   "description": "Automações modulares e configuráveis para o sistema Old Dragon 2ª Edição.",
-  "version": "0.10.12",
+  "version": "0.10.14",
   "license": "CC-BY-SA-4.0",
   "url": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida",
   "manifest": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/latest/download/module.json",
-  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.10.12/old-dragon-2-qualidade-de-vida.zip",
-  "authors": [{ "name": "Rangel Sardinha" }],
+  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.10.14/old-dragon-2-qualidade-de-vida.zip",
+  "authors": [
+    {
+      "name": "Rangel Sardinha"
+    }
+  ],
   "compatibility": {
     "minimum": "13",
     "verified": "14",
@@ -24,7 +28,8 @@
     "scripts/features/session-control/index.js",
     "scripts/features/character-generator/index.js",
     "scripts/features/effect-manager/index.js",
-    "scripts/features/class-race-abilities/index.js"
+    "scripts/features/class-race-abilities/index.js",
+    "scripts/features/alignment-axis.js"
   ],
   "styles": [
     "styles/combat.css",
@@ -36,47 +41,142 @@
     "styles/character-generator.css",
     "styles/effect-manager.css",
     "styles/class-race-abilities.css"
+    ,"styles/alignment-axis.css"
   ],
   "packs": [
-    { "name": "arcane-spells", "label": "Tomo de Magia: Arcanas por Círculo", "path": "packs/arcane-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
-    { "name": "arcane-spells-by-school", "label": "Tomo de Magia: Arcanas por Escola", "path": "packs/arcane-spells-by-school", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
-    { "name": "divine-spells", "label": "Tomo de Magia: Divinas por Círculo", "path": "packs/divine-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
-    { "name": "divine-spells-by-sphere", "label": "Tomo de Magia: Divinas por Esfera", "path": "packs/divine-spells-by-sphere", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
-    { "name": "wild-spells", "label": "Tomo de Magia: Selvagens por Círculo", "path": "packs/wild-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
-    { "name": "mission-spells", "label": "Tomo de Magia: Magias de Missão", "path": "packs/mission-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
-    { "name": "cooperative-spells", "label": "Tomo de Magia: Cooperativas por Círculo", "path": "packs/cooperative-spells", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp" },
-    { "name": "tables", "label": "Tomo de Magia: Tabelas", "path": "packs/tables", "type": "RollTable" },
-    { "name": "rules", "label": "Tomo de Magia: Regras e PDFs", "path": "packs/rules", "type": "JournalEntry" },
-    { "name": "effects", "label": "QdV: Efeitos", "path": "packs/effects", "type": "Item", "system": "olddragon2e", "banner": "systems/olddragon2e/assets/compendium-banner/magic-items.webp" }
+    {
+      "name": "arcane-spells",
+      "label": "Tomo de Magia: Arcanas por Círculo",
+      "path": "packs/arcane-spells",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp"
+    },
+    {
+      "name": "arcane-spells-by-school",
+      "label": "Tomo de Magia: Arcanas por Escola",
+      "path": "packs/arcane-spells-by-school",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp"
+    },
+    {
+      "name": "divine-spells",
+      "label": "Tomo de Magia: Divinas por Círculo",
+      "path": "packs/divine-spells",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp"
+    },
+    {
+      "name": "divine-spells-by-sphere",
+      "label": "Tomo de Magia: Divinas por Esfera",
+      "path": "packs/divine-spells-by-sphere",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp"
+    },
+    {
+      "name": "wild-spells",
+      "label": "Tomo de Magia: Selvagens por Círculo",
+      "path": "packs/wild-spells",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp"
+    },
+    {
+      "name": "mission-spells",
+      "label": "Tomo de Magia: Magias de Missão",
+      "path": "packs/mission-spells",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp"
+    },
+    {
+      "name": "cooperative-spells",
+      "label": "Tomo de Magia: Cooperativas por Círculo",
+      "path": "packs/cooperative-spells",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/spells.webp"
+    },
+    {
+      "name": "tables",
+      "label": "Tomo de Magia: Tabelas",
+      "path": "packs/tables",
+      "type": "RollTable"
+    },
+    {
+      "name": "rules",
+      "label": "Tomo de Magia: Regras e PDFs",
+      "path": "packs/rules",
+      "type": "JournalEntry"
+    },
+    {
+      "name": "effects",
+      "label": "QdV: Efeitos",
+      "path": "packs/effects",
+      "type": "Item",
+      "system": "olddragon2e",
+      "banner": "systems/olddragon2e/assets/compendium-banner/magic-items.webp"
+    }
   ],
   "packFolders": [
     {
       "name": "Tomo de Magia",
       "sorting": "m",
       "color": "#6f2138",
-      "packs": ["arcane-spells", "arcane-spells-by-school", "divine-spells", "divine-spells-by-sphere", "wild-spells", "mission-spells", "cooperative-spells", "tables", "rules"]
+      "packs": [
+        "arcane-spells",
+        "arcane-spells-by-school",
+        "divine-spells",
+        "divine-spells-by-sphere",
+        "wild-spells",
+        "mission-spells",
+        "cooperative-spells",
+        "tables",
+        "rules"
+      ]
     },
     {
       "name": "Old Dragon 2: Qualidade de Vida",
       "sorting": "m",
       "color": "#7b1f32",
-      "packs": ["effects"]
+      "packs": [
+        "effects"
+      ]
     }
   ],
   "languages": [
-    { "lang": "pt-BR", "name": "Português", "path": "lang/pt-BR.json" },
-    { "lang": "en", "name": "English", "path": "lang/en.json" }
+    {
+      "lang": "pt-BR",
+      "name": "Português",
+      "path": "lang/pt-BR.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
   ],
   "relationships": {
-    "requires": [{
-      "id": "metric-ruler-labels",
-      "type": "module",
-      "compatibility": { "minimum": "1.0.0" }
-    }],
-    "systems": [{
-      "id": "olddragon2e",
-      "type": "system",
-      "compatibility": { "minimum": "2.0.0" }
-    }]
+    "requires": [
+      {
+        "id": "metric-ruler-labels",
+        "type": "module",
+        "compatibility": {
+          "minimum": "1.0.0"
+        }
+      }
+    ],
+    "systems": [
+      {
+        "id": "olddragon2e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "2.0.0"
+        }
+      }
+    ]
   }
 }

@@ -147,3 +147,9 @@ npm run check
 Este módulo usa apenas regras abertas do [SRD do Old Dragon 2](https://olddragon.com.br/livros/srd), segue as [diretrizes oficiais de licenciamento](https://olddragon.com.br/licenciamento) e é distribuído sob CC BY-SA 4.0. É um projeto independente da comunidade, não oficial e não endossado pela Old Dragon Editora. O projeto não usa o logotipo oficial nem imagens proprietárias dos livros.
 
 A implementação inicial foi consolidada a partir de [OD2 Automação de Combate](https://github.com/rangelsardinha/od2-combat-automation), de Rangel Sardinha.
+
+### Eixo de alinhamento
+Quando habilitado nas configurações, adiciona a todos os atores o eixo moral **Bom, Neutro ou Mal**, separado do alinhamento tradicional Caótico/Neutro/Ordeiro. Atores existentes recebem Neutro automaticamente.
+
+### Afastar Mortos-vivos
+O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Moral dos mortos-vivos identificados pelo conceito **Morto-Vivo**, aplica o status de amedrontado e trata duplas de 4, 5 ou 6 como destruição imediata. A área é removida na mudança de rodada e criaturas amedrontadas testam Moral ao final da rodada para recuperar sua ação.
