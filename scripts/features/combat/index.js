@@ -173,7 +173,7 @@ Hooks.once('init', () => {
       console.info(`${MODULE_ID} | Solicitação de Aparar recebida`, { user: game.user?.name, payload });
       const targetDoc = payload.targetTokenUuid ? await fromUuid(payload.targetTokenUuid) : null;
       const targetActor = targetDoc?.actor ?? (payload.targetActorUuid ? await fromUuid(payload.targetActorUuid) : game.actors?.get(payload.targetActorId));
-      if (!targetActor || !isBarbarianActor(targetActor) || !targetActor.testUserPermission?.(game.user, 'OWNER')) return;
+      if (!targetActor || !isParryEligibleActor(targetActor) || !targetActor.testUserPermission?.(game.user, 'OWNER')) return;
       const yes = await confirmCompat({ title: 'Aparar?', content: '<p>Você recebeu um ataque antes do dano. Deseja aparar?</p><p><em>Armas e Escudos usados em um aparar ficarão inutilizados e danificados.</em></p>' });
       game.socket.emit(`module.${MODULE_ID}`, { type: 'parryResponse', requestId: payload.requestId, parry: Boolean(yes) });
     }
@@ -182,7 +182,7 @@ Hooks.once('init', () => {
 });
 
 async function requestParryDecision(target, attacker) {
-  if (!target?.actor || !isBarbarianActor(target.actor) || attacker?.type !== 'monster') return false;
+  if (!target?.actor || !isParryEligibleActor(target.actor) || attacker?.type !== 'monster') return false;
   const playerOwner = [...(game.users ?? [])].find((user) => user.active && !user.isGM && target.actor.testUserPermission?.(user, 'OWNER'));
   if (!playerOwner) return confirmCompat({ title: 'Aparar?', content: '<p>Você recebeu um ataque antes do dano. Deseja aparar?</p>' });
   const recipientUserIds = [...new Set([playerOwner.id, ...[...(game.users ?? [])].filter((user) => user.active && user.isGM).map((user) => user.id)])];
@@ -191,7 +191,7 @@ async function requestParryDecision(target, attacker) {
   const remoteRecipientUserIds = recipientUserIds.filter((id) => id !== game.user?.id);
   game.socket.emit(`module.${MODULE_ID}`, { type: 'parryRequest', requestId, recipientUserIds: remoteRecipientUserIds, targetActorId: target.actor.id, targetActorUuid: target.actor.uuid, targetTokenUuid: target.document?.uuid ?? target.uuid });
   if (recipientUserIds.includes(game.user?.id)) {
-    confirmCompat({ title: 'Aparar?', content: '<p>O Bárbaro recebeu um ataque antes do dano. Deseja aparar?</p>' }).then((parry) => {
+    confirmCompat({ title: 'Aparar?', content: '<p>Você recebeu um ataque antes do dano. Deseja aparar?</p>' }).then((parry) => {
       game.socket.emit(`module.${MODULE_ID}`, { type: 'parryResponse', requestId, parry: Boolean(parry) });
       if (parryRequests.has(requestId)) { parryRequests.get(requestId)(Boolean(parry)); parryRequests.delete(requestId); }
     });
@@ -606,7 +606,7 @@ async function handleAttack(actor, button) {
   const critical = naturalD20 === 20 ? await requestCriticalRule() : null;
   const hit = !fumble && (Boolean(critical) || attackRoll.total >= targetAc);
 
-  if (hit && isBarbarianActor(target.actor) && actor.type === 'monster') {
+  if (hit && isParryEligibleActor(target.actor) && actor.type === 'monster') {
     const parry = await requestParryDecision(target, actor);
     if (parry) {
       await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: target.actor }), content: '<strong>Golpe aparado.</strong> Faça os ajustes de equipamento necessários na ficha.' });
@@ -1367,7 +1367,7 @@ async function applyDamage(target, damage, rollMode = 'public', context = {}) {
     return;
   }
 
-  // Aviso de Aparar: o proprietário do Bárbaro deve ser notificado antes do dano.
+  // Aviso de Aparar: o proprietário do personagem deve ser notificado antes do dano.
 
   if (!canApplyDamage(actor)) {
     await requestGmDamageApplication(target, damage, rollMode, context);
@@ -1394,14 +1394,14 @@ async function markTargetUnconscious(target) {
   else if (token?.toggleActiveEffect) await token.toggleActiveEffect(getStatusEffect(id), { active: true, overlay: true });
 }
 
-function isBarbarianActor(actor) {
+function isParryEligibleActor(actor) {
   const name = actor?.system?.class?.name ?? actor?.items?.find?.((item) => item.type === 'class')?.name ?? '';
-  return /barbaro|bárbaro/i.test(String(name));
+  return /barbaro|bárbaro|guerreiro/i.test(String(name));
 }
 
 async function notifyParryOwners(target, attacker, damage) {
   const actor = target?.actor;
-  if (!isBarbarianActor(actor) || attacker?.type !== 'monster') return;
+  if (!isParryEligibleActor(actor) || attacker?.type !== 'monster') return;
   const recipients = [...(game.users ?? [])].filter((user) => user.active && (user.isGM || actor?.testUserPermission?.(user, 'OWNER'))).map((user) => user.id);
   if (!recipients.length) return;
   await ChatMessage.create({

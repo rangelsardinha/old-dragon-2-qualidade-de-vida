@@ -203,6 +203,20 @@ function barbarianEffects(actor) {
   return [effectTemplate({ name: "Bárbaro: Maestria em armas", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Bárbaro" }, key: "damage", mode: "add", value: 1, condition: { left: "attack.itemNamed", name: weapon } })];
 }
 
+function warriorEffects(actor) {
+  const cls = actor.items?.find?.((item) => item.type === "class");
+  const level = actorLevel(actor);
+  const weapons = actor.getFlag(MODULE_ID, "warriorMasteryWeapons") || actor.getFlag(MODULE_ID, "warriorMasteryWeapon");
+  if (normalizeAbilityName(actorClassName(actor)) !== "guerreiro" || !weapons) return [];
+  const selected = Array.isArray(weapons) ? weapons : [weapons];
+  const effects = [];
+  for (const weapon of selected) effects.push(effectTemplate({ name: "Guerreiro: Maestria em armas", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Guerreiro" }, key: "damage", mode: "add", value: level >= 10 ? 3 : level >= 3 ? 2 : 1, condition: { left: "attack.itemNamed", name: weapon } }));
+  const group = actor.getFlag(MODULE_ID, "warriorMasteryGroup");
+  const groupTerms = { cortantes: "espada|machado|foice", perfurante: "lança|dardo|besta|arco", impactantes: "martelo|maça|clava", disparos: "arco|besta|dardo", hastes: "lança|bordão|alabarda", arremesso: "arremesso" };
+  if (level >= 10 && group) for (const item of actor.items ?? []) if (item.type === "weapon" && new RegExp(groupTerms[normalizeAbilityName(group)] || "^$", "i").test(item.name)) effects.push(effectTemplate({ name: "Guerreiro: Maestria em grupo de armas", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Guerreiro" }, key: "damage", mode: "add", value: 3, condition: { left: "attack.itemNamed", name: item.name } }));
+  return effects;
+}
+
 function gnomeAndHalflingEffects(actor) {
   const race = actor.items?.find?.((item) => item.type === "race");
   const effects = [];
@@ -224,9 +238,9 @@ function gnomeAndHalflingEffects(actor) {
 
 async function syncDwarfEffects(actor) {
   if (!game.settings.get(MODULE_ID, "enableEffectManager")) return;
-  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas"]);
+  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Guerreiro: Maestria em armas"]);
   const current = actor.getFlag(MODULE_ID, "effects") || [];
-  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...barbarianEffects(actor)];
+  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...barbarianEffects(actor), ...warriorEffects(actor)];
   const retained = current.filter((effect) => !managedNames.has(effect.name));
   const next = [...retained, ...desired].filter((effect, index, list) => list.findIndex((entry) => entry.id === effect.id || (entry.name && entry.name === effect.name)) === index);
   if (JSON.stringify(current) !== JSON.stringify(next)) await actor.setFlag(MODULE_ID, "effects", next);
@@ -245,7 +259,7 @@ async function chooseRacialWeapon(actor) {
   await syncDwarfEffects(actor);
 }
 
-async function chooseArcherMastery(actor, allWeapons = false) {
+async function chooseArcherMastery(actor, allWeapons = false, flagName = "archerMasteryWeapon") {
   const matches = (name) => allWeapons || /arco|besta/i.test(name);
   const names = [...(actor.items ?? [])].filter((item) => item.type === "weapon" && matches(item.name)).map((item) => ({ name: item.name, label: item.name, source: 'srd' }));
   const isWeaponPack = (pack) => {
@@ -286,7 +300,7 @@ async function chooseArcherMastery(actor, allWeapons = false) {
   const selected = Number(game.release?.generation ?? 13) >= 14
     ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Escolher arma de maestria" }, content, ok: { label: "Confirmar", callback: (_event, button) => button.form.elements.srdWeapon.value || button.form.elements.darkWeapon?.value || '' } })
     : await Dialog.prompt({ title: "Escolher arma de maestria", content: `<form>${content}</form>`, label: "Confirmar", callback: (html) => html[0].querySelector('[name="srdWeapon"]').value || html[0].querySelector('[name="darkWeapon"]')?.value || '', rejectClose: false });
-  if (selected) { await actor.setFlag(MODULE_ID, "archerMasteryWeapon", selected); await syncDwarfEffects(actor); }
+  if (selected) { await actor.setFlag(MODULE_ID, flagName, selected); await syncDwarfEffects(actor); }
 }
 
 async function ensureDwarfEffectLibrary() {
@@ -346,6 +360,14 @@ function enhanceAcademicAbilities(app, html) {
       }
     }
   }
+  if (normalizeAbilityName(actorClassName(actor)) === "guerreiro") {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      if (!normalizeAbilityName(ability?.name).includes("maestria em arma") || row.querySelector("[data-warrior-mastery-choice]")) continue;
+      const selected = (actor.getFlag(MODULE_ID, "warriorMasteryWeapons") || [actor.getFlag(MODULE_ID, "warriorMasteryWeapon")]).filter(Boolean);
+      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-warrior-mastery-choice><i class="fas fa-sword"></i> Arma de maestria: ${escapeHtml(selected)}</a></div>`);
+    }
+  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -369,7 +391,8 @@ function enhanceAcademicAbilities(app, html) {
     const weaponChoice = event.target.closest?.("[data-racial-weapon-choice]");
     const masteryChoice = event.target.closest?.("[data-archer-mastery-choice]");
     const barbarianMasteryChoice = event.target.closest?.("[data-barbarian-mastery-choice]");
-    if (!button && !weaponChoice && !masteryChoice && !barbarianMasteryChoice) return;
+    const warriorMasteryChoice = event.target.closest?.("[data-warrior-mastery-choice]");
+    if (!button && !weaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (masteryChoice) { await chooseArcherMastery(actor); app.render(false); return; }
@@ -377,6 +400,26 @@ function enhanceAcademicAbilities(app, html) {
       if (actor.getFlag(MODULE_ID, "barbarianMasteryWeapon") && !game.user.isGM) { ui.notifications.warn("A arma de maestria já foi escolhida. Somente o Mestre pode alterá-la."); return; }
       await chooseArcherMastery(actor, true);
       await actor.setFlag(MODULE_ID, "barbarianMasteryWeapon", actor.getFlag(MODULE_ID, "archerMasteryWeapon"));
+      app.render(false); return;
+    }
+    if (warriorMasteryChoice) {
+      if (actor.getFlag(MODULE_ID, "warriorMasteryWeapons") && !game.user.isGM) { ui.notifications.warn("As armas de maestria já foram escolhidas. Somente o Mestre pode alterá-las."); return; }
+      await chooseArcherMastery(actor, true, "warriorMasteryWeapon");
+      const first = actor.getFlag(MODULE_ID, "warriorMasteryWeapon");
+      const weapons = [first];
+      if (actorLevel(actor) >= 3) {
+        await chooseArcherMastery(actor, true, "warriorMasteryWeapon");
+        weapons.push(actor.getFlag(MODULE_ID, "warriorMasteryWeapon"));
+      }
+      await actor.setFlag(MODULE_ID, "warriorMasteryWeapons", [...new Set(weapons.filter(Boolean))]);
+      if (actorLevel(actor) >= 10) {
+        const groups = ["Cortantes", "Perfurante", "Impactantes", "Disparos", "Hastes", "Arremesso"];
+        const content = `<form><div class="form-group"><label>Grupo de armas</label><select name="group">${groups.map((group) => `<option value="${group}">${group}</option>`).join("")}</select></div></form>`;
+        const group = Number(game.release?.generation ?? 13) >= 14
+          ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Escolher grupo de armas" }, content, ok: { label: "Confirmar", callback: (_event, button) => button.form.elements.group.value } })
+          : await Dialog.prompt({ title: "Escolher grupo de armas", content, label: "Confirmar", callback: (html) => html[0].querySelector("[name=group]").value, rejectClose: false });
+        if (group) await actor.setFlag(MODULE_ID, "warriorMasteryGroup", group);
+      }
       app.render(false); return;
     }
     button.classList.add("rolling");
