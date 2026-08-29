@@ -1396,7 +1396,7 @@ async function markTargetUnconscious(target) {
 
 function isParryEligibleActor(actor) {
   const name = actor?.system?.class?.name ?? actor?.items?.find?.((item) => item.type === 'class')?.name ?? '';
-  return /barbaro|bárbaro|guerreiro/i.test(String(name));
+  return /barbaro|bárbaro|guerreiro|paladino/i.test(String(name));
 }
 
 async function notifyParryOwners(target, attacker, damage) {

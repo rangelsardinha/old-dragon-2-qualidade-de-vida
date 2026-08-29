@@ -31,7 +31,7 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - Compara o ataque com a CA do alvo e registra acerto ou erro no chat.
 - Rola e aplica dano, com ajustes de fraqueza e resistência.
 - Trata acertos e erros críticos pelas opções do LB1/LB2.
-- Automatiza **Aparar** do Bárbaro e do Guerreiro: Mestre e jogador recebem a decisão antes da divulgação do ataque e do dano; aceitar interrompe o golpe.
+- Automatiza **Aparar** do Bárbaro, Guerreiro e Paladino: Mestre e jogador recebem a decisão antes da divulgação do ataque e do dano; aceitar interrompe o golpe.
 - Ao chegar a 0 PV, personagens recebem o status **Inconsciente** e ficam impedidos de atacar ou mover o token.
 - No início das rodadas seguintes, solicita pelo chat uma jogada de agonização usando o maior total entre JPC e JPS.
 - A agonização usa a regra de Jogada de Proteção do OD2: resultado igual ou inferior ao valor da proteção é sucesso; falhar aplica o status **Morto**, remove Inconsciente e anuncia a morte.
@@ -111,7 +111,8 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - **Meio-Gigante:** Força Descomunal e Resistência Corporal; **Aarakocra:** Nascidos dos Céus.
 - **Bárbaro:** Maestria em Armas, Talentos Selvagens e Surpresa Selvagem, além da reação de Aparar integrada ao combate.
 - **Guerreiro:** Maestria em Armas progressiva (+1 no 1º nível, duas armas com +2 no 3º e um grupo com +3 no 10º) e reação de Aparar integrada ao combate.
-- **Paladino:** Maestria em Armas com escolha de arma e bônus de +1 no dano.
+- **Paladino:** Maestria em Armas com escolha de arma e bônus de +1 no dano, além da reação de Aparar integrada ao combate.
+- **Ladrão e Bardo:** Ouvir Ruídos com progressão por nível. **Bardo e Bardo Athasiano:** Inspiração com seleção de aliados, efeito passivo, status Fortalecido e encerramento coletivo pelo bardo.
 - **Assassino:** Assassinato com progressão por nível, cálculo de DV do alvo, redutores e falha automática conforme a diferença de DV.
 - Efeitos associados são sincronizados automaticamente conforme raça, classe e nível; ao remover ou reduzir a associação, os efeitos correspondentes também são removidos.
 

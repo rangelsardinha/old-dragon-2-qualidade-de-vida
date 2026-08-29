@@ -205,6 +205,7 @@ export function normalizeEffect(source = {}, randomId = () => "effect") {
     icon: String(source.icon || "icons/svg/aura.svg"),
     enabled: source.enabled !== false,
     origin: String(source.origin || "Manual"),
+    sourceActorUuid: String(source.sourceActorUuid || ""),
     association: {
       type: ["class", "race", "class_ability", "race_ability", "spell", "equipment"].includes(source.association?.type) ? source.association.type : "",
       id: String(source.association?.id || ""),

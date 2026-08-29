@@ -1348,7 +1348,7 @@ Hooks.once("ready", () => {
   installGetterIntegrations();
   game.od2Qdv ??= {};
   game.od2Qdv.effects = {
-    open: openManager, get: effectsFor, active: (actor) => activeEffects(effectsFor(actor), worldTime()), modifier, modifierDelta, modifierDeltaExcluding,
+    open: openManager, get: effectsFor, set: saveEffects, active: (actor) => activeEffects(effectsFor(actor), worldTime()), modifier, modifierDelta, modifierDeltaExcluding,
     execute: executeConditional, trigger: triggerActorEffects, rest: completeActorRest,
     createLibraryEntry, libraryItemData
   };

@@ -21,6 +21,9 @@ function rootElement(html) {
 function actorClassName(actor) {
   return actor?.system?.class?.name ?? actor?.items?.find?.((item) => item.type === "class")?.name ?? "";
 }
+function isBard(name) {
+  return ["bardo", "bardo athasiano"].includes(normalizeAbilityName(name));
+}
 function isCleric(name) { return normalizeAbilityName(name) === "clerigo" || normalizeAbilityName(name) === "clérigo"; }
 function actorRaceName(actor) { return actor?.system?.race?.name ?? actor?.items?.find?.((item) => item.type === "race")?.name ?? ""; }
 function actorLevel(actor) {
@@ -160,6 +163,91 @@ function effectTemplate({ name, origin, association, key, mode, value, condition
     duration: { type: "permanent" }, modifiers: [{ key, mode, value }],
     conditional: condition ? { enabled: true, trigger: "manual", flow: "if", left: condition.left, operator: condition.operator || "eq", right: condition.right || "boolean.true", number: condition.number || 0, conditionName: condition.name, resultAction: "applyEffect" } : { enabled: false }
   });
+}
+
+function strengthenedStatus() {
+  const statuses = [...(game.system?.statusEffects ?? []), ...(CONFIG.statusEffects ?? [])];
+  return statuses.find((effect) => /^(empowered|strengthened)$/i.test(String(effect.id ?? "")))
+    ?? statuses.find((effect) => /fortalec|empower|strengthen/i.test(`${effect.id ?? ""} ${effect.name ?? ""} ${effect.label ?? ""} ${game.i18n?.localize?.(effect.name ?? effect.label ?? "") ?? ""}`));
+}
+
+function isInspirationEffect(effect) {
+  return normalizeAbilityName(effect?.name) === "inspiracao";
+}
+
+function isInspireAbilityName(name) {
+  const normalized = normalizeAbilityName(name);
+  return normalized === "inspirar" || normalized === "inspiracao";
+}
+
+async function saveActorEffects(actor, effects) {
+  const save = game.od2Qdv?.effects?.set;
+  if (typeof save === "function") await save(actor, effects);
+  else await actor.setFlag(MODULE_ID, "effects", effects);
+}
+
+async function syncInspirationStatus(actor) {
+  if (!actor || actor.type !== "character") return;
+  const active = (actor.getFlag(MODULE_ID, "effects") ?? []).some((effect) => isInspirationEffect(effect) && effect.enabled !== false);
+  const status = strengthenedStatus();
+  if (!status) return console.warn(`${MODULE_ID} | Status Fortalecido não encontrado no Foundry.`);
+  const currentlyActive = actor.statuses?.has?.(status.id)
+    || [...(actor.effects ?? [])].some((effect) => effect.statuses?.has?.(status.id));
+  if (Boolean(currentlyActive) === active) return;
+  try {
+    await actor.toggleStatusEffect?.(status.id, { active, overlay: false });
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Não foi possível sincronizar o status Fortalecido de ${actor.name}`, error);
+  }
+}
+
+async function removeInspirationFromSource(sourceActor) {
+  if (!sourceActor) return;
+  const storedIds = sourceActor.getFlag(MODULE_ID, "inspirationTargets") ?? [];
+  const candidates = storedIds.length
+    ? (await Promise.all(storedIds.map(async (reference) => game.actors.get(reference) ?? fromUuid(reference).catch(() => null)))).filter(Boolean)
+    : [...(game.actors ?? [])];
+  for (const target of candidates) {
+    const current = target.getFlag(MODULE_ID, "effects") ?? [];
+    // A origem pode alternar entre Actor.* e Scene.*.Token.*.Actor em fichas de token.
+    // A lista inspirationTargets já delimita exatamente os beneficiados por este uso,
+    // portanto não dependa do UUID para remover a Inspiração ao encerrar a atuação.
+    const filtered = current.filter((effect) => !isInspirationEffect(effect));
+    if (filtered.length !== current.length) await saveActorEffects(target, filtered);
+  }
+  await sourceActor.unsetFlag(MODULE_ID, "inspirationTargets");
+  sourceActor.sheet?.render?.(false);
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: sourceActor }), content: "<div class=\"title\">Encerrou o uso da <strong>Inspiração</strong>.</div>" });
+}
+
+async function useInspiration(actor) {
+  const actors = [...(game.actors ?? [])].filter((entry) => entry.type === "character");
+  const content = `<form><div class="form-group"><label>Personagens beneficiados</label>${actors.map((entry) => `<label style="display:block"><input type="checkbox" name="actor" value="${entry.id}"> ${escapeHtml(entry.name)}</label>`).join("")}</div></form>`;
+  const ids = Number(game.release?.generation ?? 13) >= 14
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar inspiração" }, content, ok: { label: "Aplicar", callback: (_e, button) => [...button.form.querySelectorAll('input[name="actor"]:checked')].map((input) => input.value) } })
+    : await Dialog.prompt({ title: "Usar inspiração", content, label: "Aplicar", callback: (html) => [...html[0].querySelectorAll('input[name="actor"]:checked')].map((input) => input.value), rejectClose: false });
+  if (!ids?.length) return;
+  const bardClass = actor.items.find((item) => item.type === "class");
+  const effect = effectTemplate({ name: "Inspiração", origin: "habilidade", association: { type: "class", id: bardClass?.id, name: bardClass?.name || actorClassName(actor) || "Bardo" }, key: "test.difficulty", mode: "add", value: -1 });
+  effect.id = `inspiration-${actor.id}`;
+  effect.sourceActorUuid = actor.uuid;
+  const recipients = [];
+  for (const id of ids) {
+    const target = game.actors.get(id);
+    if (!target) continue;
+    const tokenActors = [...(canvas?.tokens?.placeables ?? [])]
+      .filter((token) => token.document?.actorId === target.id && token.actor)
+      .map((token) => token.actor);
+    for (const recipient of [target, ...tokenActors]) {
+      if (recipients.some((entry) => entry.uuid === recipient.uuid)) continue;
+      recipients.push(recipient);
+      const current = recipient.getFlag(MODULE_ID, "effects") ?? [];
+      await saveActorEffects(recipient, [...current.filter((entry) => !isInspirationEffect(entry) || entry.sourceActorUuid !== actor.uuid), effect]);
+      recipient.sheet?.render?.(false);
+    }
+  }
+  await actor.setFlag(MODULE_ID, "inspirationTargets", recipients.map((recipient) => recipient.uuid));
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: "<div class=\"title\">Usou a habilidade:<br><strong>Inspiração</strong></div>" });
 }
 
 function dwarfEffects(actor) {
@@ -340,6 +428,7 @@ function enhanceAcademicAbilities(app, html) {
     const isRaceAbility = Boolean(row.closest(".character-tab-race"));
     if (key === "reputation" && isRaceAbility) continue;
     if (key === "assassination" && isRaceAbility) continue;
+    if (key === "hearingNoises" && !/ladrao|ladrão/i.test(actorClassName(actor)) && !isBard(actorClassName(actor))) continue;
     if (!key) continue;
     // Afastar Mortos-vivos é disparado pelo registro de uso nativo da habilidade;
     // não adicionar um botão extra na ficha.
@@ -383,6 +472,16 @@ function enhanceAcademicAbilities(app, html) {
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-paladin-mastery-choice><i class="fas fa-sword"></i> Arma de maestria: ${escapeHtml(selected)}</a></div>`);
     }
   }
+  if (isBard(actorClassName(actor))) {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      if (!isInspireAbilityName(ability?.name) || row.querySelector("[data-inspiration-choice]")) continue;
+      const active = (actor.getFlag(MODULE_ID, "inspirationTargets") ?? []).length > 0;
+      const label = active ? "Parar inspiração" : "Usar inspiração";
+      const icon = active ? "fa-stop" : "fa-sparkles";
+      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-inspiration-choice data-inspiration-active="${active}"><i class="fas ${icon}"></i> ${label}</a></div>`);
+    }
+  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -408,7 +507,8 @@ function enhanceAcademicAbilities(app, html) {
     const barbarianMasteryChoice = event.target.closest?.("[data-barbarian-mastery-choice]");
     const warriorMasteryChoice = event.target.closest?.("[data-warrior-mastery-choice]");
     const paladinMasteryChoice = event.target.closest?.("[data-paladin-mastery-choice]");
-    if (!button && !weaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice) return;
+    const inspirationChoice = event.target.closest?.("[data-inspiration-choice]");
+    if (!button && !weaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (masteryChoice) { await chooseArcherMastery(actor); app.render(false); return; }
@@ -443,17 +543,28 @@ function enhanceAcademicAbilities(app, html) {
       await chooseArcherMastery(actor, true, "paladinMasteryWeapon");
       app.render(false); return;
     }
+    if (inspirationChoice) {
+      if (inspirationChoice.dataset.inspirationActive === "true") {
+        if (game.user.isGM) await removeInspirationFromSource(actor);
+        else game.socket.emit(SOCKET, { type: "inspirationRemove", actorId: actor.id, actorUuid: actor.uuid, userId: game.user.id });
+      } else await useInspiration(actor);
+      app.render(false);
+      return;
+    }
     button.classList.add("rolling");
     try { await rollAbility(actor, button.dataset.academicAbility); } finally { button.classList.remove("rolling"); }
   }, true);
-  syncDwarfEffects(actor).catch((error) => console.error(`${MODULE_ID} | Falha ao sincronizar habilidades de anão`, error));
 }
 
 Hooks.on("renderActorSheet", enhanceAcademicAbilities);
 Hooks.on("renderActorSheetV2", enhanceAcademicAbilities);
 Hooks.on("renderOD2CharacterSheet", enhanceAcademicAbilities);
 Hooks.on("updateActor", (actor, changed, _options, userId) => {
-  if (!enabled() || (userId && game.user?.id !== userId) || actor.type !== "character" || changed.flags?.[MODULE_ID]?.effects) return;
+  if (!enabled() || (userId && game.user?.id !== userId) || actor.type !== "character") return;
+  if (changed.flags?.[MODULE_ID]?.effects) {
+    syncInspirationStatus(actor);
+    return;
+  }
   if (changed.system && Object.prototype.hasOwnProperty.call(changed.system, "level")) syncDwarfEffects(actor);
 });
 Hooks.on("createChatMessage", (message) => {
@@ -490,7 +601,15 @@ Hooks.on("updateCombat", async (combat, changed) => {
 // O sistema registra o uso da habilidade atualizando o Item (sem depender de combate
 // ou de um botão customizado). Esse caminho também cobre mensagens sem speaker.actor.
 for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (item, ...args) => {
+  const changed = hook === "updateItem" ? args[0] : null;
   const userId = [...args].reverse().find((value) => typeof value === "string");
+  const recoveredInspiration = hook === "updateItem"
+    && isInspireAbilityName(item?.name)
+    && Object.values(changed?.flags?.olddragon2e?.["daily-uses"] ?? {}).some((value) => value === false);
+  if (enabled() && recoveredInspiration && (!userId || game.user?.id === userId)) {
+    if (game.user.isGM) removeInspirationFromSource(item.parent);
+    else game.socket.emit(SOCKET, { type: "inspirationRemove", actorId: item.parent?.id, actorUuid: item.parent?.uuid, userId: game.user.id });
+  }
   if (enabled() && (!userId || game.user?.id === userId) && item.parent?.type === "character" && ["class", "race"].includes(item.type)) syncDwarfEffects(item.parent);
 });
 Hooks.once("ready", () => {
@@ -498,6 +617,11 @@ Hooks.once("ready", () => {
   console.log(`${MODULE_ID} | Automações de habilidades de classe e raça ativas`);
   for (const combat of game.combats ?? []) previousCombatants.set(combat, combat.combatant?.actor?.id ?? null);
   game.socket.on(SOCKET, async (payload) => {
+    if (payload?.type === "inspirationRemove" && game.user.isGM) {
+      const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
+      if (actor) await removeInspirationFromSource(actor);
+      return;
+    }
     if (payload?.type !== "assassinationRequest" || !game.user.isGM) return;
     if (payload.requestId && handledAssassinationRequests.has(payload.requestId)) return;
     if (payload.requestId) handledAssassinationRequests.add(payload.requestId);
@@ -505,6 +629,9 @@ Hooks.once("ready", () => {
     const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
     if (actor) await rollAbility(actor, "assassination", true, payload.assassinLevel);
   });
-  if (isPrimaryActiveGM()) for (const actor of game.actors ?? []) if (actor.type === "character") syncDwarfEffects(actor);
+  if (isPrimaryActiveGM()) for (const actor of game.actors ?? []) if (actor.type === "character") {
+    syncDwarfEffects(actor);
+    syncInspirationStatus(actor);
+  }
   ensureDwarfEffectLibrary().catch((error) => console.error(`${MODULE_ID} | Falha ao criar efeitos de anão no compêndio`, error));
 });

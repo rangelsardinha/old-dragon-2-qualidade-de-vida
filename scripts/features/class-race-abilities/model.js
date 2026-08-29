@@ -11,7 +11,9 @@ export const CLASS_RACE_ABILITIES = Object.freeze({
   climb: { label: "Escalar", names: ["escalar"] },
   naturalCamouflage: { label: "Camuflagem Natural", names: ["camuflagem natural"] },
   wildSurprise: { label: "Surpresa Selvagem", names: ["surpresa selvagem"] },
-  turnUndead: { label: "Afastar Mortos-vivos", names: ["afastar mortos vivos", "afastar mortos-vivos"] }
+  turnUndead: { label: "Afastar Mortos-vivos", names: ["afastar mortos vivos", "afastar mortos-vivos"] },
+  hearingNoises: { label: "Ouvir Ruídos", names: ["ouvir ruidos", "ouvir ruídos"] },
+  inspiration: { label: "Usar Inspiração", names: ["inspiracao", "inspiração"] }
 });
 
 export function normalizeAbilityName(value) {
@@ -40,6 +42,8 @@ export function abilityScore(key, level) {
     case "naturalCamouflage": return 2;
     case "wildSurprise": return 4;
     case "turnUndead": return currentLevel >= 10 ? 2 : currentLevel >= 3 ? 1 : 0;
+    case "hearingNoises": return currentLevel >= 10 ? 5 : currentLevel >= 6 ? 4 : currentLevel >= 3 ? 3 : 2;
+    case "inspiration": return 0;
     default: return 0;
   }
 }
