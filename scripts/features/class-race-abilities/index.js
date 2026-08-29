@@ -203,6 +203,13 @@ function barbarianEffects(actor) {
   return [effectTemplate({ name: "Bárbaro: Maestria em armas", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Bárbaro" }, key: "damage", mode: "add", value: 1, condition: { left: "attack.itemNamed", name: weapon } })];
 }
 
+function paladinEffects(actor) {
+  const cls = actor.items?.find?.((item) => item.type === "class");
+  const weapon = actor.getFlag(MODULE_ID, "paladinMasteryWeapon");
+  if (normalizeAbilityName(actorClassName(actor)) !== "paladino" || !weapon) return [];
+  return [effectTemplate({ name: "Paladino: Maestria em armas", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Paladino" }, key: "damage", mode: "add", value: 1, condition: { left: "attack.itemNamed", name: weapon } })];
+}
+
 function warriorEffects(actor) {
   const cls = actor.items?.find?.((item) => item.type === "class");
   const level = actorLevel(actor);
@@ -238,9 +245,9 @@ function gnomeAndHalflingEffects(actor) {
 
 async function syncDwarfEffects(actor) {
   if (!game.settings.get(MODULE_ID, "enableEffectManager")) return;
-  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Guerreiro: Maestria em armas"]);
+  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Paladino: Maestria em armas", "Guerreiro: Maestria em armas", "Guerreiro: Maestria em grupo de armas"]);
   const current = actor.getFlag(MODULE_ID, "effects") || [];
-  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...barbarianEffects(actor), ...warriorEffects(actor)];
+  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...barbarianEffects(actor), ...paladinEffects(actor), ...warriorEffects(actor)];
   const retained = current.filter((effect) => !managedNames.has(effect.name));
   const next = [...retained, ...desired].filter((effect, index, list) => list.findIndex((entry) => entry.id === effect.id || (entry.name && entry.name === effect.name)) === index);
   if (JSON.stringify(current) !== JSON.stringify(next)) await actor.setFlag(MODULE_ID, "effects", next);
@@ -368,6 +375,14 @@ function enhanceAcademicAbilities(app, html) {
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-warrior-mastery-choice><i class="fas fa-sword"></i> Arma de maestria: ${escapeHtml(selected)}</a></div>`);
     }
   }
+  if (normalizeAbilityName(actorClassName(actor)) === "paladino") {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      if (!normalizeAbilityName(ability?.name).includes("maestria em arma") || row.querySelector("[data-paladin-mastery-choice]")) continue;
+      const selected = actor.getFlag(MODULE_ID, "paladinMasteryWeapon") || "Não escolhida";
+      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-paladin-mastery-choice><i class="fas fa-sword"></i> Arma de maestria: ${escapeHtml(selected)}</a></div>`);
+    }
+  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -392,7 +407,8 @@ function enhanceAcademicAbilities(app, html) {
     const masteryChoice = event.target.closest?.("[data-archer-mastery-choice]");
     const barbarianMasteryChoice = event.target.closest?.("[data-barbarian-mastery-choice]");
     const warriorMasteryChoice = event.target.closest?.("[data-warrior-mastery-choice]");
-    if (!button && !weaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice) return;
+    const paladinMasteryChoice = event.target.closest?.("[data-paladin-mastery-choice]");
+    if (!button && !weaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (masteryChoice) { await chooseArcherMastery(actor); app.render(false); return; }
@@ -420,6 +436,11 @@ function enhanceAcademicAbilities(app, html) {
           : await Dialog.prompt({ title: "Escolher grupo de armas", content, label: "Confirmar", callback: (html) => html[0].querySelector("[name=group]").value, rejectClose: false });
         if (group) await actor.setFlag(MODULE_ID, "warriorMasteryGroup", group);
       }
+      app.render(false); return;
+    }
+    if (paladinMasteryChoice) {
+      if (actor.getFlag(MODULE_ID, "paladinMasteryWeapon") && !game.user.isGM) { ui.notifications.warn("A arma de maestria já foi escolhida. Somente o Mestre pode alterá-la."); return; }
+      await chooseArcherMastery(actor, true, "paladinMasteryWeapon");
       app.render(false); return;
     }
     button.classList.add("rolling");

@@ -111,6 +111,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - **Meio-Gigante:** Força Descomunal e Resistência Corporal; **Aarakocra:** Nascidos dos Céus.
 - **Bárbaro:** Maestria em Armas, Talentos Selvagens e Surpresa Selvagem, além da reação de Aparar integrada ao combate.
 - **Guerreiro:** Maestria em Armas progressiva (+1 no 1º nível, duas armas com +2 no 3º e um grupo com +3 no 10º) e reação de Aparar integrada ao combate.
+- **Paladino:** Maestria em Armas com escolha de arma e bônus de +1 no dano.
 - **Assassino:** Assassinato com progressão por nível, cálculo de DV do alvo, redutores e falha automática conforme a diferença de DV.
 - Efeitos associados são sincronizados automaticamente conforme raça, classe e nível; ao remover ou reduzir a associação, os efeitos correspondentes também são removidos.
 
