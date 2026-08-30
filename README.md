@@ -36,7 +36,7 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - No início das rodadas seguintes, solicita pelo chat uma jogada de agonização usando o maior total entre JPC e JPS.
 - A agonização usa a regra de Jogada de Proteção do OD2: resultado igual ou inferior ao valor da proteção é sucesso; falhar aplica o status **Morto**, remove Inconsciente e anuncia a morte.
 - Solicita confirmação do Mestre quando o jogador não pode alterar o alvo.
-- Resume criaturas derrotadas e distribui XP ao encerrar o combate.
+- Ao encerrar o combate, lista todos os monstros participantes (inclusive os que fugiram), mostrando PV atual/máximo e XP; o Mestre seleciona quais contam antes de distribuir a experiência.
 
 As opções de dano automático, alvo único e permissão para jogadores permanecem configuráveis separadamente.
 

@@ -297,10 +297,11 @@ async function handleCombatFinished(combat) {
   const combatants = Array.from(combat?.combatants ?? []);
   const creatures = combatants
     .filter((combatant) => combatant.actor?.type === 'monster')
-    .filter((combatant) => combatant.defeated)
     .map((combatant) => ({
       name: combatant.name ?? combatant.actor.name,
       xp: getCreatureXp(combatant.actor),
+      hp: Number(foundry.utils.getProperty(combatant.actor, 'system.hp.value') ?? 0) || 0,
+      maxHp: Number(foundry.utils.getProperty(combatant.actor, 'system.hp.max') ?? foundry.utils.getProperty(combatant.actor, 'system.hp.total') ?? 0) || 0,
     }));
 
   const recipients = getCombatXpRecipients(combatants);
@@ -316,7 +317,7 @@ async function handleCombatFinished(combat) {
   const content = `
     <div class="od2ca-card od2ca-xp-summary">
       <div class="od2ca-title">${t('OD2CA.Chat.combatFinished')}</div>
-      <strong>${t('OD2CA.Chat.defeatedCreatures')}</strong>
+      <strong>Monstros participantes</strong>
       <ul>${creatureRows}</ul>
       <div class="od2ca-xp-total"><strong>${t('OD2CA.Chat.totalXp')}:</strong> ${formatXp(totalXp)} XP</div>
       ${button}
@@ -381,9 +382,12 @@ async function onDistributeXpChatClick(message, button) {
     return;
   }
 
+  const selectedCreatures = await requestCreatureSelection(award.creatures ?? []);
+  if (!selectedCreatures) return;
+  const selectedXp = selectedCreatures.reduce((sum, creature) => sum + creature.xp, 0);
   button.disabled = true;
   try {
-    const distribution = await requestXpDistribution(recipients, Number(award.totalXp) || 0);
+    const distribution = await requestXpDistribution(recipients, selectedXp);
     if (!distribution) return;
 
     const results = [];
@@ -400,13 +404,25 @@ async function onDistributeXpChatClick(message, button) {
 
     await message.setFlag(MODULE_ID, 'xpDistributed', true);
     await message.setFlag(MODULE_ID, 'xpResults', results);
-    await sendXpDistributionMessage(award.creatures ?? [], results);
+    await sendXpDistributionMessage(selectedCreatures, results);
   } catch (error) {
     console.error(`${MODULE_ID} | Falha ao distribuir XP`, error);
     ui.notifications.error(`OD2 Automacao: ${error.message}`);
   } finally {
     button.disabled = Boolean(message.getFlag(MODULE_ID, 'xpDistributed'));
   }
+}
+
+async function requestCreatureSelection(creatures) {
+  if (!creatures.length) return [];
+  const content = `<p>Selecione os monstros que contarão para a distribuição de XP. Monstros que fugiram também aparecem nesta lista.</p><div class="od2ca-xp-creatures">${creatures.map((creature, index) => `<label style="display:block;margin:.35rem 0"><input type="checkbox" name="creature.${index}" value="${index}" checked> <strong>${escapeHtml(creature.name)}</strong> — PV ${creature.hp}/${creature.maxHp} · ${formatXp(creature.xp)} XP</label>`).join('')}</div>`;
+  const DialogV2 = Number(game.release?.generation ?? 13) >= 14 ? foundry.applications?.api?.DialogV2 : null;
+  if (DialogV2) {
+    const selected = await DialogV2.prompt({ window: { title: 'Monstros para XP' }, content, ok: { label: 'Continuar', callback: (_event, button) => Array.from(button.form.querySelectorAll('input[name^="creature."]:checked')).map((input) => Number(input.value)) } });
+    return Array.isArray(selected) ? selected.map((index) => creatures[index]).filter(Boolean) : null;
+  }
+  const selected = await (foundry.appv1?.api?.Dialog ?? globalThis.Dialog).prompt({ title: 'Monstros para XP', content, label: 'Continuar', callback: (html) => Array.from(html.find?.('input[name^="creature."]:checked') ?? html.querySelectorAll?.('input[name^="creature."]:checked') ?? []).map((input) => Number(input.value)), rejectClose: false });
+  return Array.isArray(selected) ? selected.map((index) => creatures[index]).filter(Boolean) : null;
 }
 
 async function requestXpDistribution(recipients, totalXp) {

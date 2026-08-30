@@ -3,7 +3,9 @@
 .od2qdv-container-summary { display: flex; flex: 0 0 100%; align-items: center; justify-content: space-between; padding: .25rem .5rem; background: rgba(0, 0, 0, .08); }
 .od2qdv-container-summary button, .od2qdv-contained-item button { width: auto; min-width: 0; border: 0; background: transparent; }
 .od2qdv-container-contents { flex: 0 0 100%; margin: .25rem 0 .4rem 1rem; padding-left: .5rem; border-left: 2px solid rgba(127, 127, 127, .35); }
-.od2qdv-contained-item { display: grid; grid-template-columns: 24px 1fr auto auto; align-items: center; gap: .35rem; min-height: 30px; }
+.od2qdv-container-contents-header { display: grid; flex: 0 0 100%; width: 100%; box-sizing: border-box; grid-template-columns: 24px minmax(8rem, 1fr) 3rem 4.5rem 5.5rem auto; gap: .35rem; align-items: center; padding: .15rem .25rem; font-size: .8em; font-weight: 700; opacity: .8; }
+.od2qdv-contained-item { display: grid; grid-template-columns: 24px minmax(8rem, 1fr) 3rem 4.5rem 5.5rem auto; align-items: center; gap: .35rem; min-height: 30px; }
+.od2qdv-contained-quantity, .od2qdv-contained-weight, .od2qdv-contained-value { text-align: center; white-space: nowrap; font-size: .9em; }
 .od2qdv-contained-controls { display: flex; }
 .od2qdv-contained-item > .od2qdv-container-contents { grid-column: 2 / -1; width: calc(100% - .5rem); }
 .od2qdv-container-empty { flex: 0 0 100%; padding: .3rem 1rem; opacity: .7; font-style: italic; }
