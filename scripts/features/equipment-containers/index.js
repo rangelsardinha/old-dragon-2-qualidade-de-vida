@@ -72,6 +72,29 @@ function coinLabel(coins) {
   return `${normalized.gp} PO · ${normalized.sp} PP · ${normalized.cp} PC`;
 }
 
+function containedQuantity(item) {
+  return Math.max(0, Number(item?.system?.quantity) || 0);
+}
+
+function containedWeight(item) {
+  const quantity = containedQuantity(item);
+  const load = Math.max(0, Number(item?.system?.weight_in_load) || 0);
+  const grams = Math.max(0, Number(item?.system?.weight_in_grams) || 0);
+  return load > 0 ? load * quantity : (grams * quantity) / 1000;
+}
+
+function containedValue(item) {
+  const quantity = containedQuantity(item);
+  const raw = item?.system?.cost ?? item?.system?.value ?? item?.system?.price ?? 0;
+  if (typeof raw === "number") return raw * quantity;
+  const text = String(raw ?? "").trim();
+  const match = text.match(/(-?\d+(?:[.,]\d+)?)\s*(PO|PP|PC|GP|SP|CP)?/i);
+  if (!match) return text || "0";
+  const amount = Number(match[1].replace(",", ".")) * quantity;
+  const currency = match[2] ? match[2].toUpperCase().replace("GP", "PO").replace("SP", "PP").replace("CP", "PC") : "";
+  return `${Number.isInteger(amount) ? amount : amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}${currency ? ` ${currency}` : ""}`;
+}
+
 async function confirmDialog({ title, content }) {
   const DialogV2 = Number(game.release?.generation ?? 13) >= 14
     ? foundry.applications?.api?.DialogV2
@@ -258,7 +281,8 @@ async function chooseTransferTarget(container) {
 function renderTree(actor, rootContainer, depth = 0) {
   const children = actor.items.filter((item) => parentId(item) === rootContainer.id);
   if (!children.length) return `<div class="od2qdv-container-empty">Vazio</div>`;
-  return `<ol class="od2qdv-container-contents">${children.map((item) => {
+  const header = depth === 0 ? `<div class="od2qdv-container-contents-header"><span></span><span>Item</span><span>Qtd</span><span>Peso T.</span><span>Valor T.</span><span></span></div>` : "";
+  return `${header}<ol class="od2qdv-container-contents">${children.map((item) => {
     const nested = item.type === "container" ? renderTree(actor, item, depth + 1) : "";
     const ammoToggle = allowsEquippedAmmunition(rootContainer) && isAmmunition(item)
       ? `<button type="button" data-od2qdv-action="toggle-ammunition" data-item-id="${item.id}" title="${item.system?.is_equipped ? "Desequipar" : "Equipar"} munição"><i class="fas ${item.system?.is_equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i></button>`
@@ -266,10 +290,12 @@ function renderTree(actor, rootContainer, depth = 0) {
     return `<li class="od2qdv-contained-item" data-contained-item-id="${item.id}">
       <img src="${escapeHtml(item.img)}" alt="" width="24" height="24">
       <button type="button" data-od2qdv-action="open-item" data-item-id="${item.id}">${escapeHtml(item.name)}</button>
-      <span>${item.type === "container" ? coinLabel(containerCoins(item)) : escapeHtml(item.system?.quantity ?? 1)}</span>
+      <span class="od2qdv-contained-quantity">${escapeHtml(containedQuantity(item))}</span>
+      <span class="od2qdv-contained-weight">${escapeHtml(containedWeight(item))}</span>
+      <span class="od2qdv-contained-value">${escapeHtml(item.type === "container" ? coinLabel(containerCoins(item)) : containedValue(item))}</span>
       <span class="od2qdv-contained-controls">${ammoToggle}<button type="button" data-od2qdv-action="remove-item" data-item-id="${item.id}" title="Retirar do recipiente"><i class="fas fa-eject"></i></button><button type="button" data-od2qdv-action="delete-item" data-item-id="${item.id}" title="Excluir"><i class="fas fa-trash"></i></button></span>
       ${nested}
-    </li>`;
+  </li>`;
   }).join("")}</ol>`;
 }
 
