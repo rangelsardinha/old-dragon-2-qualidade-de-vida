@@ -162,6 +162,10 @@ Este módulo usa apenas regras abertas do [SRD do Old Dragon 2](https://olddrago
 
 A implementação inicial foi consolidada a partir de [OD2 Automação de Combate](https://github.com/rangelsardinha/od2-combat-automation), de Rangel Sardinha.
 
+### Agradecimentos
+
+Agradecimento geral à comunidade do **Old Dragon 2** pelas ideias, testes e feedbacks que contribuíram para a criação e o aprimoramento deste módulo.
+
 ### Eixo de alinhamento
 Quando habilitado nas configurações, adiciona a todos os atores o eixo moral **Bom, Neutro ou Mal**, separado do alinhamento tradicional Caótico/Neutro/Ordeiro. Atores existentes recebem Neutro automaticamente.
 
