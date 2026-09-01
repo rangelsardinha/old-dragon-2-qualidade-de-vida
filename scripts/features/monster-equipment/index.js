@@ -72,6 +72,38 @@ function equipmentTab(actor) {
   </div>`;
 }
 
+function spellCircle(spell) {
+  for (const key of ["arcane", "divine", "necromancer", "illusionist"]) {
+    const value = Number(spell.system?.[key]);
+    if (value > 0) return value;
+  }
+  return 1;
+}
+
+async function magicTab(actor) {
+  const spells = actor.items.filter((item) => item.type === "spell");
+  const spellByCircle = Object.fromEntries(Array.from({ length: 9 }, (_, index) => [index + 1, { circle: index + 1, spells: [] }]));
+  for (const spell of spells) spellByCircle[spellCircle(spell)].spells.push(spell);
+  const content = await foundry.applications.handlebars.renderTemplate("systems/olddragon2e/templates/partials/tabs/character-tab-spells.hbs", { actor, system: actor.system, spell: spells, spell_by_circle: spellByCircle });
+  return `<div class="tab od2qdv-monster-magic" data-group="primary-tabs" data-tab="od2qdv-monster-magic"><div class="olddragon2e sheet character od2qdv-monster-magic-native">${content.replace(/<div class="create">[\s\S]*?<\/div>\s*<\/div>/, '<div class="create"></div></div>')}</div></div>`;
+}
+
+async function castMonsterSpell(actor, item, { skipUsage = false } = {}) {
+  const flags = item.getFlag("olddragon2e", "spell") || {};
+  if (!flags.memorized) return ui.notifications.warn(game.i18n.format("olddragon2e.notifications.spell_not_memorized", { name: item.name }));
+  const slots = Number(flags.slots) || 0;
+  if (slots < 1) return ui.notifications.warn(game.i18n.localize("olddragon2e.notifications.spell_requires_slots"));
+  if (!skipUsage) {
+    const dailyUses = foundry.utils.duplicate(flags["daily-uses"] || {});
+    let used = false;
+    for (let index = 1; index <= slots; index++) if (!dailyUses[index]) { dailyUses[index] = true; used = true; break; }
+    if (!used) return ui.notifications.warn(game.i18n.format("olddragon2e.notifications.spell_no_uses_left", { name: item.name }));
+    await item.update({ "flags.olddragon2e.spell.daily-uses": dailyUses });
+  }
+  const content = await foundry.applications.handlebars.renderTemplate("systems/olddragon2e/templates/chat/spell-chat.hbs", { name: item.name, owner: actor.id, id: item.id, system: item.system });
+  return ChatMessage.create({ user: game.user.id, speaker: { alias: actor.name }, sound: "sounds/dice.wav", content });
+}
+
 async function chooseTarget(item) {
   const candidates = game.actors
     .filter((actor) => actor.id !== item.actor.id && canReceiveContainer(actor) && actor.isOwner)
@@ -116,20 +148,32 @@ async function handleDrop(event, actor) {
   await actor.createEmbeddedDocuments("Item", [itemData]);
 }
 
+async function handleSpellDrop(event, actor) {
+  let data;
+  try { data = JSON.parse(event.dataTransfer.getData("text/plain")); } catch { return; }
+  if (data?.type !== "Item") return;
+  const source = await Item.implementation.fromDropData(data);
+  if (source?.type !== "spell") return ui.notifications.warn("Somente magias podem ser arrastadas para esta aba.");
+  if (source.actor?.id === actor.id) return;
+  const itemData = source.toObject();
+  delete itemData._id;
+  await actor.createEmbeddedDocuments("Item", [itemData]);
+}
+
 async function saveWallet(actor, tab) {
   const coins = normalizeCoins(Object.fromEntries(["gp", "sp", "cp"].map((key) => [key, tab.querySelector(`[data-monster-coin="${key}"]`)?.value])));
   await updateActorCoins(actor, coins);
 }
 
-function activateEquipmentTab(app, root) {
-  app._od2qdvMonsterEquipmentActive = true;
+function activateMonsterTab(app, root, tabName) {
+  app._od2qdvMonsterActiveTab = tabName;
   const controller = app._tabs?.[0];
-  if (controller?.activate) return controller.activate("od2qdv-monster-equipment");
-  root.querySelectorAll('nav.tabs .item').forEach((element) => element.classList.toggle("active", element.dataset.tab === "od2qdv-monster-equipment"));
-  root.querySelectorAll("section.section > .tab").forEach((element) => element.classList.toggle("active", element.dataset.tab === "od2qdv-monster-equipment"));
+  if (controller?.activate) return controller.activate(tabName);
+  root.querySelectorAll('nav.tabs .item').forEach((element) => element.classList.toggle("active", element.dataset.tab === tabName));
+  root.querySelectorAll("section.section > .tab").forEach((element) => element.classList.toggle("active", element.dataset.tab === tabName));
 }
 
-function enhanceMonsterSheet(app, html) {
+async function enhanceMonsterSheet(app, html) {
   if (!enabled() || app.actor?.type !== "monster" || !app.actor.isOwner) return;
   const root = rootElement(html);
   if (!root) return;
@@ -140,20 +184,34 @@ function enhanceMonsterSheet(app, html) {
   if (!nav.querySelector('[data-tab="od2qdv-monster-equipment"]')) {
     nav.insertAdjacentHTML("beforeend", '<a class="item" data-tab="od2qdv-monster-equipment"><i class="fas fa-suitcase"></i> Equipamentos</a>');
   }
+  if (!nav.querySelector('[data-tab="od2qdv-monster-magic"]')) nav.insertAdjacentHTML("beforeend", '<a class="item" data-tab="od2qdv-monster-magic"><i class="fas fa-book"></i> Magias</a>');
   if (!section.querySelector('[data-tab="od2qdv-monster-equipment"]')) section.insertAdjacentHTML("beforeend", equipmentTab(actor));
+  if (!section.querySelector('[data-tab="od2qdv-monster-magic"]')) section.insertAdjacentHTML("beforeend", await magicTab(actor));
   if (containersEnabled()) enhanceActorSheet(app, root);
-  if (app._od2qdvMonsterEquipmentActive) activateEquipmentTab(app, root);
+  if (app._od2qdvMonsterActiveTab) activateMonsterTab(app, root, app._od2qdvMonsterActiveTab);
   if (boundSheets.has(root)) return;
   boundSheets.add(root);
 
   root.addEventListener("click", async (event) => {
     if (event.target.closest('nav.tabs[data-group="primary-tabs"] [data-tab="od2qdv-monster-equipment"]')) {
-      event.preventDefault(); activateEquipmentTab(app, root); return;
+      event.preventDefault(); activateMonsterTab(app, root, "od2qdv-monster-equipment"); return;
+    }
+    if (event.target.closest('nav.tabs[data-group="primary-tabs"] [data-tab="od2qdv-monster-magic"]')) {
+      event.preventDefault(); activateMonsterTab(app, root, "od2qdv-monster-magic"); return;
     }
     if (event.target.closest('nav.tabs[data-group="primary-tabs"] .item')) {
-      app._od2qdvMonsterEquipmentActive = false;
+      app._od2qdvMonsterActiveTab = null;
     }
     const button = event.target.closest("[data-monster-equipment-action]");
+    const spellRow = event.target.closest(".od2qdv-monster-magic .item[data-item-id]");
+    if (spellRow && event.target.closest(".spell-cast, .item-edit, .item-delete")) {
+      event.preventDefault(); event.stopPropagation();
+      const item = actor.items.get(spellRow.dataset.itemId);
+      if (event.target.closest(".spell-cast")) await castMonsterSpell(actor, item);
+      else if (event.target.closest(".item-edit")) await item?.sheet.render(true);
+      else if (event.target.closest(".item-delete") && item) await actor.deleteEmbeddedDocuments("Item", [item.id]);
+      app.render(false); return;
+    }
     if (!button) return;
     event.preventDefault(); event.stopPropagation();
     const item = actor.items.get(button.closest(".item[data-item-id]")?.dataset.itemId);
@@ -171,12 +229,37 @@ function enhanceMonsterSheet(app, html) {
     event.dataTransfer.setData("text/plain", JSON.stringify(item.toDragData()));
   }, true);
   root.addEventListener("drop", async (event) => {
-    if (!event.target.closest(".od2qdv-monster-equipment")) return;
+    const magicArea = event.target.closest(".od2qdv-monster-magic");
+    const equipmentArea = event.target.closest(".od2qdv-monster-equipment");
+    if (!magicArea && !equipmentArea) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
-    await handleDrop(event, actor);
+    if (magicArea) await handleSpellDrop(event, actor); else await handleDrop(event, actor);
     app.render(false);
   }, true);
   root.addEventListener("change", async (event) => {
+    if (event.target.matches(".od2qdv-monster-magic .memorized-toggle")) {
+      event.stopPropagation();
+      const item = actor.items.get(event.target.dataset.itemId);
+      const update = { "flags.olddragon2e.spell.memorized": event.target.checked };
+      if (!event.target.checked) { update["flags.olddragon2e.spell.slots"] = ""; update["flags.olddragon2e.spell.daily-uses"] = {}; }
+      await item?.update(update); app.render(false); return;
+    }
+    if (event.target.matches(".od2qdv-monster-magic .slots-select")) {
+      event.stopPropagation();
+      const item = actor.items.get(event.target.dataset.itemId);
+      await item?.update({ "flags.olddragon2e.spell.slots": event.target.value ? Number(event.target.value) : "", "flags.olddragon2e.spell.daily-uses": {} });
+      app.render(false); return;
+    }
+    if (event.target.matches(".od2qdv-monster-magic .spell-use-checkbox")) {
+      event.stopPropagation();
+      const item = actor.items.get(event.target.dataset.itemId);
+      const flags = item?.getFlag("olddragon2e", "spell") || {};
+      const uses = foundry.utils.duplicate(flags["daily-uses"] || {});
+      uses[event.target.dataset.useIndex] = event.target.checked;
+      await item?.update({ "flags.olddragon2e.spell.daily-uses": uses });
+      if (event.target.checked) await castMonsterSpell(actor, item, { skipUsage: true });
+      app.render(false); return;
+    }
     if (!event.target.matches("[data-monster-coin]")) return;
     event.stopPropagation();
     await saveWallet(actor, root.querySelector(".od2qdv-monster-equipment"));

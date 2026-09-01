@@ -1,0 +1,26 @@
+.od2qdv-open-treasure-generator {
+  width: auto;
+}
+
+.od2qdv-treasure-form .form-group {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.od2qdv-treasure-form select {
+  width: 100%;
+  margin-top: .35rem;
+}
+
+.od2-tesouro h2 {
+  font-size: 1.35em;
+}
+
+.od2qdv-monster-treasure-action {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.od2qdv-monster-treasure-action i {
+  margin-right: 0.2rem;
+}

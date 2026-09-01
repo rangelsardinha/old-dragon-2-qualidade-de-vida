@@ -27,6 +27,7 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 
 ### Automação de combate
 
+- Agradecimento especial a **Henrique de Freitas Martins** pelos testes e sugestões que contribuíram para esta automação.
 - Intercepta ataques das fichas de personagens e monstros.
 - Compara o ataque com a CA do alvo e registra acerto ou erro no chat.
 - Rola e aplica dano, com ajustes de fraqueza e resistência.
@@ -70,6 +71,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 
 ### Gerador de pergaminhos
 
+- Agradecimento especial a **Henrique de Freitas Martins** pela colaboração no desenvolvimento do Gerador de Pergaminhos.
 - Adiciona **Gerar Pergaminho** ao diretório de Itens para o Mestre.
 - Permite escolher tradição arcana, divina ou ambas e definir o círculo máximo.
 - Usa magias do SRD; com **Tomo de Magia** habilitado, permite escolher SRD, Tomo ou ambas as fontes.
@@ -80,6 +82,15 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Cada magia possui link para seu documento e um botão **Usar**; o uso publica o cartão da magia no chat e consome o pergaminho.
 - Ao usar um pergaminho amaldiçoado, o efeito é enviado por mensagem privada somente aos Mestres.
 - O resultado pode ser transferido diretamente para um personagem ou ajudante.
+
+### Gerador de Tesouros
+
+- Agradecimento especial a **Beto Júnior**, da comunidade do Old Dragon 2 e um dos mantenedores do [Covil do Velho Dragão](https://covildovelhodragao.com/), autor do script original que serviu de base para esta função.
+- Adiciona **Gerador de Tesouros** ao diretório de Itens, logo abaixo do gerador de pergaminhos.
+- Permite ao Mestre escolher tesouros de covil dos tipos A–O ou tesouros individuais/carregados dos tipos P–V.
+- Rola moedas, gemas, objetos de valor, equipamentos e itens mágicos conforme as tabelas do Old Dragon 2.
+- Publica no chat o resultado completo e o valor de Tesouro Rápido correspondente ao tipo escolhido.
+- Pode ser ativado ou desativado independentemente nas configurações do módulo.
 
 ### Carta de Controle de Sessão
 

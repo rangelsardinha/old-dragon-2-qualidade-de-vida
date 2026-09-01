@@ -9,6 +9,8 @@
   "OD2QDV.Settings.enableSpellTome.hint": "Adiciona os compêndios, navegador, regras e automações de Magia Selvagem do Tomo de Magia OD2.",
   "OD2QDV.Settings.enableScrollGenerator.name": "Gerador de pergaminhos",
   "OD2QDV.Settings.enableScrollGenerator.hint": "Permite ao Mestre gerar pergaminhos arcanos e divinos do SRD e, quando habilitado, do Tomo de Magia.",
+  "OD2QDV.Settings.enableTreasureGenerator.name": "Gerador de Tesouros",
+  "OD2QDV.Settings.enableTreasureGenerator.hint": "Permite ao Mestre gerar tesouros de covil e individuais pelas tabelas do Old Dragon 2.",
   "OD2QDV.Settings.enableSessionControl.name": "Carta de Controle de Sessão",
   "OD2QDV.Settings.enableSessionControl.hint": "Adiciona aos Diários uma carta para controlar turnos, encontros, descanso, tochas, lanternas e notas da sessão.",
   "OD2QDV.Settings.enableCharacterGenerator.name": "Gerador de personagens",

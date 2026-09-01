@@ -22,6 +22,10 @@ Hooks.once("init", () => {
       name: "Gerador de pergaminhos",
       hint: "Permite ao Mestre gerar pergaminhos arcanos e divinos do SRD e, quando habilitado, do Tomo de Magia."
     },
+    enableTreasureGenerator: {
+      name: "Gerador de Tesouros",
+      hint: "Permite ao Mestre gerar tesouros de covil e individuais pelas tabelas do Old Dragon 2."
+    },
     enableSessionControl: {
       name: "Carta de Controle de Sessão",
       hint: "Adiciona aos Diários uma carta para controlar turnos, encontros, descanso, tochas, lanternas e notas da sessão."
@@ -62,6 +66,7 @@ Hooks.once("init", () => {
   worldToggle("enableMonsterEquipment");
   worldToggle("enableSpellTome");
   worldToggle("enableScrollGenerator");
+  worldToggle("enableTreasureGenerator");
   worldToggle("enableSessionControl");
   worldToggle("enableCharacterGenerator");
   worldToggle("enableEffectManager");
