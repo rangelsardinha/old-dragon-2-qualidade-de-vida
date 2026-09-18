@@ -27,6 +27,8 @@ const FALLBACK_I18N = {
   'OD2CA.Chat.hit': 'Acerto',
   'OD2CA.Chat.miss': 'Erro',
   'OD2CA.Chat.attack': 'Ataque',
+  'OD2CA.Chat.attackRoll': 'Rolagem de ataque',
+  'OD2CA.Chat.noTarget': 'Sem alvo (item ou objeto)',
   'OD2CA.Chat.damage': 'Dano',
   'OD2CA.Chat.critical': 'Acerto Critico',
   'OD2CA.Chat.fumble': 'Erro Critico',
@@ -583,8 +585,10 @@ async function handleAttack(actor, button) {
     ui.notifications.warn('Este personagem está inconsciente e não pode atacar. Deve realizar JPC ou JPS para agonizar.');
     return;
   }
-  const target = getSingleTarget();
-  if (!target) return;
+  // Ataques contra itens/objetos podem não ter um token selecionável.
+  // Nesses casos fazemos a rolagem de BAC/BAD, mas não tentamos comparar
+  // CA nem aplicar dano automaticamente.
+  const target = getSingleTarget(true);
 
   const item = getAttackItem(actor, button);
   if (!item) return;
@@ -592,8 +596,8 @@ async function handleAttack(actor, button) {
   const ammunition = await chooseAmmunition(actor, item, button);
   if (ammunition.required && !ammunition.item) return;
 
-  const targetAc = getArmorClass(target.actor);
-  if (!Number.isFinite(targetAc)) {
+  const targetAc = target ? getArmorClass(target.actor) : null;
+  if (target && !Number.isFinite(targetAc)) {
     ui.notifications.warn(t('OD2CA.Notifications.noTargetAc'));
     return;
   }
@@ -601,8 +605,8 @@ async function handleAttack(actor, button) {
   const attackData = await requestAttackOptions(actor, item, button);
   if (!attackData) return;
   attackData.ammunition = ammunition.item;
-  attackData.targetActor = target.actor;
-  attackData.targetName = target.name ?? target.document?.name ?? target.actor?.name;
+  attackData.targetActor = target?.actor;
+  attackData.targetName = target?.name ?? target?.document?.name ?? target?.actor?.name;
 
   if (ammunition.item) {
     const quantity = Math.max(0, Math.trunc(Number(ammunition.item.system?.quantity) || 0));
@@ -615,11 +619,25 @@ async function handleAttack(actor, button) {
     await item.update({ 'system.is_equipped': false });
   }
   const naturalD20 = getNaturalD20(attackRoll);
-  const triggerContext = { item, weapon: item, ammunition: ammunition.item, attackMode: attackData.attackMode, attackBasis: attackData.ba, targetActor: target.actor, roll: attackRoll };
+  const triggerContext = { item, weapon: item, ammunition: ammunition.item, attackMode: attackData.attackMode, attackBasis: attackData.ba, targetActor: target?.actor, roll: attackRoll };
   await game.od2Qdv?.effects?.trigger?.(actor, 'attack', triggerContext);
   if (naturalD20 === 20) await game.od2Qdv?.effects?.trigger?.(actor, 'natural20', triggerContext);
   const fumble = naturalD20 === 1 ? await requestFumbleRule() : null;
   const critical = naturalD20 === 20 ? await requestCriticalRule() : null;
+  if (!target) {
+    await sendAttackResultMessage({
+      actor,
+      item,
+      target: null,
+      attackRoll,
+      attackData,
+      hit: null,
+      naturalD20,
+      critical,
+      fumble,
+    });
+    return true;
+  }
   const hit = !fumble && (Boolean(critical) || attackRoll.total >= targetAc);
 
   if (hit && isParryEligibleActor(target.actor) && actor.type === 'monster') {
@@ -760,12 +778,13 @@ async function chooseAmmunition(actor, weapon, attackButton) {
   return { required: true, item: actor.items.get(itemId) ?? null };
 }
 
-function getSingleTarget() {
+function getSingleTarget(allowMissing = false) {
   const targets = Array.from(game.user.targets ?? []);
 
   if (!game.settings.get(MODULE_ID, 'combatRequireOneTarget')) return targets[0] ?? null;
 
   if (targets.length !== 1) {
+    if (allowMissing && targets.length === 0) return null;
     ui.notifications.warn(t('OD2CA.Notifications.selectTarget'));
     return null;
   }
@@ -1776,8 +1795,9 @@ function getStatusEffect(statusId) {
 }
 
 async function sendAttackResultMessage({ actor, item, target, attackRoll, attackData, hit, naturalD20, critical, fumble }) {
-  const outcomeKey = hit ? 'OD2CA.Chat.hit' : 'OD2CA.Chat.miss';
-  const outcomeClass = hit ? 'od2ca-hit' : 'od2ca-miss';
+  const targeted = Boolean(target);
+  const outcomeKey = !targeted ? 'OD2CA.Chat.attackRoll' : (hit ? 'OD2CA.Chat.hit' : 'OD2CA.Chat.miss');
+  const outcomeClass = !targeted ? '' : (hit ? 'od2ca-hit' : 'od2ca-miss');
   const damageType = hit ? getWeaponDamageType(item) : '';
   const damageTypeRow = damageType
     ? `<dt>${t('OD2CA.Chat.weaponDamageType')}</dt><dd>${escapeHtml(damageType)}</dd>`
@@ -1788,7 +1808,7 @@ async function sendAttackResultMessage({ actor, item, target, attackRoll, attack
       <div class="${outcomeClass}">${t(outcomeKey)}</div>
       <dl>
         <dt>Atacante</dt><dd>${escapeHtml(actor.name)}</dd>
-        <dt>Alvo</dt><dd>${escapeHtml(target.name)}</dd>
+        <dt>Alvo</dt><dd>${escapeHtml(target?.name ?? t('OD2CA.Chat.noTarget'))}</dd>
         <dt>D20</dt><dd>${naturalD20 ?? '-'}</dd>
         <dt>Total</dt><dd>${attackRoll.total}</dd>
         ${damageTypeRow}
@@ -1800,7 +1820,7 @@ async function sendAttackResultMessage({ actor, item, target, attackRoll, attack
 
   await attackRoll.toMessage({
     speaker: ChatMessage.getSpeaker({ actor }),
-    flavor: `${t('OD2CA.Chat.attack')}: ${hit ? t('OD2CA.Chat.hit') : t('OD2CA.Chat.miss')}`,
+    flavor: `${t('OD2CA.Chat.attack')}: ${t(outcomeKey)}`,
     content,
   }, toMessageOptions(attackData.rollMode));
 }
