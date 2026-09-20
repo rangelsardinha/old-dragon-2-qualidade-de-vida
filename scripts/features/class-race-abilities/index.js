@@ -471,6 +471,9 @@ function strengthenedStatus() {
 function isInspirationEffect(effect) {
   return normalizeAbilityName(effect?.name) === "inspiracao";
 }
+function isFuryEffect(effect) {
+  return normalizeAbilityName(effect?.name).startsWith("furia:");
+}
 
 function isInspireAbilityName(name) {
   const normalized = normalizeAbilityName(name);
@@ -487,8 +490,8 @@ async function saveActorEffects(actor, effects) {
 }
 
 async function syncInspirationStatus(actor) {
-  if (!actor || actor.type !== "character") return;
-  const active = (actor.getFlag(MODULE_ID, "effects") ?? []).some((effect) => isInspirationEffect(effect) && effect.enabled !== false);
+  if (!actor) return;
+  const active = (actor.getFlag(MODULE_ID, "effects") ?? []).some((effect) => (isInspirationEffect(effect) || isFuryEffect(effect)) && effect.enabled !== false);
   const status = strengthenedStatus();
   if (!status) return console.warn(`${MODULE_ID} | Status Fortalecido não encontrado no Foundry.`);
   const currentlyActive = actor.statuses?.has?.(status.id)
@@ -513,7 +516,10 @@ async function removeInspirationFromSource(sourceActor) {
     // A lista inspirationTargets já delimita exatamente os beneficiados por este uso,
     // portanto não dependa do UUID para remover a Inspiração ao encerrar a atuação.
     const filtered = current.filter((effect) => !isInspirationEffect(effect));
-    if (filtered.length !== current.length) await saveActorEffects(target, filtered);
+    if (filtered.length !== current.length) {
+      await saveActorEffects(target, filtered);
+      await syncInspirationStatus(target);
+    }
   }
   await sourceActor.unsetFlag(MODULE_ID, "inspirationTargets");
   sourceActor.sheet?.render?.(false);
@@ -543,6 +549,7 @@ async function useInspiration(actor) {
       recipients.push(recipient);
       const current = recipient.getFlag(MODULE_ID, "effects") ?? [];
       await saveActorEffects(recipient, [...current.filter((entry) => !isInspirationEffect(entry) || entry.sourceActorUuid !== actor.uuid), effect]);
+      await syncInspirationStatus(recipient);
       recipient.sheet?.render?.(false);
     }
   }
@@ -603,6 +610,7 @@ async function useFury(actor) {
       if (candidate.group === "enemy") recipientEffects.push({ ...effectTemplate({ name: "Fúria: Inimigo Exposto", origin: "habilidade", association, key: "incoming.attack", mode: "add", value: 2 }), id: `fury-incoming-${recipient.uuid}`, sourceActorUuid: actor.uuid });
       const current = recipient.getFlag(MODULE_ID, "effects") ?? [];
       await saveActorEffects(recipient, [...current.filter((entry) => !String(entry.name ?? "").startsWith("Fúria:") || entry.sourceActorUuid !== actor.uuid), ...recipientEffects]);
+      await syncInspirationStatus(recipient);
       recipient.sheet?.render?.(false);
       targets.push(recipient);
     }
@@ -620,7 +628,10 @@ async function removeFuryFromSource(sourceActor) {
   for (const target of candidates) {
     const current = target.getFlag(MODULE_ID, "effects") ?? [];
     const filtered = current.filter((effect) => !String(effect.name ?? "").startsWith("Fúria:") || effect.sourceActorUuid !== sourceActor.uuid);
-    if (filtered.length !== current.length) await saveActorEffects(target, filtered);
+    if (filtered.length !== current.length) {
+      await saveActorEffects(target, filtered);
+      await syncInspirationStatus(target);
+    }
   }
   await sourceActor.unsetFlag(MODULE_ID, "furyTargets");
   sourceActor.sheet?.render?.(false);
@@ -995,7 +1006,7 @@ Hooks.on("renderActorSheet", enhanceAcademicAbilities);
 Hooks.on("renderActorSheetV2", enhanceAcademicAbilities);
 Hooks.on("renderOD2CharacterSheet", enhanceAcademicAbilities);
 Hooks.on("updateActor", (actor, changed, _options, userId) => {
-  if (!enabled() || (userId && game.user?.id !== userId) || actor.type !== "character") return;
+  if (!enabled() || (userId && game.user?.id !== userId)) return;
   if (changed.flags?.[MODULE_ID]?.effects) {
     syncInspirationStatus(actor);
     return;
