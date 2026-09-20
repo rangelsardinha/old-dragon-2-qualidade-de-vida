@@ -5,6 +5,7 @@ import { darkSunPacks } from "../../integrations/dark-sun.js";
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const SOCKET = `module.${MODULE_ID}`;
 const handledAssassinationRequests = new Set();
+const handledProfanationRequests = new Set();
 const previousCombatants = new WeakMap();
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
@@ -50,6 +51,95 @@ function abilityRollHtml(key, level) {
   const ability = CLASS_RACE_ABILITIES[key];
   const score = abilityScore(key, level);
   return `<div class="od2qdv-academic-roll"><span class="od2qdv-ability-label">${escapeHtml(ability.label)}:</span> <a class="od2qdv-academic-roll-button" data-academic-ability="${key}" title="Rolar teste de ${escapeHtml(ability.label)}"><i class="fa-light fa-dice-d6 fa-sm"></i>&nbsp;1-${score} em 1d6</a></div>`;
+}
+
+function abilityDocument(actor, abilityId) {
+  return actor?.items?.get?.(abilityId) ?? null;
+}
+
+function profanationDates(actor, abilityId) {
+  const itemDates = abilityDocument(actor, abilityId)?.getFlag?.(MODULE_ID, "profanationExecutions");
+  if (Array.isArray(itemDates)) return itemDates.slice(-2);
+  return (actor?.getFlag?.(MODULE_ID, "profanationExecutions")?.[abilityId] ?? []).slice(-2);
+}
+
+function profanationHistoryHtml(dates) {
+  if (!dates.length) return "";
+  const labels = dates.map((date) => {
+    const parsed = new Date(date);
+    return escapeHtml(Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleString("pt-BR"));
+  });
+  return `<div class="od2qdv-profanation-history"><strong>Últimas execuções:</strong> ${labels.join(" · ")}</div>`;
+}
+
+function profanationMagicHtml(actor, abilityId) {
+  return `<div class="od2qdv-academic-roll od2qdv-profanation-magic"><a class="od2qdv-academic-roll-button" data-profanation-magic data-ability-id="${escapeHtml(abilityId)}" title="Rolar Profanar Magia"><i class="fa-light fa-dice-d6 fa-sm"></i>&nbsp;Profanar Magia</a>${profanationHistoryHtml(profanationDates(actor, abilityId))}</div>`;
+}
+
+async function saveProfanationDate(actor, abilityId) {
+  const dates = [...profanationDates(actor, abilityId), new Date().toISOString()].slice(-2);
+  const item = abilityDocument(actor, abilityId);
+  if (item?.setFlag) await item.setFlag(MODULE_ID, "profanationExecutions", dates);
+  else await actor.setFlag(MODULE_ID, "profanationExecutions", { ...(actor.getFlag(MODULE_ID, "profanationExecutions") ?? {}), [abilityId]: dates });
+  return dates;
+}
+
+function normalizeText(value) { return normalizeAbilityName(value); }
+
+async function profanationTable() {
+  const pack = darkSunPacks("RollTable").find((entry) => normalizeText(entry.metadata?.name ?? entry.metadata?.label) === "tabelas")
+    ?? game.packs?.get("dark-sun-old-dragon-2.tabelas");
+  if (!pack) return null;
+  const documents = await pack.getDocuments();
+  return documents.find((table) => normalizeText(table.name) === "efeitos de profanacao de magia")
+    ?? documents.find((table) => normalizeText(table.name).includes("efeitos de profanacao de magia"));
+}
+
+function tokenDistance(origin, token) {
+  try {
+    const distance = Number(canvas.grid.measureDistance(origin.center, token.center));
+    if (Number.isFinite(distance)) return distance;
+  } catch { /* fallback */ }
+  const dx = Number(token.center?.x) - Number(origin.center?.x);
+  const dy = Number(token.center?.y) - Number(origin.center?.y);
+  return (Math.hypot(dx, dy) / (Number(canvas.grid?.size) || 100)) * (Number(canvas.scene?.grid?.distance) || 5);
+}
+
+async function rollProfanationMagic(actor, abilityId, fromSocket = false) {
+  if (!actor || !game.user.isGM) {
+    if (!game.user.isGM && !fromSocket) {
+      const gm = [...(game.users ?? [])].find((user) => user.active && user.isGM);
+      if (!gm) return ui.notifications.warn("Não há Mestre ativo para realizar Profanar Magia.");
+      const requestId = foundry.utils.randomID();
+      game.socket.emit(SOCKET, { type: "profanationMagicRequest", requestId, actorId: actor.id, actorUuid: actor.uuid, abilityId, userId: game.user.id });
+      ui.notifications.info("Solicitação de Profanar Magia enviada ao Mestre.");
+    }
+    return;
+  }
+  const table = await profanationTable();
+  if (!table) return ui.notifications.error("A tabela 'Efeitos de Profanação de Magia' do módulo Dark Sun não foi encontrada.");
+  const draw = await table.draw({ displayChat: true, rollMode: "roll" });
+  await saveProfanationDate(actor, abilityId);
+  if (Number(draw?.roll?.total) !== 6) return;
+
+  const origin = actor.getActiveTokens?.()[0] ?? null;
+  const units = String(canvas?.scene?.grid?.units ?? "").toLowerCase();
+  const radius = /m|metro/.test(units) ? 0.75 : 2.5; // raio de 0,75 m (aprox. 2,5 ft)
+  const targets = new Map([[actor.uuid, actor]]);
+  if (origin && canvas?.tokens) {
+    for (const token of canvas.tokens.placeables) if (token.actor && tokenDistance(origin, token) <= radius) targets.set(token.actor.uuid, token.actor);
+    if (canvas.scene?.createEmbeddedDocuments) await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [{
+      t: "circle", user: game.user.id, x: origin.center.x, y: origin.center.y, distance: radius, direction: 0, angle: 360, width: 0,
+      borderColor: "#8b0000", fillColor: "#d32f2f", flags: { [MODULE_ID]: { profanationMagic: true } }
+    }]);
+  }
+  const affected = [];
+  for (const target of targets.values()) {
+    const current = Number(target.system?.hp?.value ?? 0);
+    await target.update({ "system.hp.value": Math.max(0, current - 3) });
+    affected.push(target.name);
+  }
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Profanar Magia — efeito 6</strong><p>A profanação causou 3 pontos de dano em: ${affected.map(escapeHtml).join(", ") || "nenhum ator"}.</p>` });
 }
 
 async function promptAssassinationDV() {
@@ -441,11 +531,21 @@ function enhanceAcademicAbilities(app, html) {
     const isRaceAbility = Boolean(row.closest(".character-tab-race"));
     if (key === "reputation" && isRaceAbility) continue;
     if (key === "assassination" && isRaceAbility) continue;
+    if (key === "profanationMagic" && !normalizeAbilityName(actorClassName(actor)).startsWith("preservador")) continue;
     if (key === "hearingNoises" && !/ladrao|ladrão/i.test(actorClassName(actor)) && !isBard(actorClassName(actor))) continue;
     if (!key) continue;
     // Afastar Mortos-vivos é disparado pelo registro de uso nativo da habilidade;
     // não adicionar um botão extra na ficha.
     if (key === "turnUndead") continue;
+    if (key === "profanationMagic") {
+      const current = row.querySelector("[data-profanation-magic]");
+      const history = profanationHistoryHtml(profanationDates(actor, row.dataset.itemId));
+      if (current) {
+        current.closest(".od2qdv-profanation-magic")?.querySelector(".od2qdv-profanation-history")?.remove();
+        if (history) current.closest(".od2qdv-profanation-magic")?.insertAdjacentHTML("beforeend", history);
+      } else (row.querySelector(":scope > .ability, :scope > .ability-header") ?? row.firstElementChild ?? row).insertAdjacentHTML("afterend", profanationMagicHtml(actor, row.dataset.itemId));
+      continue;
+    }
     const current = row.querySelector(`[data-academic-ability="${key}"]`);
     if (current) {
       const score = abilityScore(key, level);
@@ -530,7 +630,8 @@ function enhanceAcademicAbilities(app, html) {
     const warriorMasteryChoice = event.target.closest?.("[data-warrior-mastery-choice]");
     const paladinMasteryChoice = event.target.closest?.("[data-paladin-mastery-choice]");
     const inspirationChoice = event.target.closest?.("[data-inspiration-choice]");
-    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice) return;
+    const profanationMagic = event.target.closest?.("[data-profanation-magic]");
+    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (halflingWeaponChoice) {
@@ -575,6 +676,12 @@ function enhanceAcademicAbilities(app, html) {
         if (game.user.isGM) await removeInspirationFromSource(actor);
         else game.socket.emit(SOCKET, { type: "inspirationRemove", actorId: actor.id, actorUuid: actor.uuid, userId: game.user.id });
       } else await useInspiration(actor);
+      app.render(false);
+      return;
+    }
+    if (profanationMagic) {
+      profanationMagic.classList.add("rolling");
+      try { await rollProfanationMagic(actor, profanationMagic.dataset.abilityId); } finally { profanationMagic.classList.remove("rolling"); }
       app.render(false);
       return;
     }
@@ -647,6 +754,13 @@ Hooks.once("ready", () => {
     if (payload?.type === "inspirationRemove" && game.user.isGM) {
       const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
       if (actor) await removeInspirationFromSource(actor);
+      return;
+    }
+    if (payload?.type === "profanationMagicRequest" && game.user.isGM && isPrimaryActiveGM()) {
+      if (payload.requestId && handledProfanationRequests.has(payload.requestId)) return;
+      if (payload.requestId) handledProfanationRequests.add(payload.requestId);
+      const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
+      if (actor) await rollProfanationMagic(actor, payload.abilityId, true);
       return;
     }
     if (payload?.type !== "assassinationRequest" || !game.user.isGM) return;

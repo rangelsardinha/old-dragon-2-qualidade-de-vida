@@ -8,6 +8,7 @@ export const CLASS_RACE_ABILITIES = Object.freeze({
   , naturalPerception: { label: "Percepção Natural", names: ["percepcao natural"] },
   evaluators: { label: "Avaliadores", names: ["avaliadores"] },
   cryptolete: { label: "Criptolecto do Preservador", names: ["criptolecto", "criptolecto do preservador", "criptoleto", "criptoleto do preservador"] },
+  profanationMagic: { label: "Profanar Magia", names: ["profanar magia", "profanacao de magia", "profanação de magia"] },
   assassination: { label: "Assassinato", names: ["assassinato"] },
   climb: { label: "Escalar", names: ["escalar"] },
   naturalCamouflage: { label: "Camuflagem Natural", names: ["camuflagem natural"] },
@@ -26,6 +27,7 @@ export function abilityKey(name) {
   if (normalized === "reputacao" || normalized.startsWith("reputacao ") || normalized.startsWith("reputacao:")) return "reputation";
   if (normalized === "criptolecto" || normalized.startsWith("criptolecto ") || normalized.startsWith("criptolecto:")
     || normalized === "criptoleto" || normalized.startsWith("criptoleto ") || normalized.startsWith("criptoleto:")) return "cryptolete";
+  if (normalized === "profanar magia" || normalized.startsWith("profanar magia ") || normalized.startsWith("profanar magia:")) return "profanationMagic";
   return Object.entries(CLASS_RACE_ABILITIES).find(([, ability]) => ability.names.includes(normalized))?.[0] ?? null;
 }
 
@@ -41,6 +43,7 @@ export function abilityScore(key, level) {
     case "naturalPerception": return 2;
     case "evaluators": return 4;
     case "cryptolete": return 4;
+    case "profanationMagic": return 0;
     case "assassination": return currentLevel >= 10 ? 3 : currentLevel >= 6 ? 2 : 0;
     case "climb": return 3;
     case "naturalCamouflage": return 2;
