@@ -482,6 +482,20 @@ function isInspireAbilityName(name) {
 function isFuryAbilityName(name) {
   return normalizeAbilityName(name) === "furia";
 }
+function isRanger(name) {
+  return normalizeAbilityName(name).startsWith("ranger");
+}
+function isNaturalEnemyAbilityName(name) {
+  return normalizeAbilityName(name) === "inimigo mortal";
+}
+
+const NATURAL_ENEMY_CHOICES = [
+  { label: "Orcs", conditionName: "orc|orcs" },
+  { label: "Goblins", conditionName: "goblin|goblins" },
+  { label: "Homens Lagartos", conditionName: "homem lagarto|homens lagartos|homem-lagarto|homens-lagartos" },
+  { label: "Trolls", conditionName: "troll|trolls" },
+  { label: "Gigantes", conditionName: "gigante|gigantes" }
+];
 
 async function saveActorEffects(actor, effects) {
   const save = game.od2Qdv?.effects?.set;
@@ -615,6 +629,31 @@ async function useFury(actor) {
   }
   await actor.setFlag(MODULE_ID, "furyTargets", targets.map((target) => target.uuid));
   await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: "<div class=\"title\">Usou a habilidade:<br><strong>Fúria</strong></div><p>Os atores selecionados recebem +5 nos ataques, elevam o dado de dano em um passo e ficam fáceis de atingir.</p>" });
+}
+
+async function chooseNaturalEnemy(actor) {
+  const current = actor.getFlag(MODULE_ID, "naturalEnemySpecies") ?? "";
+  const options = NATURAL_ENEMY_CHOICES.map((choice) => `<option value="${escapeHtml(choice.conditionName)}" ${choice.conditionName === current ? "selected" : ""}>${escapeHtml(choice.label)}</option>`).join("");
+  const content = `<form><div class="form-group"><label>Inimigo mortal</label><select name="species">${options}</select></div></form>`;
+  const selected = Number(game.release?.generation ?? 13) >= 14
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Escolher inimigo mortal" }, content, ok: { label: "Confirmar", callback: (_event, button) => button.form.elements.species.value } })
+    : await Dialog.prompt({ title: "Escolher inimigo mortal", content, label: "Confirmar", callback: (html) => html[0].querySelector("[name=species]").value, rejectClose: false });
+  if (!selected) return;
+  const choice = NATURAL_ENEMY_CHOICES.find((entry) => entry.conditionName === selected);
+  if (!choice) return;
+  const classItem = actor.items.find((item) => item.type === "class");
+  const effect = effectTemplate({
+    name: "Inimigo Natural", origin: "habilidade da classe",
+    association: { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Ranger" },
+    key: "test.difficulty", mode: "add", value: 1,
+    condition: { left: "target.speciesNamed", name: choice.conditionName }
+  });
+  effect.id = "natural-enemy";
+  effect.modifiers.push({ key: "incoming.attack", mode: "reduce", value: 2 });
+  const effects = actor.getFlag(MODULE_ID, "effects") ?? [];
+  await saveActorEffects(actor, [...effects.filter((entry) => entry.name !== "Inimigo Natural"), effect]);
+  await actor.setFlag(MODULE_ID, "naturalEnemySpecies", selected);
+  actor.sheet?.render?.(false);
 }
 
 async function removeFuryFromSource(sourceActor) {
@@ -896,6 +935,14 @@ function enhanceAcademicAbilities(app, html) {
       }
     }
   }
+  if (isRanger(actorClassName(actor))) {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      if (!isNaturalEnemyAbilityName(ability?.name) || row.querySelector("[data-natural-enemy-choice]")) continue;
+      const selected = NATURAL_ENEMY_CHOICES.find((choice) => choice.conditionName === actor.getFlag(MODULE_ID, "naturalEnemySpecies"));
+      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-natural-enemy-choice><i class="fas fa-paw"></i> Inimigo natural: ${escapeHtml(selected?.label || "não escolhido")}</a></div>`);
+    }
+  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -932,8 +979,9 @@ function enhanceAcademicAbilities(app, html) {
     const paladinMasteryChoice = event.target.closest?.("[data-paladin-mastery-choice]");
     const inspirationChoice = event.target.closest?.("[data-inspiration-choice]");
     const furyChoice = event.target.closest?.("[data-fury-choice]");
+    const naturalEnemyChoice = event.target.closest?.("[data-natural-enemy-choice]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !profanationMagic) return;
+    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (halflingWeaponChoice) {
@@ -986,6 +1034,11 @@ function enhanceAcademicAbilities(app, html) {
         if (game.user.isGM) await removeFuryFromSource(actor);
         else game.socket.emit(SOCKET, { type: "furyRemove", actorId: actor.id, actorUuid: actor.uuid, userId: game.user.id });
       } else await useFury(actor);
+      app.render(false);
+      return;
+    }
+    if (naturalEnemyChoice) {
+      await chooseNaturalEnemy(actor);
       app.render(false);
       return;
     }

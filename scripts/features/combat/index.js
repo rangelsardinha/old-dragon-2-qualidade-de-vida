@@ -896,7 +896,9 @@ function getAttackFormula(actor, item, source, bonus, adjustment) {
   const offensiveBonus = (api?.modifierDeltaExcluding?.(actor, 'attack', [offensiveName], effectContext)
     ?? api?.modifierDelta?.(actor, 'attack', effectContext) ?? 0)
     + (isDwarfEnemy(targetActor, targetName) ? namedEffectModifier(actor, offensiveName, 'attack') : 0);
-  const defensiveContext = { targetActor: actor, targetName: actor?.name, item, weapon: item, attackMode: source?.attackMode, attackBasis: source?.ba };
+  // Para efeitos defensivos condicionados ao atacante (por exemplo, Inimigo
+  // Natural), o alvo da condição é quem está realizando o ataque.
+  const defensiveContext = { targetActor: actor, targetName: actor?.name, sourceActor: actor, sourceName: actor?.name, item, weapon: item, attackMode: source?.attackMode, attackBasis: source?.ba };
   const defensiveBonus = targetActor
     ? (api?.modifierDeltaExcluding?.(targetActor, 'incoming.attack', [defensiveName], defensiveContext)
       ?? api?.modifierDelta?.(targetActor, 'incoming.attack', defensiveContext) ?? 0)
