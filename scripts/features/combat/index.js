@@ -615,7 +615,9 @@ async function handleAttack(actor, button) {
   }
 
   const attackRoll = await rollAttack(actor, item, attackData);
-  if (item.system?.type === 'throwing' && !normalizedItemName(item).includes('funda')) {
+  // Armas de arremesso usadas em BAC continuam equipadas e disponíveis para
+  // combate corpo a corpo; somente o disparo em BAD as consome/retira do uso.
+  if (item.system?.type === 'throwing' && attackData.ba === 'bad' && !normalizedItemName(item).includes('funda')) {
     await item.update({ 'system.is_equipped': false });
   }
   const naturalD20 = getNaturalD20(attackRoll);
