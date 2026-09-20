@@ -1,4 +1,4 @@
-import { CLASS_RACE_ABILITIES, abilityKey, abilityScore, rollSucceeded, isAarakocraName, isArcherName, isBarbarianName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName, normalizeAbilityName } from "./model.js";
+import { CLASS_RACE_ABILITIES, abilityKey, abilityScore, rollSucceeded, profanadorTableResult, isAarakocraName, isArcherName, isBarbarianName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName, normalizeAbilityName } from "./model.js";
 import { normalizeEffect } from "../effect-manager/model.js";
 import { darkSunPacks } from "../../integrations/dark-sun.js";
 
@@ -176,10 +176,49 @@ function spellItemFromMessage(actor, message) {
   return actor?.items?.get?.(data.itemId) ?? [...(actor?.items ?? [])].find((item) => item.type === "spell" && item.name === data.name);
 }
 
-async function triggerProfanadorSpell(actor, item) {
+async function promptVitalDrain(actor) {
+  const level = actorLevel(actor);
+  if (level < 3) return "none";
+  const content = `<p><strong>Drenar energia vital?</strong> Este efeito aumenta para 2 chances em 6 de recuperar a magia utilizada e reduz 3 PV do Profanador.</p>${level >= 6 ? '<p><strong>Drenar energia vital aprimorada?</strong> Este efeito aumenta para 3 chances em 6 de recuperar a magia utilizada e reduz 6 PV do Profanador.</p>' : ""}`;
+  const DialogV2 = foundry.applications?.api?.DialogV2;
+  if (Number(game.release?.generation ?? 13) >= 14 && DialogV2) return DialogV2.wait({
+    window: { title: "Drenar energia vital" }, content,
+    buttons: [
+      { action: "none", icon: "fa-solid fa-times", label: "Não drenar", default: true, callback: () => "none" },
+      { action: "vital", icon: "fa-solid fa-heart-crack", label: "Drenar energia vital", callback: () => "vital" },
+      ...(level >= 6 ? [{ action: "improved", icon: "fa-solid fa-skull", label: "Drenar energia vital aprimorada", callback: () => "improved" }] : [])
+    ], close: () => "none"
+  });
+  return new Promise((resolve) => new Dialog({
+    title: "Drenar energia vital", content,
+    buttons: {
+      none: { icon: '<i class="fas fa-times"></i>', label: "Não drenar", callback: () => resolve("none") },
+      vital: { icon: '<i class="fas fa-heart-crack"></i>', label: "Drenar energia vital", callback: () => resolve("vital") },
+      ...(level >= 6 ? { improved: { icon: '<i class="fas fa-skull"></i>', label: "Drenar energia vital aprimorada", callback: () => resolve("improved") } } : {})
+    }, default: "none", close: () => resolve("none")
+  }).render(true));
+}
+
+async function recoverUsedSpell(item) {
+  const spellFlags = foundry.utils.deepClone(item.getFlag?.("olddragon2e", "spell") ?? {});
+  const uses = { ...(spellFlags["daily-uses"] ?? {}) };
+  const usedSlot = Object.keys(uses).filter((key) => uses[key] === true).sort((a, b) => Number(b) - Number(a))[0];
+  if (!usedSlot) return false;
+  uses[usedSlot] = false;
+  await item.update({ "flags.olddragon2e.spell.daily-uses": uses });
+  return true;
+}
+
+async function triggerProfanadorSpell(actor, item, drainMode = "none") {
   if (!actor || !item || !normalizeAbilityName(actorClassName(actor)).startsWith("profanador")) return;
   const level = spellLevel(item);
   if (!level) return;
+  const mode = drainMode === "improved" && actorLevel(actor) >= 6 ? "improved" : drainMode === "vital" && actorLevel(actor) >= 3 ? "vital" : "none";
+  const drainDamage = mode === "improved" ? 6 : mode === "vital" ? 3 : 0;
+  if (drainDamage) {
+    const currentHp = Number(actor.system?.hp?.value ?? 0);
+    await actor.update({ "system.hp.value": Math.max(0, currentHp - drainDamage) });
+  }
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content: `<strong>Profanação</strong><p>A vegetação e o solo ao seu redor é consumida e se transforma em cinzas.</p><p>O raio de destruição ao redor do profanador é igual ao nível da magia conjurada vezes 3 metros: <strong>${level * 3} m</strong>.</p>`,
@@ -187,7 +226,24 @@ async function triggerProfanadorSpell(actor, item) {
   });
   const table = await profanationTable();
   if (!table) return ui.notifications.warn("A tabela de efeitos de profanação requer o módulo Dark Sun 1.0.7 ou superior.");
-  await table.draw({ displayChat: true, rollMode: "roll" });
+  const naturalRoll = new Roll("1d6");
+  if (Number(game.release?.generation ?? 13) >= 14) await naturalRoll.evaluate();
+  else await naturalRoll.roll({ async: true });
+  const effectiveTotal = profanadorTableResult(naturalRoll.total, mode);
+  let tableRoll = naturalRoll;
+  if (effectiveTotal !== Number(naturalRoll.total)) {
+    tableRoll = new Roll(String(effectiveTotal));
+    if (Number(game.release?.generation ?? 13) >= 14) await tableRoll.evaluate();
+    else await tableRoll.roll({ async: true });
+  }
+  await table.draw({ roll: tableRoll, displayChat: true, rollMode: "roll" });
+  const recovered = effectiveTotal === 1 ? await recoverUsedSpell(item) : false;
+  if (mode !== "none" || recovered) {
+    const modeLabel = mode === "improved" ? "Drenar energia vital aprimorada" : mode === "vital" ? "Drenar energia vital" : "Profanação";
+    const conversion = effectiveTotal !== Number(naturalRoll.total) ? ` O resultado natural ${naturalRoll.total} foi considerado como 1.` : "";
+    const recovery = recovered ? ` A magia <strong>${escapeHtml(item.name)}</strong> foi recuperada.` : effectiveTotal === 1 ? " Não foi possível localizar o uso consumido da magia." : "";
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>${modeLabel}</strong><p>${drainDamage ? `${drainDamage} PV foram consumidos.` : ""}${conversion}${recovery}</p>`, flags: { [MODULE_ID]: { profanadorSpellEffect: true } } });
+  }
 }
 
 async function handleProfanadorSpellMessage(message, html = null) {
@@ -205,14 +261,17 @@ async function handleProfanadorSpellMessage(message, html = null) {
     ?? game.actors?.get(message.speaker?.actor)
     ?? game.actors?.get(data.ownerId);
   const item = spellItemFromMessage(actor, message);
-  if (!actor || !item) return;
+  if (!actor || !item || !normalizeAbilityName(actorClassName(actor)).startsWith("profanador")) return;
+  const messageUserId = typeof message.user === "string" ? message.user : message.user?.id ?? message.userId;
+  if (messageUserId && messageUserId !== game.user.id) return;
   if (message.id) handledProfanadorSpellMessages.add(message.id);
+  const drainMode = await promptVitalDrain(actor);
   if (game.user.isGM) {
-    if (isPrimaryActiveGM()) await triggerProfanadorSpell(actor, item);
+    if (isPrimaryActiveGM()) await triggerProfanadorSpell(actor, item, drainMode);
     return;
   }
   const requestId = foundry.utils.randomID();
-  game.socket.emit(SOCKET, { type: "profanadorSpellRequest", requestId, actorUuid: actor.uuid, spellId: item.id, messageId: message.id, userId: game.user.id });
+  game.socket.emit(SOCKET, { type: "profanadorSpellRequest", requestId, actorUuid: actor.uuid, spellId: item.id, messageId: message.id, drainMode, userId: game.user.id });
 }
 
 async function promptAssassinationDV() {
@@ -847,7 +906,7 @@ Hooks.once("ready", () => {
       if (payload.requestId) handledProfanadorSpellRequests.add(payload.requestId);
       const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
       const item = actor?.items?.get?.(payload.spellId);
-      if (actor && item) await triggerProfanadorSpell(actor, item);
+      if (actor && item) await triggerProfanadorSpell(actor, item, payload.drainMode);
       return;
     }
     if (payload?.type !== "assassinationRequest" || !game.user.isGM) return;

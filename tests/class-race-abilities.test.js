@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { academicAbilityKey, academicAbilityScore, academicRollSucceeded, dwarfAdventurerHitDieForLevel, isAarakocraName, isAcademicClassName, isArcherName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName } from "../scripts/features/class-race-abilities/model.js";
+import { academicAbilityKey, academicAbilityScore, academicRollSucceeded, dwarfAdventurerHitDieForLevel, isAarakocraName, isAcademicClassName, isArcherName, isDwarfAdventurerName, isDwarfName, isElfName, isHalfElfName, isGnomeName, isHalfGiantName, isHalflingName, profanadorTableResult } from "../scripts/features/class-race-abilities/model.js";
 
 test("reconhece a classe e as habilidades do Acadêmico ignorando acentos", () => {
   assert.equal(isAcademicClassName("Acadêmico"), true);
@@ -24,6 +24,12 @@ test("aplica a progressão de Reputação", () => {
 test("considera sucesso quando o d6 fica dentro da faixa", () => {
   assert.equal(academicRollSucceeded(3, 3), true);
   assert.equal(academicRollSucceeded(4, 3), false);
+});
+
+test("amplia a recuperação de magia ao drenar energia vital", () => {
+  assert.deepEqual([1, 2, 3, 6].map((result) => profanadorTableResult(result, "none")), [1, 2, 3, 6]);
+  assert.deepEqual([1, 2, 3, 6].map((result) => profanadorTableResult(result, "vital")), [1, 1, 3, 6]);
+  assert.deepEqual([1, 2, 3, 6].map((result) => profanadorTableResult(result, "improved")), [1, 1, 1, 6]);
 });
 
 test("reconhece as habilidades de anão e Anão Aventureiro", () => {

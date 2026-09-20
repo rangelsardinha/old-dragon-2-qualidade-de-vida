@@ -75,6 +75,12 @@ export function rollSucceeded(total, score) {
   return Number(total) <= Number(score);
 }
 
+export function profanadorTableResult(total, drainMode = "none") {
+  const natural = Math.max(1, Math.min(6, Number(total) || 1));
+  const recoveryLimit = drainMode === "improved" ? 3 : drainMode === "vital" ? 2 : 1;
+  return natural <= recoveryLimit ? 1 : natural;
+}
+
 export const ACADEMIC_ABILITIES = CLASS_RACE_ABILITIES;
 export const normalizeAcademicName = normalizeAbilityName;
 export const academicAbilityKey = abilityKey;
