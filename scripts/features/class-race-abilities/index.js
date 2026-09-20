@@ -1016,9 +1016,6 @@ Hooks.on("createChatMessage", (message) => {
 Hooks.on("createChatMessage", (message) => {
   handleLayOnHandsMessage(message).catch((error) => console.error(`${MODULE_ID} | Falha ao processar Cura pelas Mãos`, error));
 });
-Hooks.on("renderChatMessage", (message, html) => {
-  handleProfanadorSpellMessage(message, html).catch((error) => console.error(`${MODULE_ID} | Falha ao processar cartão de magia do Profanador`, error));
-});
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!enabled() || !Object.prototype.hasOwnProperty.call(changed ?? {}, "round") || !isPrimaryActiveGM()) return;
   if (Object.prototype.hasOwnProperty.call(changed ?? {}, "round")) {
