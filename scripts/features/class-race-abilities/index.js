@@ -40,6 +40,12 @@ function escapeHtml(value) {
 function isMagicalWeaponName(name) {
   return /\+\s*\d|amaldi[cç]|matadora|cancelamento|mágic|magic/i.test(String(name ?? ""));
 }
+function classAbilityName(actor, row) {
+  const itemId = row?.dataset?.itemId;
+  const item = actor?.items?.get?.(itemId)
+    ?? [...(actor?.system?.class_abilities ?? [])].find((entry) => (entry._id ?? entry.id) === itemId);
+  return item?.name ?? row?.querySelector?.(".ability strong")?.textContent?.replace(/:\s*$/, "") ?? "";
+}
 function abilityRollHtml(key, level) {
   const ability = CLASS_RACE_ABILITIES[key];
   const score = abilityScore(key, level);
@@ -431,7 +437,7 @@ function enhanceAcademicAbilities(app, html) {
   if (!root) return;
   const level = actorLevel(actor);
   for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id], .character-tab-race .race-abilities li.item[data-item-id]")) {
-    const key = abilityKey(actor.items?.get?.(row.dataset.itemId)?.name);
+    const key = abilityKey(classAbilityName(actor, row));
     const isRaceAbility = Boolean(row.closest(".character-tab-race"));
     if (key === "reputation" && isRaceAbility) continue;
     if (key === "assassination" && isRaceAbility) continue;

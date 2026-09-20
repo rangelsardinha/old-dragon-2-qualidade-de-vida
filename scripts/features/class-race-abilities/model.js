@@ -24,6 +24,7 @@ export function normalizeAbilityName(value) {
 export function abilityKey(name) {
   const normalized = normalizeAbilityName(name);
   if (normalized === "reputacao" || normalized.startsWith("reputacao ") || normalized.startsWith("reputacao:")) return "reputation";
+  if (normalized === "criptoleto" || normalized.startsWith("criptoleto ") || normalized.startsWith("criptoleto:")) return "cryptolete";
   return Object.entries(CLASS_RACE_ABILITIES).find(([, ability]) => ability.names.includes(normalized))?.[0] ?? null;
 }
 
