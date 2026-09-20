@@ -8,6 +8,7 @@ const handledAssassinationRequests = new Set();
 const handledProfanationRequests = new Set();
 const handledProfanadorSpellRequests = new Set();
 const handledProfanadorSpellMessages = new Set();
+const handledLayOnHandsMessages = new Set();
 const previousCombatants = new WeakMap();
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
@@ -272,6 +273,71 @@ async function handleProfanadorSpellMessage(message, html = null) {
   }
   const requestId = foundry.utils.randomID();
   game.socket.emit(SOCKET, { type: "profanadorSpellRequest", requestId, actorUuid: actor.uuid, spellId: item.id, messageId: message.id, drainMode, userId: game.user.id });
+}
+
+function messageStrongText(message) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = String(message?.content ?? "");
+  return wrapper.querySelector?.(".title strong")?.textContent?.trim() ?? "";
+}
+
+function speakerActor(message) {
+  return message?.speaker?.token
+    ? canvas?.tokens?.get(message.speaker.token)?.actor
+      ?? game.scenes?.get(message.speaker.scene)?.tokens?.get(message.speaker.token)?.actor
+    : null;
+}
+
+function isLayOnHandsName(name) {
+  return normalizeAbilityName(name) === "cura pelas maos";
+}
+
+function activeHealingTargets(caster) {
+  const targets = new Map();
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    if (!token.actor?.system?.hp) continue;
+    targets.set(token.actor.uuid, { actor: token.actor, label: token.name ?? token.actor.name });
+  }
+  if (!targets.size) for (const actor of game.actors ?? []) if (actor.system?.hp && actor.type !== "vehicle") targets.set(actor.uuid, { actor, label: actor.name });
+  if (caster?.system?.hp && !targets.has(caster.uuid)) targets.set(caster.uuid, { actor: caster, label: caster.name });
+  return [...targets.values()].sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+async function promptLayOnHandsTarget(caster) {
+  const targets = activeHealingTargets(caster);
+  if (!targets.length) return null;
+  const options = targets.map(({ actor, label }) => `<option value="${escapeHtml(actor.uuid)}">${escapeHtml(label)}</option>`).join("");
+  const content = `<form><div class="form-group"><label>Alvo da Cura pelas Mãos</label><select name="target">${options}</select></div></form>`;
+  const DialogV2 = foundry.applications?.api?.DialogV2;
+  if (Number(game.release?.generation ?? 13) >= 14 && DialogV2) return DialogV2.prompt({ window: { title: "Cura pelas Mãos" }, content, ok: { label: "Curar", callback: (_event, button) => button.form.elements.target.value } });
+  return Dialog.prompt({ title: "Cura pelas Mãos", content, label: "Curar", callback: (html) => html[0].querySelector('[name="target"]').value, rejectClose: false });
+}
+
+async function applyLayOnHands(caster, targetUuid) {
+  const target = game.actors?.get(targetUuid) ?? await fromUuid(targetUuid).catch(() => null);
+  if (!caster || !target?.system?.hp) return;
+  const before = Number(target.system.hp.value ?? 0);
+  const maximum = Number(target.system.hp.max ?? before);
+  const amount = Math.max(0, Math.min(actorLevel(caster), maximum - before));
+  if (amount) await target.update({ "system.hp.value": before + amount });
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: caster }), content: `<strong>Cura pelas Mãos</strong><p>${escapeHtml(target.name)} recuperou ${amount} PV (nível ${actorLevel(caster)} do Paladino).</p>` });
+}
+
+async function handleLayOnHandsMessage(message) {
+  if (!enabled() || message?.getFlag?.(MODULE_ID, "layOnHandsResult") || !isLayOnHandsName(messageStrongText(message))) return;
+  if (message.id && handledLayOnHandsMessages.has(message.id)) return;
+  const messageUserId = typeof message.user === "string" ? message.user : message.user?.id ?? message.userId;
+  if (messageUserId && messageUserId !== game.user.id) return;
+  const caster = speakerActor(message) ?? game.actors?.get(message.speaker?.actor);
+  if (!caster || normalizeAbilityName(actorClassName(caster)) !== "paladino") return;
+  if (message.id) handledLayOnHandsMessages.add(message.id);
+  const targetUuid = await promptLayOnHandsTarget(caster);
+  if (!targetUuid) return;
+  if (game.user.isGM) {
+    if (isPrimaryActiveGM()) await applyLayOnHands(caster, targetUuid);
+    return;
+  }
+  game.socket.emit(SOCKET, { type: "layOnHandsRequest", requestId: foundry.utils.randomID(), casterUuid: caster.uuid, targetUuid, userId: game.user.id });
 }
 
 async function promptAssassinationDV() {
@@ -844,6 +910,9 @@ Hooks.on("createChatMessage", (message) => {
 Hooks.on("createChatMessage", (message) => {
   handleProfanadorSpellMessage(message).catch((error) => console.error(`${MODULE_ID} | Falha ao processar magia do Profanador`, error));
 });
+Hooks.on("createChatMessage", (message) => {
+  handleLayOnHandsMessage(message).catch((error) => console.error(`${MODULE_ID} | Falha ao processar Cura pelas Mãos`, error));
+});
 Hooks.on("renderChatMessage", (message, html) => {
   handleProfanadorSpellMessage(message, html).catch((error) => console.error(`${MODULE_ID} | Falha ao processar cartão de magia do Profanador`, error));
 });
@@ -907,6 +976,12 @@ Hooks.once("ready", () => {
       const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
       const item = actor?.items?.get?.(payload.spellId);
       if (actor && item) await triggerProfanadorSpell(actor, item, payload.drainMode);
+      return;
+    }
+    if (payload?.type === "layOnHandsRequest" && game.user.isGM && isPrimaryActiveGM()) {
+      const caster = game.actors?.get(payload.casterId) ?? (payload.casterUuid ? await fromUuid(payload.casterUuid) : null);
+      const targetUuid = payload.targetUuid;
+      if (caster && targetUuid) await applyLayOnHands(caster, targetUuid);
       return;
     }
     if (payload?.type !== "assassinationRequest" || !game.user.isGM) return;
