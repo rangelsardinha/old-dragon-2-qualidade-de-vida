@@ -7,7 +7,7 @@ export const CLASS_RACE_ABILITIES = Object.freeze({
   miners: { label: "Mineradores", names: ["mineradores"] }
   , naturalPerception: { label: "Percepção Natural", names: ["percepcao natural"] },
   evaluators: { label: "Avaliadores", names: ["avaliadores"] },
-  cryptolete: { label: "Criptoleto", names: ["criptoleto"] },
+  cryptolete: { label: "Criptolecto do Preservador", names: ["criptolecto", "criptolecto do preservador", "criptoleto", "criptoleto do preservador"] },
   assassination: { label: "Assassinato", names: ["assassinato"] },
   climb: { label: "Escalar", names: ["escalar"] },
   naturalCamouflage: { label: "Camuflagem Natural", names: ["camuflagem natural"] },
@@ -24,7 +24,8 @@ export function normalizeAbilityName(value) {
 export function abilityKey(name) {
   const normalized = normalizeAbilityName(name);
   if (normalized === "reputacao" || normalized.startsWith("reputacao ") || normalized.startsWith("reputacao:")) return "reputation";
-  if (normalized === "criptoleto" || normalized.startsWith("criptoleto ") || normalized.startsWith("criptoleto:")) return "cryptolete";
+  if (normalized === "criptolecto" || normalized.startsWith("criptolecto ") || normalized.startsWith("criptolecto:")
+    || normalized === "criptoleto" || normalized.startsWith("criptoleto ") || normalized.startsWith("criptoleto:")) return "cryptolete";
   return Object.entries(CLASS_RACE_ABILITIES).find(([, ability]) => ability.names.includes(normalized))?.[0] ?? null;
 }
 

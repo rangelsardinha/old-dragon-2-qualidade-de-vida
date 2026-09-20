@@ -49,7 +49,8 @@ test("reconhece habilidades de Elfo e Arqueiro", () => {
   assert.equal(isHalflingName("Halfling"), true);
   assert.equal(academicAbilityKey("Avaliadores"), "evaluators");
   assert.equal(academicAbilityScore("evaluators", 1), 4);
-  assert.equal(academicAbilityKey("Criptoleto"), "cryptolete");
+  assert.equal(academicAbilityKey("Criptolecto"), "cryptolete");
+  assert.equal(academicAbilityKey("Criptolecto do Preservador"), "cryptolete");
   assert.equal(academicAbilityKey("Criptoleto do Preservador"), "cryptolete");
   assert.equal(academicAbilityScore("cryptolete", 1), 4);
 });
