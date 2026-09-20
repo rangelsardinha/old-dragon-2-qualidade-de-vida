@@ -581,24 +581,23 @@ async function useFury(actor) {
     return;
   }
   const candidates = furyCandidates();
-  const allies = candidates.filter((entry) => entry.group === "ally");
-  const enemies = candidates.filter((entry) => entry.group === "enemy");
-  const checkboxList = (name, entries) => entries.length
-    ? entries.map((entry) => `<label style="display:block"><input type="checkbox" name="${name}" value="${escapeHtml(entry.value)}"> ${escapeHtml(entry.label)}</label>`).join("")
+  const checkboxList = (entries) => entries.length
+    ? entries.map((entry) => `<label style="display:block"><input type="checkbox" name="actor" value="${escapeHtml(entry.value)}"> ${escapeHtml(entry.label)}</label>`).join("")
     : "<em>Nenhum ator disponível</em>";
-  const content = `<form><div class="form-group"><label>Aliados e jogadores beneficiados (+5 nos ataques e dado de dano elevado)</label>${checkboxList("ally", allies)}</div><div class="form-group"><label>Inimigos afetados (+2 para serem atingidos)</label>${checkboxList("enemy", enemies)}</div></form>`;
+  const content = `<form><div class="form-group"><label>Atores sob efeito da Fúria (+5 nos ataques, dado de dano elevado e ataques recebidos fáceis)</label>${checkboxList(candidates)}</div></form>`;
   const selected = Number(game.release?.generation ?? 13) >= 14
-    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar Fúria" }, content, ok: { label: "Aplicar", callback: (_event, button) => ({ allies: [...button.form.querySelectorAll('input[name="ally"]:checked')].map((input) => input.value), enemies: [...button.form.querySelectorAll('input[name="enemy"]:checked')].map((input) => input.value) }) } })
-    : await Dialog.prompt({ title: "Usar Fúria", content, label: "Aplicar", callback: (html) => ({ allies: [...html[0].querySelectorAll('input[name="ally"]:checked')].map((input) => input.value), enemies: [...html[0].querySelectorAll('input[name="enemy"]:checked')].map((input) => input.value) }), rejectClose: false });
-  if (!selected?.allies?.length && !selected?.enemies?.length) return;
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar Fúria" }, content, ok: { label: "Aplicar", callback: (_event, button) => [...button.form.querySelectorAll('input[name="actor"]:checked')].map((input) => input.value) } })
+    : await Dialog.prompt({ title: "Usar Fúria", content, label: "Aplicar", callback: (html) => [...html[0].querySelectorAll('input[name="actor"]:checked')].map((input) => input.value), rejectClose: false });
+  if (!selected?.length) return;
   const classItem = actor.items.find((item) => item.type === "class");
   const association = { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Xamã" };
   const effects = [
     effectTemplate({ name: "Fúria: Ataques", origin: "habilidade", association, key: "attack", mode: "add", value: 5 }),
-    effectTemplate({ name: "Fúria: Dano", origin: "habilidade", association, key: "damage.dieStep", mode: "add", value: 1 })
+    effectTemplate({ name: "Fúria: Dano", origin: "habilidade", association, key: "damage.dieStep", mode: "add", value: 1 }),
+    effectTemplate({ name: "Fúria: Exposto", origin: "habilidade", association, key: "incoming.attack", mode: "add", value: 2 })
   ];
   const targets = [];
-  for (const uuid of [...(selected.allies ?? []), ...(selected.enemies ?? [])]) {
+  for (const uuid of selected) {
     const candidate = candidates.find((entry) => entry.value === uuid);
     if (!candidate?.actor) continue;
     const recipients = candidate.group === "ally" && !candidate.isToken
@@ -607,7 +606,6 @@ async function useFury(actor) {
     for (const recipient of recipients) {
       if (targets.some((entry) => entry.uuid === recipient.uuid)) continue;
       const recipientEffects = effects.map((effect) => ({ ...effect, id: `${effect.id}-${recipient.uuid}`, sourceActorUuid: actor.uuid }));
-      if (candidate.group === "enemy") recipientEffects.push({ ...effectTemplate({ name: "Fúria: Inimigo Exposto", origin: "habilidade", association, key: "incoming.attack", mode: "add", value: 2 }), id: `fury-incoming-${recipient.uuid}`, sourceActorUuid: actor.uuid });
       const current = recipient.getFlag(MODULE_ID, "effects") ?? [];
       await saveActorEffects(recipient, [...current.filter((entry) => !String(entry.name ?? "").startsWith("Fúria:") || entry.sourceActorUuid !== actor.uuid), ...recipientEffects]);
       await syncInspirationStatus(recipient);
@@ -616,7 +614,7 @@ async function useFury(actor) {
     }
   }
   await actor.setFlag(MODULE_ID, "furyTargets", targets.map((target) => target.uuid));
-  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: "<div class=\"title\">Usou a habilidade:<br><strong>Fúria</strong></div><p>Aliados recebem +5 nos ataques e elevam o dado de dano em um passo. Inimigos selecionados recebem +2 para serem atingidos.</p>" });
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: "<div class=\"title\">Usou a habilidade:<br><strong>Fúria</strong></div><p>Os atores selecionados recebem +5 nos ataques, elevam o dado de dano em um passo e ficam fáceis de atingir.</p>" });
 }
 
 async function removeFuryFromSource(sourceActor) {
