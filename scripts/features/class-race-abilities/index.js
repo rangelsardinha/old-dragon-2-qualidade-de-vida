@@ -95,6 +95,14 @@ async function profanationTable() {
     ?? documents.find((table) => normalizeText(table.name).includes("efeitos de profanacao de magia"));
 }
 
+async function promptProfanationSpellLevel() {
+  const content = '<form><div class="form-group"><label>Nível da magia utilizada</label><input name="level" type="number" min="1" max="9" step="1" value="1" required></div></form>';
+  const level = Number(game.release?.generation ?? 13) >= 14
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Profanar Magia" }, content, ok: { label: "Aplicar", callback: (_event, button) => Number(button.form.elements.level.value) } })
+    : await Dialog.prompt({ title: "Profanar Magia", content, label: "Aplicar", callback: (html) => Number(html[0].querySelector('[name="level"]').value), rejectClose: false });
+  return Number.isInteger(level) && level >= 1 && level <= 9 ? level : null;
+}
+
 function tokenDistance(origin, token) {
   try {
     const distance = Number(canvas.grid.measureDistance(origin.center, token.center));
@@ -121,10 +129,13 @@ async function rollProfanationMagic(actor, abilityId, fromSocket = false) {
   const draw = await table.draw({ displayChat: true, rollMode: "roll" });
   await saveProfanationDate(actor, abilityId);
   if (Number(draw?.roll?.total) !== 6) return;
+  const spellLevel = await promptProfanationSpellLevel();
+  if (!spellLevel) return;
 
   const origin = actor.getActiveTokens?.()[0] ?? null;
   const units = String(canvas?.scene?.grid?.units ?? "").toLowerCase();
   const radius = /m|metro/.test(units) ? 0.75 : 2.5; // raio de 0,75 m (aprox. 2,5 ft)
+  const damage = 3 * spellLevel;
   const targets = new Map([[actor.uuid, actor]]);
   if (origin && canvas?.tokens) {
     for (const token of canvas.tokens.placeables) if (token.actor && tokenDistance(origin, token) <= radius) targets.set(token.actor.uuid, token.actor);
@@ -136,10 +147,10 @@ async function rollProfanationMagic(actor, abilityId, fromSocket = false) {
   const affected = [];
   for (const target of targets.values()) {
     const current = Number(target.system?.hp?.value ?? 0);
-    await target.update({ "system.hp.value": Math.max(0, current - 3) });
+    await target.update({ "system.hp.value": Math.max(0, current - damage) });
     affected.push(target.name);
   }
-  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Profanar Magia — efeito 6</strong><p>A profanação causou 3 pontos de dano em: ${affected.map(escapeHtml).join(", ") || "nenhum ator"}.</p>` });
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Profanar Magia — efeito 6</strong><p>Magia de ${spellLevel}º nível: ${damage} pontos de dano em: ${affected.map(escapeHtml).join(", ") || "nenhum ator"}.</p>` });
 }
 
 async function promptAssassinationDV() {
