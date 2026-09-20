@@ -83,11 +83,38 @@ function profanationMagicHtml(actor, abilityId) {
   return `<div class="od2qdv-academic-roll od2qdv-profanation-magic"><a class="od2qdv-academic-roll-button" data-profanation-magic data-ability-id="${escapeHtml(abilityId)}" title="Rolar Profanar Magia"><i class="fa-light fa-dice-d6 fa-sm"></i>&nbsp;Profanar Magia</a>${profanationHistoryHtml(profanationDates(actor, abilityId))}</div>`;
 }
 
+function cityFundsDates(actor, abilityId) {
+  const itemDates = abilityDocument(actor, abilityId)?.getFlag?.(MODULE_ID, "cityFundsExecutions");
+  if (Array.isArray(itemDates)) return itemDates.slice(-2);
+  return (actor?.getFlag?.(MODULE_ID, "cityFundsExecutions")?.[abilityId] ?? []).slice(-2);
+}
+
+function cityFundsHistoryHtml(dates) {
+  if (!dates.length) return "";
+  const labels = dates.map((date) => {
+    const parsed = new Date(date);
+    return escapeHtml(Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleString("pt-BR"));
+  });
+  return `<div class="od2qdv-city-funds-history"><strong>Últimas utilizações:</strong> ${labels.join(" · ")}</div>`;
+}
+
+function cityFundsHtml(actor, abilityId) {
+  return `<div class="od2qdv-academic-roll od2qdv-city-funds"><a class="od2qdv-academic-roll-button" data-city-funds data-ability-id="${escapeHtml(abilityId)}" title="Utilizar Fundos"><i class="fa-light fa-coins fa-sm"></i>&nbsp;Utilizar Fundos</a>${cityFundsHistoryHtml(cityFundsDates(actor, abilityId))}</div>`;
+}
+
 async function saveProfanationDate(actor, abilityId) {
   const dates = [...profanationDates(actor, abilityId), new Date().toISOString()].slice(-2);
   const item = abilityDocument(actor, abilityId);
   if (item?.setFlag) await item.setFlag(MODULE_ID, "profanationExecutions", dates);
   else await actor.setFlag(MODULE_ID, "profanationExecutions", { ...(actor.getFlag(MODULE_ID, "profanationExecutions") ?? {}), [abilityId]: dates });
+  return dates;
+}
+
+async function saveCityFundsDate(actor, abilityId) {
+  const dates = [...cityFundsDates(actor, abilityId), new Date().toISOString()].slice(-2);
+  const item = abilityDocument(actor, abilityId);
+  if (item?.setFlag) await item.setFlag(MODULE_ID, "cityFundsExecutions", dates);
+  else await actor.setFlag(MODULE_ID, "cityFundsExecutions", { ...(actor.getFlag(MODULE_ID, "cityFundsExecutions") ?? {}), [abilityId]: dates });
   return dates;
 }
 
@@ -406,6 +433,21 @@ async function rollPatrolConvocation(actor) {
   });
 }
 
+async function rollCityFunds(actor, abilityId) {
+  const roll = new Roll("1d10");
+  if (Number(game.release?.generation ?? 13) >= 14) await roll.evaluate();
+  else await roll.roll({ async: true });
+  const result = (Number(roll.total) || 0) * actorLevel(actor);
+  const currentPo = Math.max(0, Math.trunc(Number(actor.system?.economy?.gp) || 0));
+  await actor.update({ "system.economy.gp": currentPo + result });
+  await saveCityFundsDate(actor, abilityId);
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    rolls: [roll],
+    content: `<strong>Utilizar Fundos</strong><p>O Templário conseguiu <strong>${result}</strong> moedas de ouro. Poucas perguntas são feitas quando o ouro é requisitado, desde que nenhuma tentativa seja feita para retirar fundos mais do que uma vez por mês.</p>`
+  });
+}
+
 async function rollTurnUndead(actor, level) {
   const origin = actor.getActiveTokens?.()[0] ?? null;
   if (!origin || !canvas?.tokens) return ui.notifications.warn("O clérigo precisa estar representado por um token.");
@@ -504,6 +546,9 @@ function isNaturalEnemyAbilityName(name) {
 }
 function isPatrolConvocationAbilityName(name) {
   return normalizeAbilityName(name) === "convocar patrulha";
+}
+function isCityFundsAbilityName(name) {
+  return normalizeAbilityName(name) === "fundos da cidade";
 }
 function isOutcast(name) {
   return normalizeAbilityName(name).startsWith("proscrito");
@@ -974,8 +1019,19 @@ function enhanceAcademicAbilities(app, html) {
   if (isTemplar(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
-      if (!isPatrolConvocationAbilityName(ability?.name) || row.querySelector("[data-patrol-convocation]")) continue;
-      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-patrol-convocation title="Rolar Convocar Patrulha"><i class="fa-light fa-dice-d4 fa-sm"></i>&nbsp;Convocar Patrulha (1d4)</a></div>`);
+      if (isPatrolConvocationAbilityName(ability?.name) && !row.querySelector("[data-patrol-convocation]")) {
+        (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-patrol-convocation title="Rolar Convocar Patrulha"><i class="fa-light fa-dice-d4 fa-sm"></i>&nbsp;Convocar Patrulha (1d4)</a></div>`);
+      }
+      if (isCityFundsAbilityName(ability?.name)) {
+        const current = row.querySelector("[data-city-funds]");
+        const history = cityFundsHistoryHtml(cityFundsDates(actor, row.dataset.itemId));
+        if (current) {
+          current.closest(".od2qdv-city-funds")?.querySelector(".od2qdv-city-funds-history")?.remove();
+          if (history) current.closest(".od2qdv-city-funds")?.insertAdjacentHTML("beforeend", history);
+        } else {
+          (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", cityFundsHtml(actor, row.dataset.itemId));
+        }
+      }
     }
   }
   if (isDwarfAdventurerName(actorClassName(actor))) {
@@ -1016,8 +1072,9 @@ function enhanceAcademicAbilities(app, html) {
     const furyChoice = event.target.closest?.("[data-fury-choice]");
     const naturalEnemyChoice = event.target.closest?.("[data-natural-enemy-choice]");
     const patrolConvocation = event.target.closest?.("[data-patrol-convocation]");
+    const cityFunds = event.target.closest?.("[data-city-funds]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !profanationMagic) return;
+    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !cityFunds && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (halflingWeaponChoice) {
@@ -1081,6 +1138,12 @@ function enhanceAcademicAbilities(app, html) {
     if (patrolConvocation) {
       patrolConvocation.classList.add("rolling");
       try { await rollPatrolConvocation(actor); } finally { patrolConvocation.classList.remove("rolling"); }
+      return;
+    }
+    if (cityFunds) {
+      cityFunds.classList.add("rolling");
+      try { await rollCityFunds(actor, cityFunds.dataset.abilityId); } finally { cityFunds.classList.remove("rolling"); }
+      app.render(false);
       return;
     }
     if (profanationMagic) {
