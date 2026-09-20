@@ -58,6 +58,8 @@ test("reconhece habilidades de Elfo e Arqueiro", () => {
   assert.equal(academicAbilityKey("Criptolecto"), "cryptolete");
   assert.equal(academicAbilityKey("Criptolecto do Preservador"), "cryptolete");
   assert.equal(academicAbilityKey("Criptoleto do Preservador"), "cryptolete");
+  assert.equal(academicAbilityKey("Inspirar"), "inspiration");
+  assert.equal(academicAbilityKey("Inspiração"), "inspiration");
   assert.equal(academicAbilityKey("Animal Sagrado"), "inspiration");
   assert.equal(academicAbilityScore("cryptolete", 1), 4);
 });

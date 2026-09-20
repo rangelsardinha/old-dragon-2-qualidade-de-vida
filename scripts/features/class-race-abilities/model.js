@@ -15,7 +15,7 @@ export const CLASS_RACE_ABILITIES = Object.freeze({
   wildSurprise: { label: "Surpresa Selvagem", names: ["surpresa selvagem"] },
   turnUndead: { label: "Afastar Mortos-vivos", names: ["afastar mortos vivos", "afastar mortos-vivos"] },
   hearingNoises: { label: "Ouvir Ruídos", names: ["ouvir ruidos", "ouvir ruídos"] },
-  inspiration: { label: "Usar Inspiração", names: ["inspiracao", "inspiração", "animal sagrado"] }
+  inspiration: { label: "Usar Inspiração", names: ["inspirar", "inspiracao", "inspiração", "animal sagrado"] }
 });
 
 export function normalizeAbilityName(value) {
