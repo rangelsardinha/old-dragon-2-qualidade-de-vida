@@ -6,6 +6,7 @@ const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const SOCKET = `module.${MODULE_ID}`;
 const handledAssassinationRequests = new Set();
 const handledProfanationRequests = new Set();
+const handledProfanadorSpellRequests = new Set();
 const previousCombatants = new WeakMap();
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
@@ -151,6 +152,46 @@ async function rollProfanationMagic(actor, abilityId, fromSocket = false) {
     affected.push(target.name);
   }
   await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Profanar Magia — efeito 6</strong><p>Magia de ${spellLevel}º nível: ${damage} pontos de dano em: ${affected.map(escapeHtml).join(", ") || "nenhum ator"}.</p>` });
+}
+
+function spellLevel(item) {
+  return ["arcane", "divine", "necromancer", "illusionist"].map((key) => Number(item?.system?.[key])).find((level) => Number.isInteger(level) && level >= 1 && level <= 9) ?? null;
+}
+
+function spellItemFromMessage(actor, message) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = String(message?.content ?? "");
+  const spell = wrapper.querySelector?.(".spell");
+  const itemId = spell?.dataset?.itemId;
+  return actor?.items?.get?.(itemId) ?? [...(actor?.items ?? [])].find((item) => item.type === "spell" && item.name === spell?.querySelector?.(".title strong")?.textContent?.trim());
+}
+
+async function triggerProfanadorSpell(actor, item) {
+  if (!actor || !item || !normalizeAbilityName(actorClassName(actor)).startsWith("profanador")) return;
+  const level = spellLevel(item);
+  if (!level) return;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content: `<strong>Profanação</strong><p>A vegetação e o solo ao seu redor é consumida e se transforma em cinzas.</p><p>O raio de destruição ao redor do profanador é igual ao nível da magia conjurada vezes 3 metros: <strong>${level * 3} m</strong>.</p>`,
+    flags: { [MODULE_ID]: { profanadorSpellEffect: true } }
+  });
+  const table = await profanationTable();
+  if (!table) return ui.notifications.warn("A tabela de efeitos de profanação requer o módulo Dark Sun 1.0.7 ou superior.");
+  await table.draw({ displayChat: true, rollMode: "roll" });
+}
+
+async function handleProfanadorSpellMessage(message) {
+  if (!enabled() || message?.getFlag?.(MODULE_ID, "profanadorSpellEffect") || !String(message?.content ?? "").includes('class="spell"')) return;
+  if (message.user?.id && message.user.id !== game.user.id) return;
+  const actor = game.actors?.get(message.speaker?.actor) ?? (message.speaker?.token ? canvas?.tokens?.get(message.speaker.token)?.actor : null);
+  const item = spellItemFromMessage(actor, message);
+  if (!actor || !item) return;
+  if (game.user.isGM) {
+    if (isPrimaryActiveGM()) await triggerProfanadorSpell(actor, item);
+    return;
+  }
+  const requestId = foundry.utils.randomID();
+  game.socket.emit(SOCKET, { type: "profanadorSpellRequest", requestId, actorUuid: actor.uuid, spellId: item.id, messageId: message.id, userId: game.user.id });
 }
 
 async function promptAssassinationDV() {
@@ -720,6 +761,9 @@ Hooks.on("createChatMessage", (message) => {
   const actor = message?.speaker?.actor ? game.actors?.get(message.speaker.actor) : null;
   if (actor && isCleric(actorClassName(actor))) rollTurnUndead(actor, actorLevel(actor));
 });
+Hooks.on("createChatMessage", (message) => {
+  handleProfanadorSpellMessage(message).catch((error) => console.error(`${MODULE_ID} | Falha ao processar magia do Profanador`, error));
+});
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!enabled() || !Object.prototype.hasOwnProperty.call(changed ?? {}, "round") || !isPrimaryActiveGM()) return;
   if (Object.prototype.hasOwnProperty.call(changed ?? {}, "round")) {
@@ -772,6 +816,14 @@ Hooks.once("ready", () => {
       if (payload.requestId) handledProfanationRequests.add(payload.requestId);
       const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
       if (actor) await rollProfanationMagic(actor, payload.abilityId, true);
+      return;
+    }
+    if (payload?.type === "profanadorSpellRequest" && game.user.isGM && isPrimaryActiveGM()) {
+      if (payload.requestId && handledProfanadorSpellRequests.has(payload.requestId)) return;
+      if (payload.requestId) handledProfanadorSpellRequests.add(payload.requestId);
+      const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
+      const item = actor?.items?.get?.(payload.spellId);
+      if (actor && item) await triggerProfanadorSpell(actor, item);
       return;
     }
     if (payload?.type !== "assassinationRequest" || !game.user.isGM) return;
