@@ -158,12 +158,20 @@ function spellLevel(item) {
   return ["arcane", "divine", "necromancer", "illusionist"].map((key) => Number(item?.system?.[key])).find((level) => Number.isInteger(level) && level >= 1 && level <= 9) ?? null;
 }
 
-function spellItemFromMessage(actor, message) {
+function spellMessageData(message) {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = String(message?.content ?? "");
   const spell = wrapper.querySelector?.(".spell");
-  const itemId = spell?.dataset?.itemId;
-  return actor?.items?.get?.(itemId) ?? [...(actor?.items ?? [])].find((item) => item.type === "spell" && item.name === spell?.querySelector?.(".title strong")?.textContent?.trim());
+  return {
+    ownerId: spell?.dataset?.ownerId,
+    itemId: spell?.dataset?.itemId,
+    name: spell?.querySelector?.(".title strong")?.textContent?.trim()
+  };
+}
+
+function spellItemFromMessage(actor, message) {
+  const data = spellMessageData(message);
+  return actor?.items?.get?.(data.itemId) ?? [...(actor?.items ?? [])].find((item) => item.type === "spell" && item.name === data.name);
 }
 
 async function triggerProfanadorSpell(actor, item) {
@@ -181,9 +189,11 @@ async function triggerProfanadorSpell(actor, item) {
 }
 
 async function handleProfanadorSpellMessage(message) {
-  if (!enabled() || message?.getFlag?.(MODULE_ID, "profanadorSpellEffect") || !String(message?.content ?? "").includes('class="spell"')) return;
-  if (message.user?.id && message.user.id !== game.user.id) return;
-  const actor = game.actors?.get(message.speaker?.actor) ?? (message.speaker?.token ? canvas?.tokens?.get(message.speaker.token)?.actor : null);
+  if (!enabled() || message?.getFlag?.(MODULE_ID, "profanadorSpellEffect") || !/<div\s+class=["'][^"']*\bspell\b/i.test(String(message?.content ?? ""))) return;
+  const data = spellMessageData(message);
+  const actor = game.actors?.get(message.speaker?.actor)
+    ?? game.actors?.get(data.ownerId)
+    ?? (message.speaker?.token ? canvas?.tokens?.get(message.speaker.token)?.actor : null);
   const item = spellItemFromMessage(actor, message);
   if (!actor || !item) return;
   if (game.user.isGM) {
