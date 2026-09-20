@@ -191,9 +191,10 @@ async function triggerProfanadorSpell(actor, item) {
 }
 
 async function handleProfanadorSpellMessage(message, html = null) {
-  if (!enabled() || message?.getFlag?.(MODULE_ID, "profanadorSpellEffect") || !/<div\s+class=["'][^"']*\bspell\b/i.test(String(message?.content ?? ""))) return;
+  if (!enabled() || message?.getFlag?.(MODULE_ID, "profanadorSpellEffect")) return;
   if (message.id && handledProfanadorSpellMessages.has(message.id)) return;
   const data = spellMessageData(message, html);
+  if (!data.itemId && !data.name) return;
   const actor = game.actors?.get(message.speaker?.actor)
     ?? game.actors?.get(data.ownerId)
     ?? (message.speaker?.token ? canvas?.tokens?.get(message.speaker.token)?.actor : null);
