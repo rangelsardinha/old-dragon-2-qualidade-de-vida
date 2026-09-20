@@ -900,7 +900,8 @@ function getAttackFormula(actor, item, source, bonus, adjustment) {
       ?? api?.modifierDelta?.(targetActor, 'incoming.attack', defensiveContext) ?? 0)
       + (isDwarfEnemy(actor, actor.name) ? namedEffectModifier(targetActor, defensiveName, 'incoming.attack') : 0)
     : 0;
-  const effectBonus = offensiveBonus + defensiveBonus;
+  const paladinChaosPenalty = paladinChaosPenaltyFor(actor, targetActor);
+  const effectBonus = offensiveBonus + defensiveBonus + paladinChaosPenalty;
   if (namedEffectPresent(actor, offensiveName) || namedEffectPresent(targetActor, defensiveName)) {
     console.info(`${MODULE_ID} | Modificadores raciais`, { attacker: actor?.name, target: targetName, offensiveBonus, defensiveBonus, effectBonus });
   }
@@ -915,6 +916,24 @@ function getAttackFormula(actor, item, source, bonus, adjustment) {
   const baseAttack = ba === 'bad' ? actor.system.bad : actor.system.bac;
   const itemBonus = dataset.baBonus === '' || dataset.baBonus === true ? item.system.bonus_ba : 0;
   return joinFormulaTerms(['1d20', adjustmentValue(adjustedDifficulty), baseAttack, itemBonus, bonus, effectBonus]);
+}
+
+function normalizedAlignment(actor) {
+  return String(actor?.system?.alignment ?? actor?.system?.details?.alignment ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+}
+
+function isChaoticActor(actor) {
+  return /\bcaotico\b/.test(normalizedAlignment(actor));
+}
+
+function isPaladinTarget(actor) {
+  const className = actor?.system?.class?.name ?? actor?.items?.find?.((item) => item.type === "class")?.name ?? "";
+  return normalizedCreatureName(className).startsWith("paladino") && Number(actor?.system?.level) >= 6;
+}
+
+function paladinChaosPenaltyFor(attacker, target) {
+  return isPaladinTarget(target) && isChaoticActor(attacker) ? -2 : 0;
 }
 
 function normalizedCreatureName(value) {
