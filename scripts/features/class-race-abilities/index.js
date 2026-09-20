@@ -476,6 +476,9 @@ function isInspireAbilityName(name) {
   const normalized = normalizeAbilityName(name);
   return normalized === "inspirar" || normalized === "inspiracao" || normalized === "animal sagrado";
 }
+function isFuryAbilityName(name) {
+  return normalizeAbilityName(name) === "furia";
+}
 
 async function saveActorEffects(actor, effects) {
   const save = game.od2Qdv?.effects?.set;
@@ -545,6 +548,83 @@ async function useInspiration(actor) {
   }
   await actor.setFlag(MODULE_ID, "inspirationTargets", recipients.map((recipient) => recipient.uuid));
   await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: "<div class=\"title\">Usou a habilidade:<br><strong>Inspiração</strong></div>" });
+}
+
+function furyCandidates() {
+  const candidates = [];
+  const seen = new Set();
+  const add = (actor, group) => {
+    if (!actor?.uuid || seen.has(actor.uuid)) return;
+    seen.add(actor.uuid);
+    candidates.push({ actor, group, value: actor.uuid, label: actor.name });
+  };
+  for (const actor of game.actors ?? []) {
+    if (["character", "retainer"].includes(actor.type)) add(actor, "ally");
+  }
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    if (!token.actor) continue;
+    add(token.actor, ["character", "retainer"].includes(token.actor.type) ? "ally" : "enemy");
+  }
+  return candidates;
+}
+
+async function useFury(actor) {
+  if (actorLevel(actor) < 6) {
+    ui.notifications.warn("Fúria só pode ser usada a partir do 6º nível.");
+    return;
+  }
+  const candidates = furyCandidates();
+  const allies = candidates.filter((entry) => entry.group === "ally");
+  const enemies = candidates.filter((entry) => entry.group === "enemy");
+  const checkboxList = (name, entries) => entries.length
+    ? entries.map((entry) => `<label style="display:block"><input type="checkbox" name="${name}" value="${escapeHtml(entry.value)}"> ${escapeHtml(entry.label)}</label>`).join("")
+    : "<em>Nenhum ator disponível</em>";
+  const content = `<form><div class="form-group"><label>Aliados e jogadores beneficiados (+5 nos ataques e dado de dano elevado)</label>${checkboxList("ally", allies)}</div><p><em>Todos os inimigos ativos na cena receberão +2 para serem atingidos.</em></p></form>`;
+  const selected = Number(game.release?.generation ?? 13) >= 14
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar Fúria" }, content, ok: { label: "Aplicar", callback: (_event, button) => ({ allies: [...button.form.querySelectorAll('input[name="ally"]:checked')].map((input) => input.value) }) } })
+    : await Dialog.prompt({ title: "Usar Fúria", content, label: "Aplicar", callback: (html) => ({ allies: [...html[0].querySelectorAll('input[name="ally"]:checked')].map((input) => input.value) }), rejectClose: false });
+  if (!selected?.allies?.length && !enemies.length) return;
+  const classItem = actor.items.find((item) => item.type === "class");
+  const association = { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Xamã" };
+  const effects = [
+    effectTemplate({ name: "Fúria: Ataques", origin: "habilidade", association, key: "attack", mode: "add", value: 5 }),
+    effectTemplate({ name: "Fúria: Dano", origin: "habilidade", association, key: "damage.dieStep", mode: "add", value: 1 })
+  ];
+  const targets = [];
+  for (const uuid of [...(selected.allies ?? []), ...enemies.map((entry) => entry.value)]) {
+    const candidate = candidates.find((entry) => entry.value === uuid);
+    if (!candidate?.actor) continue;
+    const recipients = candidate.group === "ally"
+      ? [candidate.actor, ...[...(canvas?.tokens?.placeables ?? [])].filter((token) => token.document?.actorId === candidate.actor.id && token.actor).map((token) => token.actor)]
+      : [candidate.actor];
+    for (const recipient of recipients) {
+      if (targets.some((entry) => entry.uuid === recipient.uuid)) continue;
+      const recipientEffects = effects.map((effect) => ({ ...effect, id: `${effect.id}-${recipient.uuid}`, sourceActorUuid: actor.uuid }));
+      if (candidate.group === "enemy") recipientEffects.push({ ...effectTemplate({ name: "Fúria: Inimigo Exposto", origin: "habilidade", association, key: "incoming.attack", mode: "add", value: 2 }), id: `fury-incoming-${recipient.uuid}`, sourceActorUuid: actor.uuid });
+      const current = recipient.getFlag(MODULE_ID, "effects") ?? [];
+      await saveActorEffects(recipient, [...current.filter((entry) => !String(entry.name ?? "").startsWith("Fúria:") || entry.sourceActorUuid !== actor.uuid), ...recipientEffects]);
+      recipient.sheet?.render?.(false);
+      targets.push(recipient);
+    }
+  }
+  await actor.setFlag(MODULE_ID, "furyTargets", targets.map((target) => target.uuid));
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: "<div class=\"title\">Usou a habilidade:<br><strong>Fúria</strong></div><p>Aliados recebem +5 nos ataques e elevam o dado de dano em um passo. Inimigos selecionados recebem +2 para serem atingidos.</p>" });
+}
+
+async function removeFuryFromSource(sourceActor) {
+  if (!sourceActor) return;
+  const storedIds = sourceActor.getFlag(MODULE_ID, "furyTargets") ?? [];
+  const candidates = storedIds.length
+    ? (await Promise.all(storedIds.map(async (reference) => game.actors.get(reference) ?? fromUuid(reference).catch(() => null)))).filter(Boolean)
+    : [...(game.actors ?? [])];
+  for (const target of candidates) {
+    const current = target.getFlag(MODULE_ID, "effects") ?? [];
+    const filtered = current.filter((effect) => !String(effect.name ?? "").startsWith("Fúria:") || effect.sourceActorUuid !== sourceActor.uuid);
+    if (filtered.length !== current.length) await saveActorEffects(target, filtered);
+  }
+  await sourceActor.unsetFlag(MODULE_ID, "furyTargets");
+  sourceActor.sheet?.render?.(false);
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: sourceActor }), content: "<div class=\"title\">Encerrou o uso da <strong>Fúria</strong>.</div>" });
 }
 
 function dwarfEffects(actor) {
@@ -791,11 +871,20 @@ function enhanceAcademicAbilities(app, html) {
   if (isBard(actorClassName(actor)) || isShaman(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
-      if (!isInspireAbilityName(ability?.name) || row.querySelector("[data-inspiration-choice]")) continue;
-      const active = (actor.getFlag(MODULE_ID, "inspirationTargets") ?? []).length > 0;
-      const label = active ? "Parar inspiração" : "Usar inspiração";
-      const icon = active ? "fa-stop" : "fa-sparkles";
-      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-inspiration-choice data-inspiration-active="${active}"><i class="fas ${icon}"></i> ${label}</a></div>`);
+      if (isInspireAbilityName(ability?.name)) {
+        if (row.querySelector("[data-inspiration-choice]")) continue;
+        const active = (actor.getFlag(MODULE_ID, "inspirationTargets") ?? []).length > 0;
+        const label = active ? "Parar inspiração" : "Usar inspiração";
+        const icon = active ? "fa-stop" : "fa-sparkles";
+        (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-inspiration-choice data-inspiration-active="${active}"><i class="fas ${icon}"></i> ${label}</a></div>`);
+      }
+      if (isFuryAbilityName(ability?.name) && actorLevel(actor) >= 6) {
+        if (row.querySelector("[data-fury-choice]")) continue;
+        const active = (actor.getFlag(MODULE_ID, "furyTargets") ?? []).length > 0;
+        const label = active ? "Parar fúria" : "Usar fúria";
+        const icon = active ? "fa-stop" : "fa-fire";
+        (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-fury-choice data-fury-active="${active}"><i class="fas ${icon}"></i> ${label}</a></div>`);
+      }
     }
   }
   if (isDwarfAdventurerName(actorClassName(actor))) {
@@ -833,8 +922,9 @@ function enhanceAcademicAbilities(app, html) {
     const warriorMasteryChoice = event.target.closest?.("[data-warrior-mastery-choice]");
     const paladinMasteryChoice = event.target.closest?.("[data-paladin-mastery-choice]");
     const inspirationChoice = event.target.closest?.("[data-inspiration-choice]");
+    const furyChoice = event.target.closest?.("[data-fury-choice]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !profanationMagic) return;
+    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (halflingWeaponChoice) {
@@ -879,6 +969,14 @@ function enhanceAcademicAbilities(app, html) {
         if (game.user.isGM) await removeInspirationFromSource(actor);
         else game.socket.emit(SOCKET, { type: "inspirationRemove", actorId: actor.id, actorUuid: actor.uuid, userId: game.user.id });
       } else await useInspiration(actor);
+      app.render(false);
+      return;
+    }
+    if (furyChoice) {
+      if (furyChoice.dataset.furyActive === "true") {
+        if (game.user.isGM) await removeFuryFromSource(actor);
+        else game.socket.emit(SOCKET, { type: "furyRemove", actorId: actor.id, actorUuid: actor.uuid, userId: game.user.id });
+      } else await useFury(actor);
       app.render(false);
       return;
     }
@@ -952,9 +1050,16 @@ for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (i
   const recoveredInspiration = hook === "updateItem"
     && isInspireAbilityName(item?.name)
     && Object.values(changed?.flags?.olddragon2e?.["daily-uses"] ?? {}).some((value) => value === false);
+  const recoveredFury = hook === "updateItem"
+    && isFuryAbilityName(item?.name)
+    && Object.values(changed?.flags?.olddragon2e?.["daily-uses"] ?? {}).some((value) => value === false);
   if (enabled() && recoveredInspiration && (!userId || game.user?.id === userId)) {
     if (game.user.isGM) removeInspirationFromSource(item.parent);
     else game.socket.emit(SOCKET, { type: "inspirationRemove", actorId: item.parent?.id, actorUuid: item.parent?.uuid, userId: game.user.id });
+  }
+  if (enabled() && recoveredFury && (!userId || game.user?.id === userId)) {
+    if (game.user.isGM) removeFuryFromSource(item.parent);
+    else game.socket.emit(SOCKET, { type: "furyRemove", actorId: item.parent?.id, actorUuid: item.parent?.uuid, userId: game.user.id });
   }
   if (enabled() && (!userId || game.user?.id === userId) && item.parent?.type === "character" && ["class", "race"].includes(item.type)) syncDwarfEffects(item.parent);
 });
@@ -966,6 +1071,11 @@ Hooks.once("ready", () => {
     if (payload?.type === "inspirationRemove" && game.user.isGM) {
       const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
       if (actor) await removeInspirationFromSource(actor);
+      return;
+    }
+    if (payload?.type === "furyRemove" && game.user.isGM) {
+      const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
+      if (actor) await removeFuryFromSource(actor);
       return;
     }
     if (payload?.type === "profanationMagicRequest" && game.user.isGM && isPrimaryActiveGM()) {
