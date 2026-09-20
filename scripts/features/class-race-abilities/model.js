@@ -7,6 +7,7 @@ export const CLASS_RACE_ABILITIES = Object.freeze({
   miners: { label: "Mineradores", names: ["mineradores"] }
   , naturalPerception: { label: "Percepção Natural", names: ["percepcao natural"] },
   evaluators: { label: "Avaliadores", names: ["avaliadores"] },
+  cryptolete: { label: "Criptoleto", names: ["criptoleto"] },
   assassination: { label: "Assassinato", names: ["assassinato"] },
   climb: { label: "Escalar", names: ["escalar"] },
   naturalCamouflage: { label: "Camuflagem Natural", names: ["camuflagem natural"] },
@@ -37,6 +38,7 @@ export function abilityScore(key, level) {
     case "miners": return 2;
     case "naturalPerception": return 2;
     case "evaluators": return 4;
+    case "cryptolete": return 4;
     case "assassination": return currentLevel >= 10 ? 3 : currentLevel >= 6 ? 2 : 0;
     case "climb": return 3;
     case "naturalCamouflage": return 2;
