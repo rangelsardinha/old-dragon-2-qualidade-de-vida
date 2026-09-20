@@ -195,9 +195,15 @@ async function handleProfanadorSpellMessage(message, html = null) {
   if (message.id && handledProfanadorSpellMessages.has(message.id)) return;
   const data = spellMessageData(message, html);
   if (!data.itemId && !data.name) return;
-  const actor = game.actors?.get(message.speaker?.actor)
-    ?? game.actors?.get(data.ownerId)
-    ?? (message.speaker?.token ? canvas?.tokens?.get(message.speaker.token)?.actor : null);
+  // Tokens não vinculados podem ter classe e itens diferentes do ator-base.
+  // A mensagem contém ambos; priorizar o ator sintético que efetivamente conjurou.
+  const tokenActor = message.speaker?.token
+    ? canvas?.tokens?.get(message.speaker.token)?.actor
+      ?? game.scenes?.get(message.speaker.scene)?.tokens?.get(message.speaker.token)?.actor
+    : null;
+  const actor = tokenActor
+    ?? game.actors?.get(message.speaker?.actor)
+    ?? game.actors?.get(data.ownerId);
   const item = spellItemFromMessage(actor, message);
   if (!actor || !item) return;
   if (message.id) handledProfanadorSpellMessages.add(message.id);
