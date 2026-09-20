@@ -491,9 +491,6 @@ function isNaturalEnemyAbilityName(name) {
 function isOutcast(name) {
   return normalizeAbilityName(name).startsWith("proscrito");
 }
-function isCombatTrainingAbilityName(name) {
-  return normalizeAbilityName(name) === "treinamento em combate";
-}
 
 const NATURAL_ENEMY_CHOICES = [
   { label: "Orcs", conditionName: "orc|orcs" },
@@ -664,9 +661,10 @@ async function chooseNaturalEnemy(actor) {
 
 function outcastEffects(actor) {
   const cls = actor.items?.find?.((item) => item.type === "class");
-  const base = actor.getFlag(MODULE_ID, "combatTrainingAttackBase");
-  if (!isOutcast(actorClassName(actor)) || actorLevel(actor) < 3 || !["bac", "bad"].includes(base)) return [];
-  return [effectTemplate({ name: "Treinamento em combate", origin: "habilidade da classe", association: { type: "class", id: cls?.id, name: cls?.name || "Proscrito" }, key: base, mode: "add", value: 1 })];
+  if (!isOutcast(actorClassName(actor)) || actorLevel(actor) < 3) return [];
+  const effect = effectTemplate({ name: "Treinamento em combate", origin: "habilidade da classe", association: { type: "class", id: cls?.id, name: cls?.name || "Proscrito" }, key: "bac", mode: "add", value: 1 });
+  effect.modifiers.push({ key: "bad", mode: "add", value: 1 });
+  return [effect];
 }
 
 async function removeFuryFromSource(sourceActor) {
@@ -956,15 +954,6 @@ function enhanceAcademicAbilities(app, html) {
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-natural-enemy-choice><i class="fas fa-paw"></i> Inimigo natural: ${escapeHtml(selected?.label || "não escolhido")}</a></div>`);
     }
   }
-  if (isOutcast(actorClassName(actor)) && actorLevel(actor) >= 3) {
-    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
-      const ability = actor.items?.get?.(row.dataset.itemId);
-      if (!isCombatTrainingAbilityName(ability?.name) || row.querySelector("[data-combat-training-choice]")) continue;
-      const selected = actor.getFlag(MODULE_ID, "combatTrainingAttackBase");
-      const label = selected === "bac" ? "BAC" : selected === "bad" ? "BAD" : "escolher BAC ou BAD";
-      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-combat-training-choice><i class="fas fa-swords"></i> Treinamento em combate: ${label}</a></div>`);
-    }
-  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -1002,9 +991,8 @@ function enhanceAcademicAbilities(app, html) {
     const inspirationChoice = event.target.closest?.("[data-inspiration-choice]");
     const furyChoice = event.target.closest?.("[data-fury-choice]");
     const naturalEnemyChoice = event.target.closest?.("[data-natural-enemy-choice]");
-    const combatTrainingChoice = event.target.closest?.("[data-combat-training-choice]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !combatTrainingChoice && !profanationMagic) return;
+    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (halflingWeaponChoice) {
@@ -1062,18 +1050,6 @@ function enhanceAcademicAbilities(app, html) {
     }
     if (naturalEnemyChoice) {
       await chooseNaturalEnemy(actor);
-      app.render(false);
-      return;
-    }
-    if (combatTrainingChoice) {
-      const content = `<form><div class="form-group"><label>Base de ataque treinada</label><select name="base"><option value="bac">BAC — corpo a corpo</option><option value="bad">BAD — à distância</option></select></div></form>`;
-      const selected = Number(game.release?.generation ?? 13) >= 14
-        ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Treinamento em combate" }, content, ok: { label: "Confirmar", callback: (_event, dialogButton) => dialogButton.form.elements.base.value } })
-        : await Dialog.prompt({ title: "Treinamento em combate", content, label: "Confirmar", callback: (html) => html[0].querySelector("[name=base]").value, rejectClose: false });
-      if (selected) {
-        await actor.setFlag(MODULE_ID, "combatTrainingAttackBase", selected);
-        await syncDwarfEffects(actor);
-      }
       app.render(false);
       return;
     }
