@@ -28,6 +28,9 @@ function actorClassName(actor) {
 function isBard(name) {
   return ["bardo", "bardo athasiano"].includes(normalizeAbilityName(name));
 }
+function isShaman(name) {
+  return normalizeAbilityName(name).startsWith("xama");
+}
 function isCleric(name) { return normalizeAbilityName(name) === "clerigo" || normalizeAbilityName(name) === "clérigo"; }
 function actorRaceName(actor) { return actor?.system?.race?.name ?? actor?.items?.find?.((item) => item.type === "race")?.name ?? ""; }
 function actorLevel(actor) {
@@ -471,7 +474,7 @@ function isInspirationEffect(effect) {
 
 function isInspireAbilityName(name) {
   const normalized = normalizeAbilityName(name);
-  return normalized === "inspirar" || normalized === "inspiracao";
+  return normalized === "inspirar" || normalized === "inspiracao" || normalized === "animal sagrado";
 }
 
 async function saveActorEffects(actor, effects) {
@@ -521,8 +524,8 @@ async function useInspiration(actor) {
     ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar inspiração" }, content, ok: { label: "Aplicar", callback: (_e, button) => [...button.form.querySelectorAll('input[name="actor"]:checked')].map((input) => input.value) } })
     : await Dialog.prompt({ title: "Usar inspiração", content, label: "Aplicar", callback: (html) => [...html[0].querySelectorAll('input[name="actor"]:checked')].map((input) => input.value), rejectClose: false });
   if (!ids?.length) return;
-  const bardClass = actor.items.find((item) => item.type === "class");
-  const effect = effectTemplate({ name: "Inspiração", origin: "habilidade", association: { type: "class", id: bardClass?.id, name: bardClass?.name || actorClassName(actor) || "Bardo" }, key: "test.difficulty", mode: "add", value: -1 });
+  const classItem = actor.items.find((item) => item.type === "class");
+  const effect = effectTemplate({ name: "Inspiração", origin: "habilidade", association: { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Bardo" }, key: "test.difficulty", mode: "add", value: -1 });
   effect.id = `inspiration-${actor.id}`;
   effect.sourceActorUuid = actor.uuid;
   const recipients = [];
@@ -735,6 +738,8 @@ function enhanceAcademicAbilities(app, html) {
     // Afastar Mortos-vivos é disparado pelo registro de uso nativo da habilidade;
     // não adicionar um botão extra na ficha.
     if (key === "turnUndead") continue;
+    // Inspiração/Animal Sagrado usa um seletor de personagens, não um teste de 1d6.
+    if (key === "inspiration") continue;
     if (key === "profanationMagic") {
       const current = row.querySelector("[data-profanation-magic]");
       const history = profanationHistoryHtml(profanationDates(actor, row.dataset.itemId));
@@ -783,7 +788,7 @@ function enhanceAcademicAbilities(app, html) {
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-paladin-mastery-choice><i class="fas fa-sword"></i> Arma de maestria: ${escapeHtml(selected)}</a></div>`);
     }
   }
-  if (isBard(actorClassName(actor))) {
+  if (isBard(actorClassName(actor)) || isShaman(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
       if (!isInspireAbilityName(ability?.name) || row.querySelector("[data-inspiration-choice]")) continue;
