@@ -129,7 +129,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 
 ### Integração com Dark Sun
 
-- Detecta automaticamente módulos Dark Sun ativos na versão 1.0.4 ou superior.
+- Detecta automaticamente módulos Dark Sun ativos na versão 1.0.7 ou superior.
 - Acrescenta raças e classes dos compêndios Dark Sun ao gerador de personagens, identificando sua origem nas listas.
 - Acrescenta magias Dark Sun às fontes do gerador de pergaminhos, isoladamente ou combinadas com SRD e Tomo de Magia.
 - Equipamentos, recipientes, munições, inventários de monstros e automação de combate funcionam com itens Dark Sun sem configuração adicional.

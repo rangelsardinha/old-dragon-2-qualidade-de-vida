@@ -1,4 +1,4 @@
-const MINIMUM_VERSION = "1.0.4";
+const MINIMUM_VERSION = "1.0.7";
 
 function normalized(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
