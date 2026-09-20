@@ -527,24 +527,24 @@ async function removeInspirationFromSource(sourceActor) {
 }
 
 async function useInspiration(actor) {
-  const actors = [...(game.actors ?? [])].filter((entry) => entry.type === "character");
-  const content = `<form><div class="form-group"><label>Personagens beneficiados</label>${actors.map((entry) => `<label style="display:block"><input type="checkbox" name="actor" value="${entry.id}"> ${escapeHtml(entry.name)}</label>`).join("")}</div></form>`;
-  const ids = Number(game.release?.generation ?? 13) >= 14
+  const candidates = furyCandidates();
+  const content = `<form><div class="form-group"><label>Atores beneficiados</label>${candidates.length ? candidates.map((entry) => `<label style="display:block"><input type="checkbox" name="actor" value="${escapeHtml(entry.value)}"> ${escapeHtml(entry.label)}</label>`).join("") : "<em>Nenhum ator disponível</em>"}</div></form>`;
+  const selected = Number(game.release?.generation ?? 13) >= 14
     ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar inspiração" }, content, ok: { label: "Aplicar", callback: (_e, button) => [...button.form.querySelectorAll('input[name="actor"]:checked')].map((input) => input.value) } })
     : await Dialog.prompt({ title: "Usar inspiração", content, label: "Aplicar", callback: (html) => [...html[0].querySelectorAll('input[name="actor"]:checked')].map((input) => input.value), rejectClose: false });
-  if (!ids?.length) return;
+  if (!selected?.length) return;
   const classItem = actor.items.find((item) => item.type === "class");
   const effect = effectTemplate({ name: "Inspiração", origin: "habilidade", association: { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Bardo" }, key: "test.difficulty", mode: "add", value: 1 });
   effect.id = `inspiration-${actor.id}`;
   effect.sourceActorUuid = actor.uuid;
   const recipients = [];
-  for (const id of ids) {
-    const target = game.actors.get(id);
-    if (!target) continue;
-    const tokenActors = [...(canvas?.tokens?.placeables ?? [])]
-      .filter((token) => token.document?.actorId === target.id && token.actor)
+  for (const uuid of selected) {
+    const candidate = candidates.find((entry) => entry.value === uuid);
+    if (!candidate?.actor) continue;
+    const tokenActors = candidate.isToken ? [] : [...(canvas?.tokens?.placeables ?? [])]
+      .filter((token) => token.document?.actorId === candidate.actor.id && token.actor)
       .map((token) => token.actor);
-    for (const recipient of [target, ...tokenActors]) {
+    for (const recipient of [candidate.actor, ...tokenActors]) {
       if (recipients.some((entry) => entry.uuid === recipient.uuid)) continue;
       recipients.push(recipient);
       const current = recipient.getFlag(MODULE_ID, "effects") ?? [];
@@ -560,17 +560,17 @@ async function useInspiration(actor) {
 function furyCandidates() {
   const candidates = [];
   const seen = new Set();
-  const add = (actor, group) => {
+  const add = (actor, group, isToken = false) => {
     if (!actor?.uuid || seen.has(actor.uuid)) return;
     seen.add(actor.uuid);
-    candidates.push({ actor, group, value: actor.uuid, label: actor.name });
+    candidates.push({ actor, group, isToken, value: actor.uuid, label: actor.name });
   };
   for (const actor of game.actors ?? []) {
     if (["character", "retainer"].includes(actor.type)) add(actor, "ally");
   }
   for (const token of canvas?.tokens?.placeables ?? []) {
     if (!token.actor) continue;
-    add(token.actor, ["character", "retainer"].includes(token.actor.type) ? "ally" : "enemy");
+    add(token.actor, ["character", "retainer"].includes(token.actor.type) ? "ally" : "enemy", true);
   }
   return candidates;
 }
@@ -586,11 +586,11 @@ async function useFury(actor) {
   const checkboxList = (name, entries) => entries.length
     ? entries.map((entry) => `<label style="display:block"><input type="checkbox" name="${name}" value="${escapeHtml(entry.value)}"> ${escapeHtml(entry.label)}</label>`).join("")
     : "<em>Nenhum ator disponível</em>";
-  const content = `<form><div class="form-group"><label>Aliados e jogadores beneficiados (+5 nos ataques e dado de dano elevado)</label>${checkboxList("ally", allies)}</div><p><em>Todos os inimigos ativos na cena receberão +2 para serem atingidos.</em></p></form>`;
+  const content = `<form><div class="form-group"><label>Aliados e jogadores beneficiados (+5 nos ataques e dado de dano elevado)</label>${checkboxList("ally", allies)}</div><div class="form-group"><label>Inimigos afetados (+2 para serem atingidos)</label>${checkboxList("enemy", enemies)}</div></form>`;
   const selected = Number(game.release?.generation ?? 13) >= 14
-    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar Fúria" }, content, ok: { label: "Aplicar", callback: (_event, button) => ({ allies: [...button.form.querySelectorAll('input[name="ally"]:checked')].map((input) => input.value) }) } })
-    : await Dialog.prompt({ title: "Usar Fúria", content, label: "Aplicar", callback: (html) => ({ allies: [...html[0].querySelectorAll('input[name="ally"]:checked')].map((input) => input.value) }), rejectClose: false });
-  if (!selected?.allies?.length && !enemies.length) return;
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Usar Fúria" }, content, ok: { label: "Aplicar", callback: (_event, button) => ({ allies: [...button.form.querySelectorAll('input[name="ally"]:checked')].map((input) => input.value), enemies: [...button.form.querySelectorAll('input[name="enemy"]:checked')].map((input) => input.value) }) } })
+    : await Dialog.prompt({ title: "Usar Fúria", content, label: "Aplicar", callback: (html) => ({ allies: [...html[0].querySelectorAll('input[name="ally"]:checked')].map((input) => input.value), enemies: [...html[0].querySelectorAll('input[name="enemy"]:checked')].map((input) => input.value) }), rejectClose: false });
+  if (!selected?.allies?.length && !selected?.enemies?.length) return;
   const classItem = actor.items.find((item) => item.type === "class");
   const association = { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Xamã" };
   const effects = [
@@ -598,10 +598,10 @@ async function useFury(actor) {
     effectTemplate({ name: "Fúria: Dano", origin: "habilidade", association, key: "damage.dieStep", mode: "add", value: 1 })
   ];
   const targets = [];
-  for (const uuid of [...(selected.allies ?? []), ...enemies.map((entry) => entry.value)]) {
+  for (const uuid of [...(selected.allies ?? []), ...(selected.enemies ?? [])]) {
     const candidate = candidates.find((entry) => entry.value === uuid);
     if (!candidate?.actor) continue;
-    const recipients = candidate.group === "ally"
+    const recipients = candidate.group === "ally" && !candidate.isToken
       ? [candidate.actor, ...[...(canvas?.tokens?.placeables ?? [])].filter((token) => token.document?.actorId === candidate.actor.id && token.actor).map((token) => token.actor)]
       : [candidate.actor];
     for (const recipient of recipients) {
