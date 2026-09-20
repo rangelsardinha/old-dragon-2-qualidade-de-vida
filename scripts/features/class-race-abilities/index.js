@@ -32,6 +32,7 @@ function isShaman(name) {
   return normalizeAbilityName(name).startsWith("xama");
 }
 function isCleric(name) { return normalizeAbilityName(name) === "clerigo" || normalizeAbilityName(name) === "clérigo"; }
+function isTemplar(name) { return normalizeAbilityName(name).startsWith("templario"); }
 function actorRaceName(actor) { return actor?.system?.race?.name ?? actor?.items?.find?.((item) => item.type === "race")?.name ?? ""; }
 function actorLevel(actor) {
   const classItem = actor?.items?.find?.((item) => item.type === "class");
@@ -392,6 +393,19 @@ async function rollAbility(actor, key, fromSocket = false, requestedLevel = null
   if (key === "assassination" && !success) await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), whisper: (game.users ?? []).filter((user) => user.isGM).map((user) => user.id), content: "O alvo não recebe dano e fica imune a um novo Assassinato até o Assassino evoluir para o próximo nível." });
 }
 
+async function rollPatrolConvocation(actor) {
+  const roll = new Roll("1d4");
+  if (Number(game.release?.generation ?? 13) >= 14) await roll.evaluate();
+  else await roll.roll({ async: true });
+  const count = Number(roll.total) || 0;
+  const soldiers = count === 1 ? "soldado templário" : "soldados templários";
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    rolls: [roll],
+    content: `<strong>Convocar Patrulha</strong><p>Convocado ${count} ${soldiers} de sua cidade-estado, de qualquer nível menor que o seu.</p><p>Esses soldados não podem deixar suas cidades sem a permissão do rei feiticeiro.</p><p>Os Templários só poderão solicitar ajuda novamente quando voltarem.</p><p>Quando os soldados estão com os Templários, eles são como mercenários.</p>`
+  });
+}
+
 async function rollTurnUndead(actor, level) {
   const origin = actor.getActiveTokens?.()[0] ?? null;
   if (!origin || !canvas?.tokens) return ui.notifications.warn("O clérigo precisa estar representado por um token.");
@@ -487,6 +501,9 @@ function isRanger(name) {
 }
 function isNaturalEnemyAbilityName(name) {
   return normalizeAbilityName(name) === "inimigo mortal";
+}
+function isPatrolConvocationAbilityName(name) {
+  return normalizeAbilityName(name) === "convocar patrulha";
 }
 function isOutcast(name) {
   return normalizeAbilityName(name).startsWith("proscrito");
@@ -954,6 +971,13 @@ function enhanceAcademicAbilities(app, html) {
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-natural-enemy-choice><i class="fas fa-paw"></i> Inimigo natural: ${escapeHtml(selected?.label || "não escolhido")}</a></div>`);
     }
   }
+  if (isTemplar(actorClassName(actor))) {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      if (!isPatrolConvocationAbilityName(ability?.name) || row.querySelector("[data-patrol-convocation]")) continue;
+      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-patrol-convocation title="Rolar Convocar Patrulha"><i class="fa-light fa-dice-d4 fa-sm"></i>&nbsp;Convocar Patrulha (1d4)</a></div>`);
+    }
+  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -991,8 +1015,9 @@ function enhanceAcademicAbilities(app, html) {
     const inspirationChoice = event.target.closest?.("[data-inspiration-choice]");
     const furyChoice = event.target.closest?.("[data-fury-choice]");
     const naturalEnemyChoice = event.target.closest?.("[data-natural-enemy-choice]");
+    const patrolConvocation = event.target.closest?.("[data-patrol-convocation]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !profanationMagic) return;
+    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (halflingWeaponChoice) {
@@ -1051,6 +1076,11 @@ function enhanceAcademicAbilities(app, html) {
     if (naturalEnemyChoice) {
       await chooseNaturalEnemy(actor);
       app.render(false);
+      return;
+    }
+    if (patrolConvocation) {
+      patrolConvocation.classList.add("rolling");
+      try { await rollPatrolConvocation(actor); } finally { patrolConvocation.classList.remove("rolling"); }
       return;
     }
     if (profanationMagic) {
