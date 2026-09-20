@@ -87,8 +87,8 @@ async function saveProfanationDate(actor, abilityId) {
 function normalizeText(value) { return normalizeAbilityName(value); }
 
 async function profanationTable() {
-  const pack = darkSunPacks("RollTable").find((entry) => normalizeText(entry.metadata?.name ?? entry.metadata?.label) === "tabelas")
-    ?? game.packs?.get("dark-sun-old-dragon-2.tabelas");
+  // darkSunPacks já filtra o módulo pela versão mínima e mantém o Dark Sun opcional.
+  const pack = darkSunPacks("RollTable").find((entry) => normalizeText(entry.metadata?.name ?? entry.metadata?.label) === "tabelas");
   if (!pack) return null;
   const documents = await pack.getDocuments();
   return documents.find((table) => normalizeText(table.name) === "efeitos de profanacao de magia")
