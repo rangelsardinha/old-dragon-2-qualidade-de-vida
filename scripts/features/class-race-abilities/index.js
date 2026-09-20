@@ -7,6 +7,7 @@ const SOCKET = `module.${MODULE_ID}`;
 const handledAssassinationRequests = new Set();
 const handledProfanationRequests = new Set();
 const handledProfanadorSpellRequests = new Set();
+const handledProfanadorSpellMessages = new Set();
 const previousCombatants = new WeakMap();
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
@@ -158,10 +159,11 @@ function spellLevel(item) {
   return ["arcane", "divine", "necromancer", "illusionist"].map((key) => Number(item?.system?.[key])).find((level) => Number.isInteger(level) && level >= 1 && level <= 9) ?? null;
 }
 
-function spellMessageData(message) {
+function spellMessageData(message, html = null) {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = String(message?.content ?? "");
-  const spell = wrapper.querySelector?.(".spell");
+  const renderedSpell = rootElement(html)?.querySelector?.(".spell");
+  const spell = renderedSpell ?? wrapper.querySelector?.(".spell");
   return {
     ownerId: spell?.dataset?.ownerId,
     itemId: spell?.dataset?.itemId,
@@ -188,14 +190,16 @@ async function triggerProfanadorSpell(actor, item) {
   await table.draw({ displayChat: true, rollMode: "roll" });
 }
 
-async function handleProfanadorSpellMessage(message) {
+async function handleProfanadorSpellMessage(message, html = null) {
   if (!enabled() || message?.getFlag?.(MODULE_ID, "profanadorSpellEffect") || !/<div\s+class=["'][^"']*\bspell\b/i.test(String(message?.content ?? ""))) return;
-  const data = spellMessageData(message);
+  if (message.id && handledProfanadorSpellMessages.has(message.id)) return;
+  const data = spellMessageData(message, html);
   const actor = game.actors?.get(message.speaker?.actor)
     ?? game.actors?.get(data.ownerId)
     ?? (message.speaker?.token ? canvas?.tokens?.get(message.speaker.token)?.actor : null);
   const item = spellItemFromMessage(actor, message);
   if (!actor || !item) return;
+  if (message.id) handledProfanadorSpellMessages.add(message.id);
   if (game.user.isGM) {
     if (isPrimaryActiveGM()) await triggerProfanadorSpell(actor, item);
     return;
@@ -773,6 +777,9 @@ Hooks.on("createChatMessage", (message) => {
 });
 Hooks.on("createChatMessage", (message) => {
   handleProfanadorSpellMessage(message).catch((error) => console.error(`${MODULE_ID} | Falha ao processar magia do Profanador`, error));
+});
+Hooks.on("renderChatMessage", (message, html) => {
+  handleProfanadorSpellMessage(message, html).catch((error) => console.error(`${MODULE_ID} | Falha ao processar cartão de magia do Profanador`, error));
 });
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!enabled() || !Object.prototype.hasOwnProperty.call(changed ?? {}, "round") || !isPrimaryActiveGM()) return;
