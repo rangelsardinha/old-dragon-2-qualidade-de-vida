@@ -528,7 +528,7 @@ async function useInspiration(actor) {
     : await Dialog.prompt({ title: "Usar inspiração", content, label: "Aplicar", callback: (html) => [...html[0].querySelectorAll('input[name="actor"]:checked')].map((input) => input.value), rejectClose: false });
   if (!ids?.length) return;
   const classItem = actor.items.find((item) => item.type === "class");
-  const effect = effectTemplate({ name: "Inspiração", origin: "habilidade", association: { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Bardo" }, key: "test.difficulty", mode: "add", value: -1 });
+  const effect = effectTemplate({ name: "Inspiração", origin: "habilidade", association: { type: "class", id: classItem?.id, name: classItem?.name || actorClassName(actor) || "Bardo" }, key: "test.difficulty", mode: "add", value: 1 });
   effect.id = `inspiration-${actor.id}`;
   effect.sourceActorUuid = actor.uuid;
   const recipients = [];
