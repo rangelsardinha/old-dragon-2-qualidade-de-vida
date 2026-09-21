@@ -6,10 +6,12 @@ const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const PARENT_FLAG = "parentContainerId";
 const COINS_FLAG = "containerCoins";
 const EQUIPPED_AMMO_FLAG = "allowEquippedAmmunition";
+const WATERSKIN_FULL_FLAG = "waterskinFull";
 const COIN_LABELS = { gp: "PO", sp: "PP", cp: "PC" };
 const INVENTORY_TYPES = new Set(["weapon", "armor", "shield", "misc", "container", "vehicle"]);
 const boundActorSheets = new WeakSet();
 const boundItemSheets = new WeakSet();
+const boundWaterskinSheets = new WeakSet();
 
 function enabled() {
   if (game.system.id !== "olddragon2e") return false;
@@ -20,6 +22,34 @@ function enabled() {
 function rootElement(html) {
   if (html instanceof HTMLElement) return html;
   return html?.[0] ?? html;
+}
+
+function normalizedName(value) {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
+}
+
+function isWaterskin(item) {
+  return /^odre(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
+}
+
+function enhanceWaterskinSheet(app, root) {
+  const item = app.item ?? app.document;
+  if (!isWaterskin(item) || !item?.isOwner || root.querySelector("[data-od2qdv-waterskin-full]")) return;
+  const form = root.matches?.("form") ? root : root.querySelector("form");
+  if (!form) return;
+  const field = document.createElement("div");
+  field.className = "form-group od2qdv-waterskin-state";
+  field.innerHTML = `<label>Estado do odre</label><label class="checkbox"><input type="checkbox" data-od2qdv-waterskin-full ${item.getFlag(MODULE_ID, WATERSKIN_FULL_FLAG) === true ? "checked" : ""}> Cheio</label><p class="hint">Desmarcado, o odre é considerado vazio.</p>`;
+  const footer = form.querySelector("footer, .form-footer");
+  if (footer) footer.before(field);
+  else form.append(field);
+  if (boundWaterskinSheets.has(root)) return;
+  boundWaterskinSheets.add(root);
+  root.addEventListener("change", async (event) => {
+    if (!event.target.matches?.("[data-od2qdv-waterskin-full]")) return;
+    event.stopPropagation();
+    await item.setFlag(MODULE_ID, WATERSKIN_FULL_FLAG, event.target.checked);
+  });
 }
 
 function parentId(item) {
@@ -404,8 +434,12 @@ async function saveCoins(container, panel) {
 }
 
 function enhanceItemSheet(app, html) {
-  if (!enabled() || app.item?.type !== "container" || !app.item.actor || !app.item.isOwner) return;
+  if (game.system.id !== "olddragon2e") return;
   const root = rootElement(html);
+  if (!root) return;
+  enhanceWaterskinSheet(app, root);
+  if (!enabled()) return;
+  if (app.item?.type !== "container" || !app.item.actor || !app.item.isOwner) return;
   if (!root || root.querySelector(".od2qdv-container-sheet")) return;
   const form = root.matches?.("form") ? root : root.querySelector("form");
   if (!form) return;

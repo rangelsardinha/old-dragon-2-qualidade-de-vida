@@ -839,7 +839,7 @@ function managerContent(actor) {
   const temporary = effects.filter((effect) => effect.enabled && effect.duration.type !== "permanent");
   const passive = effects.filter((effect) => effect.enabled && effect.duration.type === "permanent");
   const inactive = effects.filter((effect) => !effect.enabled);
-  return `<div class="od2qdv-effect-manager"><div class="od2qdv-effect-toolbar"><button type="button" data-effect-rest><i class="fas fa-bed"></i> Concluir descanso</button></div><table>${effectGroup("Efeitos Temporários", "temporary", temporary)}${effectGroup("Efeitos Passivos", "passive", passive)}${effectGroup("Efeitos Inativos", "inactive", inactive)}</table></div>`;
+  return `<div class="od2qdv-effect-manager"><table>${effectGroup("Efeitos Temporários", "temporary", temporary)}${effectGroup("Efeitos Passivos", "passive", passive)}${effectGroup("Efeitos Inativos", "inactive", inactive)}</table></div>`;
 }
 
 async function openManager(actor) {
@@ -847,7 +847,6 @@ async function openManager(actor) {
   const V2 = dialogV2();
   const bind = (root, close) => {
     bindEffectLibraryDrop(root, actor, () => { close(); openManager(actor); });
-    root.querySelector("[data-effect-rest]")?.addEventListener("click", async () => { await completeActorRest(actor); close(); openManager(actor); });
     root.querySelectorAll("[data-effect-create]").forEach((button) => button.addEventListener("click", async () => { if (await editEffect(actor, newEffectForCategory(button.dataset.effectCreate))) { close(); openManager(actor); } }));
     root.querySelector(".od2qdv-effect-manager table")?.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-effect-action]");
@@ -926,14 +925,6 @@ function enhanceEffectTab(app, html) {
       event.preventDefault(); activateEffectTab(app, root); return;
     }
     if (event.target.closest('nav.tabs[data-group="primary-tabs"] .item')) app._od2QdvEffectTabActive = false;
-    const rest = event.target.closest("[data-effect-rest]");
-    if (rest) {
-      event.preventDefault(); event.stopPropagation();
-      await completeActorRest(actor);
-      app._od2QdvEffectTabActive = true;
-      app.render(false);
-      return;
-    }
     const create = event.target.closest("[data-effect-create]");
     if (create) {
       event.preventDefault(); event.stopPropagation();
