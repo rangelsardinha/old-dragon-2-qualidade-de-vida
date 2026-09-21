@@ -44,14 +44,14 @@ function candidateActors() {
   const actors = new Map();
   for (const actor of game.actors ?? []) if (actor.type === "character") actors.set(actor.uuid, actor);
   for (const token of canvas?.scene?.tokens ?? []) {
-    const actor = token.actor;
+    const actor = game.actors?.get(token.actorId) ?? token.actor;
     if (actor?.type === "character" && !actors.has(actor.uuid)) actors.set(actor.uuid, actor);
   }
   return [...actors.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }
 
 function selectedByDefault(actor) {
-  return Boolean(canvas?.tokens?.controlled?.some((token) => token.actor?.uuid === actor.uuid));
+  return Boolean(canvas?.tokens?.controlled?.some((token) => token.actor?.uuid === actor.uuid || token.document?.actorId === actor.id));
 }
 
 async function chooseActors() {
@@ -141,24 +141,33 @@ async function resourceChoices(actors, type, { darkSun = false } = {}) {
   }).render(true));
 }
 
-async function emptyWaterskins(actor, requested) {
+async function updateActorItem(actor, item, changes) {
+  const updated = await actor.updateEmbeddedDocuments("Item", [{ _id: item.id, ...changes }]);
+  return updated?.[0] ?? actor.items?.get?.(item.id) ?? null;
+}
+
+export async function emptyWaterskins(actor, requested) {
   let remaining = Math.max(0, Math.trunc(Number(requested) || 0));
   let emptied = 0;
   for (const item of actor.items.filter(isWaterskin)) {
     if (!remaining) break;
-    const result = emptyWaterskinStates(waterskinStates(item), remaining);
+    const previousStates = waterskinStates(item);
+    const result = emptyWaterskinStates(previousStates, remaining);
     if (!result.emptied) continue;
-    await item.update({
+    const updatedItem = await updateActorItem(actor, item, {
       [`flags.${MODULE_ID}.${WATERSKIN_STATES_FLAG}`]: result.states,
       [`flags.${MODULE_ID}.${WATERSKIN_FULL_FLAG}`]: result.states.length > 0 && result.states.every(Boolean)
     });
-    emptied += result.emptied;
-    remaining -= result.emptied;
+    if (!updatedItem) continue;
+    const persistedStates = waterskinStates(updatedItem);
+    const persisted = Math.max(0, previousStates.filter(Boolean).length - persistedStates.filter(Boolean).length);
+    emptied += persisted;
+    remaining -= persisted;
   }
   return emptied;
 }
 
-async function consumeRations(actor, requested) {
+export async function consumeRations(actor, requested) {
   let remaining = Math.max(0, Math.trunc(Number(requested) || 0));
   let consumed = 0;
   for (const item of rations(actor)) {
@@ -167,10 +176,17 @@ async function consumeRations(actor, requested) {
     const amount = Math.min(quantity, remaining);
     if (!amount) continue;
     const nextQuantity = Math.max(0, quantity - amount);
-    if (nextQuantity === 0) await actor.deleteEmbeddedDocuments("Item", [item.id]);
-    else await item.update({ "system.quantity": nextQuantity });
-    consumed += amount;
-    remaining -= amount;
+    let persisted = 0;
+    if (nextQuantity === 0) {
+      const deleted = await actor.deleteEmbeddedDocuments("Item", [item.id]);
+      const stillExists = actor.items?.get?.(item.id) ?? actor.items?.find?.((entry) => entry.id === item.id);
+      if (deleted?.length || !stillExists) persisted = quantity;
+    } else {
+      const updatedItem = await updateActorItem(actor, item, { "system.quantity": nextQuantity });
+      if (updatedItem) persisted = Math.max(0, quantity - itemQuantity(updatedItem));
+    }
+    consumed += persisted;
+    remaining -= persisted;
   }
   return consumed;
 }
