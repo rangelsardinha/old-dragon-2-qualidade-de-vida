@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, isAmmunition, normalizeCoins, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
+import { actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, emptyWaterskinStates, isAmmunition, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
 import { curseForRoll, selectRandomSpells } from "../scripts/features/scroll-generator/model.js";
 
 const items = [
@@ -55,6 +55,12 @@ test("permite transferir recipientes para personagens e ajudantes", () => {
   assert.equal(canReceiveContainer({ type: "retainer" }), true);
   assert.equal(canReceiveContainer({ type: "monster" }), true);
   assert.equal(canReceiveContainer({ type: "vehicle" }), false);
+});
+
+test("controla o estado individual dos odres de uma pilha", () => {
+  assert.deepEqual(normalizeWaterskinStates(3, undefined, true), [true, true, true]);
+  assert.deepEqual(normalizeWaterskinStates(4, [true, false], false), [true, false, false, false]);
+  assert.deepEqual(emptyWaterskinStates([true, false, true, true], 2), { states: [false, false, false, true], emptied: 2 });
 });
 
 test("lista os usuários proprietários do ator sem incluir Mestres", () => {

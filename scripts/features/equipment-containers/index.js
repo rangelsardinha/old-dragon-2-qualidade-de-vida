@@ -1,5 +1,5 @@
 import {
-  COIN_KEYS, actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, descendantIds, isAmmunition, normalizeCoins, subtractCoins, sumAllocatedCoins, wouldCreateCycle
+  COIN_KEYS, actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, descendantIds, isAmmunition, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
 } from "./model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
@@ -7,6 +7,7 @@ const PARENT_FLAG = "parentContainerId";
 const COINS_FLAG = "containerCoins";
 const EQUIPPED_AMMO_FLAG = "allowEquippedAmmunition";
 const WATERSKIN_FULL_FLAG = "waterskinFull";
+const WATERSKIN_STATES_FLAG = "waterskinStates";
 const COIN_LABELS = { gp: "PO", sp: "PP", cp: "PC" };
 const INVENTORY_TYPES = new Set(["weapon", "armor", "shield", "misc", "container", "vehicle"]);
 const boundActorSheets = new WeakSet();
@@ -38,21 +39,30 @@ function canContainItems(item) {
 
 function enhanceWaterskinSheet(app, root) {
   const item = app.item ?? app.document;
-  if (!isWaterskin(item) || !item?.isOwner || root.querySelector("[data-od2qdv-waterskin-full]")) return;
+  if (!isWaterskin(item) || !item?.isOwner || root.querySelector("[data-od2qdv-waterskin-states]")) return;
   const form = root.matches?.("form") ? root : root.querySelector("form");
   if (!form) return;
+  const quantity = item.system?.quantity == null ? 1 : Math.max(0, Math.trunc(Number(item.system.quantity) || 0));
+  const states = normalizeWaterskinStates(quantity, item.getFlag(MODULE_ID, WATERSKIN_STATES_FLAG), item.getFlag(MODULE_ID, WATERSKIN_FULL_FLAG));
   const field = document.createElement("div");
   field.className = "form-group od2qdv-waterskin-state";
-  field.innerHTML = `<label>Estado do odre</label><label class="checkbox"><input type="checkbox" data-od2qdv-waterskin-full ${item.getFlag(MODULE_ID, WATERSKIN_FULL_FLAG) === true ? "checked" : ""}> Cheio</label><p class="hint">Desmarcado, o odre é considerado vazio.</p>`;
+  field.dataset.od2qdvWaterskinStates = "true";
+  field.innerHTML = `<label>Estado dos odres</label><div class="od2qdv-waterskin-units">${states.length ? states.map((full, index) => `<label class="checkbox"><input type="checkbox" data-od2qdv-waterskin-index="${index}" ${full ? "checked" : ""}><span>Odre ${index + 1}: ${full ? "cheio" : "vazio"}</span></label>`).join("") : "<em>Nenhum odre nesta pilha.</em>"}</div><p class="hint">Cada checkbox representa um odre da quantidade deste item.</p>`;
   const footer = form.querySelector("footer, .form-footer");
   if (footer) footer.before(field);
   else form.append(field);
   if (boundWaterskinSheets.has(root)) return;
   boundWaterskinSheets.add(root);
   root.addEventListener("change", async (event) => {
-    if (!event.target.matches?.("[data-od2qdv-waterskin-full]")) return;
+    if (!event.target.matches?.("[data-od2qdv-waterskin-index]")) return;
     event.stopPropagation();
-    await item.setFlag(MODULE_ID, WATERSKIN_FULL_FLAG, event.target.checked);
+    event.target.nextElementSibling.textContent = `Odre ${Number(event.target.dataset.od2qdvWaterskinIndex) + 1}: ${event.target.checked ? "cheio" : "vazio"}`;
+    const checkboxes = [...root.querySelectorAll("[data-od2qdv-waterskin-index]")].sort((left, right) => Number(left.dataset.od2qdvWaterskinIndex) - Number(right.dataset.od2qdvWaterskinIndex));
+    const next = checkboxes.map((checkbox) => checkbox.checked);
+    await item.update({
+      [`flags.${MODULE_ID}.${WATERSKIN_STATES_FLAG}`]: next,
+      [`flags.${MODULE_ID}.${WATERSKIN_FULL_FLAG}`]: next.length > 0 && next.every(Boolean)
+    });
   });
 }
 

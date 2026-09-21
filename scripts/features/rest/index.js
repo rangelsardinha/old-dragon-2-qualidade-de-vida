@@ -1,7 +1,9 @@
 import { darkSunEnabled } from "../../integrations/dark-sun.js";
+import { emptyWaterskinStates, normalizeWaterskinStates } from "../equipment-containers/model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const WATERSKIN_FULL_FLAG = "waterskinFull";
+const WATERSKIN_STATES_FLAG = "waterskinStates";
 
 function rootOf(html) {
   return html instanceof HTMLElement ? html : html?.[0];
@@ -99,8 +101,12 @@ async function askSource(title, question) {
   }).render(true));
 }
 
-function fullWaterskins(actor) {
-  return actor.items.filter((item) => isWaterskin(item) && item.getFlag(MODULE_ID, WATERSKIN_FULL_FLAG) === true);
+function waterskinStates(item) {
+  return normalizeWaterskinStates(itemQuantity(item), item.getFlag(MODULE_ID, WATERSKIN_STATES_FLAG), item.getFlag(MODULE_ID, WATERSKIN_FULL_FLAG));
+}
+
+function fullWaterskinCount(actor) {
+  return actor.items.filter(isWaterskin).reduce((total, item) => total + waterskinStates(item).filter(Boolean).length, 0);
 }
 
 function rations(actor) {
@@ -113,7 +119,7 @@ function availableCount(items) {
 
 async function resourceChoices(actors, type, { darkSun = false } = {}) {
   const water = type === "water";
-  const data = actors.map((actor) => ({ actor, available: availableCount(water ? fullWaterskins(actor) : rations(actor)) }));
+  const data = actors.map((actor) => ({ actor, available: water ? fullWaterskinCount(actor) : availableCount(rations(actor)) }));
   const note = water
     ? darkSun
       ? "Personagens consomem 4 litros de água por dia. Thri-kreen consome 1 litro de água. Meio-gigantes consomem 8 litros."
@@ -138,25 +144,16 @@ async function resourceChoices(actors, type, { darkSun = false } = {}) {
 async function emptyWaterskins(actor, requested) {
   let remaining = Math.max(0, Math.trunc(Number(requested) || 0));
   let emptied = 0;
-  for (const item of fullWaterskins(actor)) {
+  for (const item of actor.items.filter(isWaterskin)) {
     if (!remaining) break;
-    const quantity = itemQuantity(item);
-    const amount = Math.min(quantity, remaining);
-    if (!amount) continue;
-    if (amount === quantity) {
-      await item.setFlag(MODULE_ID, WATERSKIN_FULL_FLAG, false);
-    } else {
-      await item.update({ "system.quantity": quantity - amount });
-      const data = item.toObject();
-      delete data._id;
-      data.system.quantity = amount;
-      data.flags ??= {};
-      data.flags[MODULE_ID] ??= {};
-      data.flags[MODULE_ID][WATERSKIN_FULL_FLAG] = false;
-      await actor.createEmbeddedDocuments("Item", [data]);
-    }
-    emptied += amount;
-    remaining -= amount;
+    const result = emptyWaterskinStates(waterskinStates(item), remaining);
+    if (!result.emptied) continue;
+    await item.update({
+      [`flags.${MODULE_ID}.${WATERSKIN_STATES_FLAG}`]: result.states,
+      [`flags.${MODULE_ID}.${WATERSKIN_FULL_FLAG}`]: result.states.length > 0 && result.states.every(Boolean)
+    });
+    emptied += result.emptied;
+    remaining -= result.emptied;
   }
   return emptied;
 }
@@ -169,8 +166,7 @@ async function consumeRations(actor, requested) {
     const quantity = itemQuantity(item);
     const amount = Math.min(quantity, remaining);
     if (!amount) continue;
-    if (amount === quantity) await actor.deleteEmbeddedDocuments("Item", [item.id]);
-    else await item.update({ "system.quantity": quantity - amount });
+    await item.update({ "system.quantity": Math.max(0, quantity - amount) });
     consumed += amount;
     remaining -= amount;
   }
@@ -219,8 +215,10 @@ async function performRest() {
   const rows = actors.map((actor) => {
     const recovery = recovered.get(actor.uuid) ?? { spells: 0, abilities: 0 };
     const details = [`${recovery.spells} magia(s) recuperada(s)`, `${recovery.abilities} habilidade(s) diária(s) recuperada(s)`];
-    if (consumedWater.has(actor.uuid)) details.push(`${consumedWater.get(actor.uuid)} odre(s) esvaziado(s)`);
-    if (consumedFood.has(actor.uuid)) details.push(`${consumedFood.get(actor.uuid)} ração(ões) consumida(s)`);
+    if (hasWater) details.push("nenhum odre esvaziado devido à fonte natural de água");
+    else if (consumedWater.has(actor.uuid)) details.push(`${consumedWater.get(actor.uuid)} odre(s) esvaziado(s)`);
+    if (hasFood) details.push("nenhuma ração descontada devido à fonte natural de comida ou caça");
+    else if (consumedFood.has(actor.uuid)) details.push(`${consumedFood.get(actor.uuid)} ração(ões) descontada(s)`);
     return `<li><strong>${escapeHtml(actor.name)}</strong>: ${details.join("; ")}.</li>`;
   }).join("");
   await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ alias: "Descanso" }), content: `<h3>Descanso realizado</h3><ul>${rows}</ul>` });

@@ -13,6 +13,25 @@ export function canReceiveContainer(actor) {
   return actor?.type === "character" || actor?.type === "retainer" || actor?.type === "monster";
 }
 
+export function normalizeWaterskinStates(quantity, storedStates, legacyFull = false) {
+  const count = Math.max(0, Math.trunc(Number(quantity) || 0));
+  const states = Array.isArray(storedStates) ? storedStates : [];
+  return Array.from({ length: count }, (_value, index) => typeof states[index] === "boolean" ? states[index] : legacyFull === true);
+}
+
+export function emptyWaterskinStates(states, requested) {
+  const next = [...states];
+  let remaining = Math.max(0, Math.trunc(Number(requested) || 0));
+  let emptied = 0;
+  for (let index = 0; index < next.length && remaining > 0; index += 1) {
+    if (!next[index]) continue;
+    next[index] = false;
+    emptied += 1;
+    remaining -= 1;
+  }
+  return { states: next, emptied };
+}
+
 export function actorOwnerNames(actor, users = [], ownerLevel = 3) {
   return users
     .filter((user) => !user.isGM)

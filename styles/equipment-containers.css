@@ -17,3 +17,5 @@
 .od2qdv-coins label { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .25rem; font-weight: 700; }
 .od2qdv-coins input { min-width: 0; }
 .od2qdv-coins button { white-space: nowrap; width: auto; }
+.od2qdv-waterskin-units { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .35rem .75rem; width: 100%; }
+.od2qdv-waterskin-units .checkbox { justify-content: flex-start; }
