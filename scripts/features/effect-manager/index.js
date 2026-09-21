@@ -216,7 +216,7 @@ function conditionalValueOptions(actor, selected, type = "all") {
 function conditionalEditor(rule, actor) {
   const rightType = conditionalValueType(rule.left);
   const right = rightType === "boolean" && conditionalValueType(rule.right) !== "boolean" ? "boolean.true" : rule.right;
-  const namedOperands = new Set(["item.named", "item.count", "class.named", "race.named", "classAbility.named", "raceAbility.named", "spell.named", "condition", "effect.inactive", "attack.itemNamed", "attack.ammunitionNamed", "target.speciesNamed", "target.conceptNamed", "target.alignmentNamed", "target.conditionNamed", "scene.environmentNamed"]);
+  const namedOperands = new Set(["item.named", "item.count", "class.named", "race.named", "classAbility.named", "raceAbility.named", "spell.named", "condition", "effect.inactive", "attack.itemNamed", "attack.rangedItemNamed", "attack.ammunitionNamed", "target.speciesNamed", "target.conceptNamed", "target.alignmentNamed", "target.conditionNamed", "scene.environmentNamed"]);
   const systemConfig = CONFIG.olddragon2e ?? CONFIG.OLDDRAGON2E ?? {};
   const suggestions = [...(actor.items ?? [])].map((item) => item.name);
   suggestions.push(...Object.keys(systemConfig.monster_concepts ?? {}), ...Object.keys(systemConfig.alignment ?? {}));
@@ -273,7 +273,7 @@ function bindModifierEditor(root, actor) {
   const conditionalLeft = root.querySelector('[name="conditionalLeft"]');
   const conditionalRight = root.querySelector('[name="conditionalRight"]');
   const conditionalName = root.querySelector("[data-conditional-name]");
-  const namedOperands = new Set(["item.named", "item.count", "class.named", "race.named", "classAbility.named", "raceAbility.named", "spell.named", "condition", "effect.inactive", "attack.itemNamed", "attack.ammunitionNamed", "target.speciesNamed", "target.conceptNamed", "target.alignmentNamed", "target.conditionNamed", "scene.environmentNamed"]);
+  const namedOperands = new Set(["item.named", "item.count", "class.named", "race.named", "classAbility.named", "raceAbility.named", "spell.named", "condition", "effect.inactive", "attack.itemNamed", "attack.rangedItemNamed", "attack.ammunitionNamed", "target.speciesNamed", "target.conceptNamed", "target.alignmentNamed", "target.conditionNamed", "scene.environmentNamed"]);
   const refreshConditionalOperand = () => {
     const type = conditionalValueType(conditionalLeft.value);
     const selected = type === "boolean" ? "boolean.true" : "number";
@@ -471,7 +471,7 @@ function actorSnapshot(actor, context = {}) {
       "item.ammunitionEquipped": items.some((item) => item.type === "weapon" && item.system.type === "ammunition" && item.system.is_equipped),
       "item.container": items.some((item) => item.type === "container"), "item.magic": equipment.some((item) => item.system.magic_item),
       "source.itemEquipped": Boolean(context.sourceItem?.system?.is_equipped),
-      "attack.itemNamed": Boolean(attackItem), "attack.weaponMelee": attackMode === "melee",
+      "attack.itemNamed": Boolean(attackItem), "attack.rangedItemNamed": Boolean(attackItem) && ["ranged", "throwing"].includes(attackMode), "attack.weaponMelee": attackMode === "melee",
       "attack.weaponRanged": attackMode === "ranged", "attack.weaponThrowing": attackMode === "throwing",
       "attack.throwingBad": attackMode === "throwing" && (attackBasis === "bad" || attackBasis === ""),
       "attack.usesBAC": attackBasis === "bac" || attackMode === "melee",
@@ -497,7 +497,7 @@ function actorSnapshot(actor, context = {}) {
     classAbilities: items.filter((item) => item.type === "class_ability").map((item) => item.name),
     raceAbilities: items.filter((item) => item.type === "race_ability").map((item) => item.name),
     spells: items.filter((item) => item.type === "spell").map((item) => item.name),
-    attackItems: attackItem ? [attackItem.name] : [], ammunitionItems: ammunition ? [ammunition.name] : [],
+    attackItems: attackItem ? [attackItem.name] : [], rangedAttackItems: attackItem && ["ranged", "throwing"].includes(attackMode) ? [attackItem.name] : [], ammunitionItems: ammunition ? [ammunition.name] : [],
     targetSpecies: targetActor ? [context.targetName, targetActor.name, targetConcept, ...targetRaceNames].filter(Boolean) : [],
     targetConcepts: targetConcept ? [targetConcept] : [], targetAlignments: targetAlignment ? [targetAlignment] : [],
     targetConditions,

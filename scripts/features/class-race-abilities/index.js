@@ -437,7 +437,7 @@ async function rollCityFunds(actor, abilityId) {
   const roll = new Roll("1d10");
   if (Number(game.release?.generation ?? 13) >= 14) await roll.evaluate();
   else await roll.roll({ async: true });
-  const result = (Number(roll.total) || 0) * actorLevel(actor);
+  const result = (Number(roll.total) || 0) * 100 * actorLevel(actor);
   const currentPo = Math.max(0, Math.trunc(Number(actor.system?.economy?.gp) || 0));
   await actor.update({ "system.economy.gp": currentPo + result });
   await saveCityFundsDate(actor, abilityId);
@@ -802,7 +802,10 @@ function halflingAdventurerEffects(actor) {
   const cls = actor.items?.find?.((item) => item.type === "class");
   const weapon = actor.getFlag(MODULE_ID, "halflingAdventurerRacialWeapon");
   if (normalizeAbilityName(actorClassName(actor)) !== "halfling aventureiro" || !weapon) return [];
-  return [effectTemplate({ name: "Halfling Aventureiro: Arma Racial", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Halfling Aventureiro" }, key: "damage", mode: "add", value: 2, condition: { left: "attack.itemNamed", name: weapon } })];
+  return [
+    effectTemplate({ name: "Halfling Aventureiro: Arma Racial", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Halfling Aventureiro" }, key: "damage", mode: "add", value: 2, condition: { left: "attack.itemNamed", name: weapon } }),
+    effectTemplate({ name: "Halfling Aventureiro: No Alvo", origin: "habilidade da classe", association: { type: "class", id: cls?.id, name: cls?.name || "Halfling Aventureiro" }, key: "test.difficulty", mode: "add", value: 2, condition: { left: "attack.rangedItemNamed", name: weapon } })
+  ];
 }
 
 function paladinEffects(actor) {
@@ -847,7 +850,7 @@ function gnomeAndHalflingEffects(actor) {
 
 async function syncDwarfEffects(actor) {
   if (!game.settings.get(MODULE_ID, "enableEffectManager")) return;
-  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Halfling Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo Aventureiro: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Paladino: Maestria em armas", "Guerreiro: Maestria em armas", "Guerreiro: Maestria em grupo de armas", "Treinamento em combate"]);
+  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Halfling Aventureiro: Arma Racial", "Halfling Aventureiro: No Alvo", "Elfo: Arma Racial", "Elfo Aventureiro: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Paladino: Maestria em armas", "Guerreiro: Maestria em armas", "Guerreiro: Maestria em grupo de armas", "Treinamento em combate"]);
   const current = actor.getFlag(MODULE_ID, "effects") || [];
   const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...halflingAdventurerEffects(actor), ...barbarianEffects(actor), ...paladinEffects(actor), ...warriorEffects(actor), ...outcastEffects(actor)];
   const retained = current.filter((effect) => !managedNames.has(effect.name));
