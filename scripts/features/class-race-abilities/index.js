@@ -460,13 +460,15 @@ async function promptImprovisedWeaponDamage() {
 async function improviseWeapon(actor) {
   const combat = game.combat;
   if (!combat?.id) return ui.notifications.warn("A habilidade só pode ser usada durante um combate ativo.");
+  const score = 2;
   const roll = new Roll("1d6");
   if (Number(game.release?.generation ?? 13) >= 14) await roll.evaluate();
   else await roll.roll({ async: true });
-  if (Number(roll.total) > 2) {
-    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), rolls: [roll], content: "<strong>Armamento Improvisado</strong><p>A tentativa falhou.</p>" });
-    return;
-  }
+  const success = rollSucceeded(roll.total, score);
+  const result = `<strong class="${success ? "success" : "failure"}">${escapeHtml(game.i18n.localize(success ? "olddragon2e.chat.success" : "olddragon2e.chat.failure"))}</strong>`;
+  const flavor = `<div class="title">Teste de habilidade <strong>Armamento Improvisado</strong> (${score})</div><p class="result">${result}</p>`;
+  await roll.toMessage({ flavor, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: "blindroll" });
+  if (!success) return;
   const damage = await promptImprovisedWeaponDamage();
   if (!damage) return ui.notifications.warn("Informe um dano válido para a arma improvisada.");
   const [item] = await actor.createEmbeddedDocuments("Item", [{
@@ -1288,7 +1290,7 @@ Hooks.on("createChatMessage", (message) => {
 });
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!enabled() || !isPrimaryActiveGM()) return;
-  if (changed?.active === false) {
+  if (changed?.active === false || changed?.started === false) {
     await breakImprovisedWeapons(combat);
     return;
   }
