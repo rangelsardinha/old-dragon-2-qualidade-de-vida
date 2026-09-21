@@ -56,6 +56,12 @@ test("aplica o bônus de +2 PV por nível do Bárbaro", () => {
   assert.equal(jpcBonusForClass({ name: "Guerreiro", system: {} }), 0);
 });
 
+test("aplica +1 PV por nível ao Elfo Aventureiro", () => {
+  const elf = { name: "Elfo Aventureiro", system: {} };
+  assert.equal(hitPointBonusForClass(elf), 1);
+  assert.equal(calculateHitPoints(4, 3, 13, [2, 3], hitPointBonusForClass(elf)), 15);
+});
+
 test("Anão Aventureiro passa a usar d12 a partir do 3º nível", () => {
   const characterClass = { name: "Anão Aventureiro", system: {} };
   assert.equal(hitDieForClassLevel(characterClass, 1), 10);

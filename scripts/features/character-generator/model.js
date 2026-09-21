@@ -54,7 +54,7 @@ const CLASS_HIT_DICE = new Map([
   ["preservador", 4], ["profanador", 4], ["psionico", 4], ["templario", 8]
 ]);
 
-const CLASS_HIT_POINT_BONUSES = new Map([["barbaro", 2]]);
+const CLASS_HIT_POINT_BONUSES = new Map([["barbaro", 2], ["elfo aventureiro", 1]]);
 const CLASS_JPC_BONUSES = new Map([["barbaro", 2]]);
 const RACE_HIT_POINT_BONUSES = new Map([["mul", 1], ["meio gigante", 2], ["meio-gigante", 2]]);
 
