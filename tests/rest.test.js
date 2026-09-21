@@ -1,18 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-globalThis.Hooks = { on() {}, once() {} };
+globalThis.Hooks = { on() {}, once() {}, callAll() {} };
+globalThis.game = { od2Qdv: {} };
 
-const { consumeRations, emptyWaterskins } = await import("../scripts/features/rest/index.js");
+const { consumeRations, emptyWaterskins, recoverActor } = await import("../scripts/features/rest/index.js");
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 
-function item({ id, name, quantity, states = [] }) {
+function item({ id, name, quantity, states = [], type = "misc", flags = {} }) {
   return {
     id,
     name,
+    type,
     system: { quantity },
-    flags: { [MODULE_ID]: { waterskinStates: states, waterskinFull: states.length > 0 && states.every(Boolean) } },
+    flags: { [MODULE_ID]: { waterskinStates: states, waterskinFull: states.length > 0 && states.every(Boolean) }, ...flags },
     getFlag(namespace, key) { return this.flags?.[namespace]?.[key]; }
   };
 }
@@ -59,4 +61,25 @@ test("persiste a quantidade consumida e remove a pilha vazia de racoes", async (
   assert.equal(ration.system.quantity, 4);
   assert.equal(await consumeRations(actor, 4), 4);
   assert.equal(actor.items.length, 0);
+});
+
+test("desmarca usos consumidos de magias e habilidades no descanso", async () => {
+  const spell = item({
+    id: "spell", name: "Mísseis Mágicos", type: "spell",
+    flags: { olddragon2e: { spell: { "daily-uses": { 0: true, 1: false, 2: true } } } }
+  });
+  const ability = item({
+    id: "ability", name: "Ler Magias", type: "class_ability",
+    flags: { olddragon2e: { "daily-uses": { 0: true, 1: true, 2: false } } }
+  });
+  const unused = item({
+    id: "unused", name: "Detectar Magias", type: "class_ability",
+    flags: { olddragon2e: { "daily-uses": { 0: false } } }
+  });
+  const actor = actorWithItems([spell, ability, unused]);
+
+  assert.deepEqual(await recoverActor(actor), { spells: 1, abilities: 1 });
+  assert.deepEqual(spell.flags.olddragon2e.spell["daily-uses"], { 0: false, 1: false, 2: false });
+  assert.deepEqual(ability.flags.olddragon2e["daily-uses"], { 0: false, 1: false, 2: false });
+  assert.deepEqual(unused.flags.olddragon2e["daily-uses"], { 0: false });
 });

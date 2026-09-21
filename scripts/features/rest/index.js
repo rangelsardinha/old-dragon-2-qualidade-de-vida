@@ -191,12 +191,23 @@ export async function consumeRations(actor, requested) {
   return consumed;
 }
 
-async function recoverActor(actor) {
-  const spells = actor.items.filter((item) => item.type === "spell" && Object.keys(item.getFlag?.("olddragon2e", "spell")?.["daily-uses"] ?? {}).length);
-  const abilities = actor.items.filter((item) => ["class_ability", "race_ability"].includes(item.type)
-    && Object.keys(item.getFlag?.("olddragon2e", "daily-uses") ?? {}).length);
-  if (spells.length) await actor.updateEmbeddedDocuments("Item", spells.map((item) => ({ _id: item.id, "flags.olddragon2e.spell.daily-uses": {} })));
-  if (abilities.length) await actor.updateEmbeddedDocuments("Item", abilities.map((item) => ({ _id: item.id, "flags.olddragon2e.daily-uses": {} })));
+function usedDailyUses(item, spell = false) {
+  const flags = spell ? item.getFlag?.("olddragon2e", "spell")?.["daily-uses"] : item.getFlag?.("olddragon2e", "daily-uses");
+  const uses = { ...(flags ?? {}) };
+  return Object.values(uses).some((used) => used === true) ? uses : {};
+}
+
+function resetDailyUses(uses) {
+  return Object.fromEntries(Object.keys(uses).map((key) => [key, false]));
+}
+
+export async function recoverActor(actor) {
+  const spells = actor.items.map((item) => ({ item, uses: item.type === "spell" ? usedDailyUses(item, true) : {} }))
+    .filter(({ uses }) => Object.keys(uses).length);
+  const abilities = actor.items.map((item) => ({ item, uses: ["class_ability", "race_ability"].includes(item.type) ? usedDailyUses(item) : {} }))
+    .filter(({ uses }) => Object.keys(uses).length);
+  if (spells.length) await actor.updateEmbeddedDocuments("Item", spells.map(({ item, uses }) => ({ _id: item.id, "flags.olddragon2e.spell.daily-uses": resetDailyUses(uses) })));
+  if (abilities.length) await actor.updateEmbeddedDocuments("Item", abilities.map(({ item, uses }) => ({ _id: item.id, "flags.olddragon2e.daily-uses": resetDailyUses(uses) })));
   await game.od2Qdv?.classRaceAbilities?.rest?.(actor);
   if (game.od2Qdv?.effects?.rest) await game.od2Qdv.effects.rest(actor);
   else Hooks.callAll("od2QdvRestCompleted", actor);

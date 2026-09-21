@@ -13,6 +13,7 @@ const INVENTORY_TYPES = new Set(["weapon", "armor", "shield", "misc", "container
 const boundActorSheets = new WeakSet();
 const boundItemSheets = new WeakSet();
 const boundWaterskinSheets = new WeakSet();
+const waterskinScrollPositions = new Map();
 
 function enabled() {
   if (game.system.id !== "olddragon2e") return false;
@@ -37,9 +38,22 @@ function canContainItems(item) {
   return item?.type === "container" && !isWaterskin(item);
 }
 
+function itemSheetScroller(root) {
+  return root.closest?.(".window-content") ?? root.querySelector?.(".window-content") ?? root;
+}
+
 function enhanceWaterskinSheet(app, root) {
   const item = app.item ?? app.document;
-  if (!isWaterskin(item) || !item?.isOwner || root.querySelector("[data-od2qdv-waterskin-states]")) return;
+  if (!isWaterskin(item) || !item?.isOwner) return;
+  const scrollKey = item.uuid ?? item.id;
+  const savedScroll = waterskinScrollPositions.get(scrollKey);
+  if (savedScroll) requestAnimationFrame(() => {
+    const scroller = itemSheetScroller(root);
+    scroller.scrollTop = savedScroll.top;
+    scroller.scrollLeft = savedScroll.left;
+    waterskinScrollPositions.delete(scrollKey);
+  });
+  if (root.querySelector("[data-od2qdv-waterskin-states]")) return;
   const form = root.matches?.("form") ? root : root.querySelector("form");
   if (!form) return;
   const quantity = item.system?.quantity == null ? 1 : Math.max(0, Math.trunc(Number(item.system.quantity) || 0));
@@ -59,9 +73,19 @@ function enhanceWaterskinSheet(app, root) {
     event.target.nextElementSibling.textContent = `Odre ${Number(event.target.dataset.od2qdvWaterskinIndex) + 1}: ${event.target.checked ? "cheio" : "vazio"}`;
     const checkboxes = [...root.querySelectorAll("[data-od2qdv-waterskin-index]")].sort((left, right) => Number(left.dataset.od2qdvWaterskinIndex) - Number(right.dataset.od2qdvWaterskinIndex));
     const next = checkboxes.map((checkbox) => checkbox.checked);
+    const scroller = itemSheetScroller(root);
+    waterskinScrollPositions.set(scrollKey, { top: scroller.scrollTop, left: scroller.scrollLeft });
     await item.update({
       [`flags.${MODULE_ID}.${WATERSKIN_STATES_FLAG}`]: next,
       [`flags.${MODULE_ID}.${WATERSKIN_FULL_FLAG}`]: next.length > 0 && next.every(Boolean)
+    }, { render: false });
+    requestAnimationFrame(() => {
+      const currentScroller = itemSheetScroller(root);
+      const saved = waterskinScrollPositions.get(scrollKey);
+      if (!saved) return;
+      currentScroller.scrollTop = saved.top;
+      currentScroller.scrollLeft = saved.left;
+      waterskinScrollPositions.delete(scrollKey);
     });
   });
 }
