@@ -19,6 +19,8 @@
   "OD2QDV.Settings.enableClassAbilities.hint": "Adiciona testes e automações às habilidades de classe e raça, incluindo Acadêmico, Anão e Anão Aventureiro.",
   "OD2QDV.Settings.enableAutomatedLighting.name": "Luz automatizada",
   "OD2QDV.Settings.enableAutomatedLighting.hint": "Adiciona ao diretório de Atores uma ferramenta para configurar infravisão nos protótipos de token.",
+  "OD2QDV.Settings.enableLightResourceConsumption.name": "Contabilizar tochas e óleo",
+  "OD2QDV.Settings.enableLightResourceConsumption.hint": "Pergunta ao Mestre se deve consumir tochas ou frascos de óleo ao acender fontes de luz e integra sua duração à Carta de Controle de Sessão.",
   "OD2CA.Settings.combatAutoDamage.name": "Aplicar dano automatico",
   "OD2CA.Settings.combatAutoDamage.hint": "Quando um ataque acertar, rola o dano da arma e desconta automaticamente do alvo.",
   "OD2CA.Settings.combatRequireOneTarget.name": "Exigir exatamente um alvo",

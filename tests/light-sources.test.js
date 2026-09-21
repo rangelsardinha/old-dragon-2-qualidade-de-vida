@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { OD2_LIGHT_SOURCE_COMPATIBILITY, OD2_LIGHT_SOURCES, upgradedItemTypes } from "../scripts/features/light-sources/model.js";
+import {
+  expiresWithSessionEvent,
+  inventoryResourceKind,
+  lightResourceKind,
+  OD2_LIGHT_SOURCE_COMPATIBILITY,
+  OD2_LIGHT_SOURCES,
+  quantityAfterConsumption,
+  upgradedItemTypes
+} from "../scripts/features/light-sources/model.js";
 
 test("configura o Light Sources para itens gerais do Old Dragon 2", () => {
   assert.deepEqual(OD2_LIGHT_SOURCE_COMPATIBILITY, {
@@ -51,4 +59,27 @@ test("migra apenas o padrão antigo de tipos de item", () => {
   assert.deepEqual(upgradedItemTypes(["misc"], 0), ["misc", "spell"]);
   assert.deepEqual(upgradedItemTypes(["misc", "weapon"], 0), ["misc", "weapon"]);
   assert.deepEqual(upgradedItemTypes(["misc"], 2), ["misc"]);
+});
+
+test("identifica os recursos consumidos pelas fontes físicas", () => {
+  assert.equal(lightResourceKind("Tocha"), "torch");
+  assert.equal(lightResourceKind("Lamparina"), "oil");
+  assert.equal(lightResourceKind("Lanterna furta-fogo"), "oil");
+  assert.equal(lightResourceKind("Luz Contínua"), null);
+  assert.equal(inventoryResourceKind({ name: "Óleo", system: { odo_id: "oleo" } }), "oil");
+  assert.equal(inventoryResourceKind({ name: "Tocha", system: { odo_id: "tocha" } }), "torch");
+});
+
+test("reduz pilhas e remove a última unidade do recurso", () => {
+  assert.deepEqual(quantityAfterConsumption(4), { delete: false, quantity: 3 });
+  assert.deepEqual(quantityAfterConsumption(1), { delete: true, quantity: 0 });
+  assert.deepEqual(quantityAfterConsumption(null), { delete: true, quantity: 0 });
+});
+
+test("eventos da carta apagam somente a fonte correspondente", () => {
+  assert.equal(expiresWithSessionEvent("Tocha", "torch"), true);
+  assert.equal(expiresWithSessionEvent("Lamparina", "torch"), false);
+  assert.equal(expiresWithSessionEvent("Lamparina", "lamp"), true);
+  assert.equal(expiresWithSessionEvent("Lanterna furta-fogo", "lamp"), true);
+  assert.equal(expiresWithSessionEvent("Luz", "lamp"), false);
 });

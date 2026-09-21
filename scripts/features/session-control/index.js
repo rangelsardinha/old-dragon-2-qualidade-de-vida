@@ -1,5 +1,6 @@
 import { OD2_TIME } from "../effect-manager/model.js";
 import { seedAdvancedTurns, updateTurnState } from "./model.js";
+import { expireSessionLights } from "../light-sources/resource-tracking.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const LEGACY_ID = "carta-de-controle-de-sessao-od2";
@@ -121,8 +122,14 @@ async function triggerEvents(key) {
   for (const event of turn?.events ?? []) {
     if (event === "E") await encounter(hour, number);
     if (event === "D") await publicMessage("Descanso necessário", "O grupo deve descansar. Sem descanso curto, os testes subsequentes são difíceis (-2) até que descansem.");
-    if (event === "T") await publicMessage("Tochas queimaram", "As tochas se apagaram ao fim deste turno.");
-    if (event === "L") await publicMessage("Lanterna apagou", "A lanterna se apagou ao fim deste turno.");
+    if (event === "T") {
+      const count = await expireSessionLights("torch");
+      await publicMessage("Tochas queimaram", `As tochas se apagaram ao fim deste turno.${count ? ` ${count} fonte(s) de luz apagada(s).` : ""}`);
+    }
+    if (event === "L") {
+      const count = await expireSessionLights("lamp");
+      await publicMessage("Lamparinas e lanternas apagaram", `As lamparinas e lanternas furta-fogo se apagaram ao fim deste turno.${count ? ` ${count} fonte(s) de luz apagada(s).` : ""}`);
+    }
   }
 }
 async function encounter(hour, number) {

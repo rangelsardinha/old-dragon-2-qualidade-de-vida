@@ -75,3 +75,38 @@ export function upgradedItemTypes(current, presetVersion) {
   if (values.length === 1 && values[0] === "misc") return ["misc", "spell"];
   return values;
 }
+
+export function normalizedLightName(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
+
+export function lightResourceKind(itemName) {
+  const name = normalizedLightName(itemName);
+  if (name === "tocha") return "torch";
+  if (name === "lamparina" || name === "lanterna furta-fogo") return "oil";
+  return null;
+}
+
+export function inventoryResourceKind(item) {
+  const id = normalizedLightName(item?.system?.odo_id);
+  const name = normalizedLightName(item?.name);
+  if (id === "tocha" || name === "tocha") return "torch";
+  if (id === "oleo" || name === "oleo") return "oil";
+  return null;
+}
+
+export function quantityAfterConsumption(value) {
+  const quantity = value == null ? 1 : Math.max(0, Math.trunc(Number(value) || 0));
+  return quantity <= 1 ? { delete: true, quantity: 0 } : { delete: false, quantity: quantity - 1 };
+}
+
+export function expiresWithSessionEvent(itemName, event) {
+  const name = normalizedLightName(itemName);
+  if (event === "torch") return name === "tocha";
+  if (event === "lamp") return name === "lamparina" || name === "lanterna furta-fogo";
+  return false;
+}

@@ -19,6 +19,8 @@
   "OD2QDV.Settings.enableClassAbilities.hint": "Adds tests and automation to class abilities, starting with the Academic class.",
   "OD2QDV.Settings.enableAutomatedLighting.name": "Automated lighting",
   "OD2QDV.Settings.enableAutomatedLighting.hint": "Adds an Actor-directory tool for configuring infravision on prototype tokens.",
+  "OD2QDV.Settings.enableLightResourceConsumption.name": "Track torches and oil",
+  "OD2QDV.Settings.enableLightResourceConsumption.hint": "Asks the Gamemaster whether to consume torches or oil flasks when light sources are lit and integrates their duration with the Session Control Card.",
   "OD2CA.Settings.combatAutoDamage.name": "Aplicar dano automatico",
   "OD2CA.Settings.combatAutoDamage.hint": "Quando um ataque acertar, rola o dano da arma e desconta automaticamente do alvo.",
   "OD2CA.Settings.combatRequireOneTarget.name": "Exigir exatamente um alvo",

@@ -121,6 +121,8 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Lê a infravisão do item de raça de personagens e ajudantes e também das descrições de monstros e mercenários.
 - Habilita a visão dos protótipos e dos tokens presentes no mapa atual, seleciona **Visão no Escuro** e configura seu alcance calculado.
 - Requer o módulo **Light Sources 0.0.9 ou superior**, traduz sua interface para português e registra as configurações de Lamparina, Lanterna furta-fogo, Vela, Tocha e das magias Luz e Luz Contínua preparadas no mundo de teste.
+- A opção **Contabilizar tochas e óleo** pede ao Mestre confirmação para consumir uma Tocha ao acendê-la ou um frasco de Óleo ao acender Lamparina e Lanterna furta-fogo; pilhas com uma única unidade são removidas.
+- Com essa opção ativa, os campos `T` da Carta de Controle apagam as tochas acesas, e o campo 6 da 4ª hora também apaga lamparinas e lanternas furta-fogo.
 
 ### Habilidades de raça e classe automatizadas
 

@@ -49,6 +49,10 @@ Hooks.once("init", () => {
     enableAutomatedLighting: {
       name: "Luz automatizada",
       hint: "Adiciona ao diretório de Atores uma ferramenta para configurar infravisão nos protótipos de token."
+    },
+    enableLightResourceConsumption: {
+      name: "Contabilizar tochas e óleo",
+      hint: "Pergunta ao Mestre se deve consumir tochas ou frascos de óleo ao acender fontes de luz e integra sua duração à Carta de Controle de Sessão."
     }
   };
   const localized = (key, fallback) => {
@@ -77,6 +81,7 @@ Hooks.once("init", () => {
   worldToggle("enableClassAbilities");
   worldToggle("enableAlignmentAxis");
   worldToggle("enableAutomatedLighting");
+  worldToggle("enableLightResourceConsumption", false);
 
   game.settings.register(MODULE_ID, "sessionEncounterDie", {
     name: "Dado de encontros aleatórios",

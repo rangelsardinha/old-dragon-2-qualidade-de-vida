@@ -4,9 +4,12 @@ import {
   OD2_LIGHT_SOURCES,
   upgradedItemTypes
 } from "./model.js";
+import { installLightResourceTracking } from "./resource-tracking.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const PRESET_VERSION = 2;
+
+installLightResourceTracking();
 
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "lightSourcesPresetVersion", {
