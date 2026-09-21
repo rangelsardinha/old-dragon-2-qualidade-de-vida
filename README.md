@@ -113,6 +113,14 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Ao concluir, abre a ficha e orienta o jogador a escolher equipamentos e magias.
 - Jogadores podem solicitar a criação; o Mestre autoriza o início, cada rerrolagem e o resumo final diretamente pelo chat.
 
+### Luz automatizada
+
+- Pode ser habilitada ou desabilitada nas configurações do módulo.
+- Adiciona ao diretório de Atores o botão **Corrigir luz dos atores**, disponível para o Mestre.
+- Solicita o tamanho, em metros, de cada quadrado do mapa e converte a infravisão para unidades de grade.
+- Lê a infravisão do item de raça de personagens e ajudantes e também das descrições de monstros e mercenários.
+- Habilita a visão do protótipo de token, seleciona **Visão no Escuro** e configura seu alcance calculado.
+
 ### Habilidades de raça e classe automatizadas
 
 - **Acadêmico:** Conhecimento Acadêmico, Decifrar Linguagens, Lendas e Tradições, Identificar Itens e Reputação, com progressão por nível e rolagens secretas quando aplicável.

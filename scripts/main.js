@@ -45,6 +45,10 @@ Hooks.once("init", () => {
     enableAlignmentAxis: {
       name: "Eixo moral de alinhamento",
       hint: "Adiciona o eixo Bom, Neutro ou Mal ao alinhamento de todos os atores."
+    },
+    enableAutomatedLighting: {
+      name: "Luz automatizada",
+      hint: "Adiciona ao diretório de Atores uma ferramenta para configurar infravisão nos protótipos de token."
     }
   };
   const localized = (key, fallback) => {
@@ -72,6 +76,7 @@ Hooks.once("init", () => {
   worldToggle("enableEffectManager");
   worldToggle("enableClassAbilities");
   worldToggle("enableAlignmentAxis");
+  worldToggle("enableAutomatedLighting");
 
   game.settings.register(MODULE_ID, "sessionEncounterDie", {
     name: "Dado de encontros aleatórios",
