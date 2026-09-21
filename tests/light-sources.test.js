@@ -4,10 +4,12 @@ import test from "node:test";
 import {
   expiresWithSessionEvent,
   inventoryResourceKind,
+  isPortableLampItem,
   lightResourceKind,
   OD2_LIGHT_SOURCE_COMPATIBILITY,
   OD2_LIGHT_SOURCES,
   quantityAfterConsumption,
+  portableLampName,
   upgradedItemTypes
 } from "../scripts/features/light-sources/model.js";
 
@@ -82,4 +84,13 @@ test("eventos da carta apagam somente a fonte correspondente", () => {
   assert.equal(expiresWithSessionEvent("Lamparina", "lamp"), true);
   assert.equal(expiresWithSessionEvent("Lanterna furta-fogo", "lamp"), true);
   assert.equal(expiresWithSessionEvent("Luz", "lamp"), false);
+});
+
+test("reconhece lamparinas e lanternas como itens transferíveis", () => {
+  assert.equal(portableLampName("Lamparina"), "lamparina");
+  assert.equal(portableLampName("Lanterna furta-fogo"), "lanterna furta-fogo");
+  assert.equal(portableLampName("Tocha"), null);
+  assert.equal(isPortableLampItem({ name: "Lamparina", system: { odo_id: "lamparina" } }, "Lamparina"), true);
+  assert.equal(isPortableLampItem({ name: "Lanterna furta-fogo", system: { odo_id: "lanterna-furta-fogo" } }, "Lanterna furta-fogo"), true);
+  assert.equal(isPortableLampItem({ name: "Óleo", system: { odo_id: "oleo" } }, "Lamparina"), false);
 });

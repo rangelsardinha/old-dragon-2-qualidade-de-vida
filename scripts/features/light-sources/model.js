@@ -110,3 +110,16 @@ export function expiresWithSessionEvent(itemName, event) {
   if (event === "lamp") return name === "lamparina" || name === "lanterna furta-fogo";
   return false;
 }
+
+export function portableLampName(value) {
+  const name = normalizedLightName(value);
+  return name === "lamparina" || name === "lanterna furta-fogo" ? name : null;
+}
+
+export function isPortableLampItem(item, lightName) {
+  const expected = portableLampName(lightName);
+  if (!expected) return false;
+  const id = normalizedLightName(item?.system?.odo_id);
+  const name = normalizedLightName(item?.name);
+  return name === expected || id === expected.replaceAll(" ", "-");
+}

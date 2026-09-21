@@ -1,6 +1,8 @@
 import {
   inventoryResourceKind,
+  isPortableLampItem,
   lightResourceKind,
+  portableLampName,
   quantityAfterConsumption,
   expiresWithSessionEvent
 } from "./model.js";
@@ -8,17 +10,24 @@ import {
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const LIGHT_SOURCES_MODULE_ID = "light-sources";
 const LIGHT_FLAG = "light";
+const GROUND_LIGHT_FLAG = "groundLight";
+const DROPPED_ITEM_FLAG = "droppedLightItem";
 const PROMPT_DELAY_MS = 750;
 const pendingPrompts = new Map();
+let pendingTransfers = [];
+let pendingPickups = [];
 
-function enabled() {
+function integrationEnabled() {
   try {
     return game.system.id === "olddragon2e"
-      && game.settings.get(MODULE_ID, "enableLightResourceConsumption")
       && game.modules.get(LIGHT_SOURCES_MODULE_ID)?.active;
   } catch {
     return false;
   }
+}
+
+function enabled() {
+  return integrationEnabled() && game.settings.get(MODULE_ID, "enableLightResourceConsumption");
 }
 
 function activeGm() {
@@ -37,6 +46,28 @@ function quantity(item) {
 
 function resourceItem(actor, kind) {
   return [...(actor?.items ?? [])].find((item) => inventoryResourceKind(item) === kind && quantity(item) > 0) ?? null;
+}
+
+function lampItem(actor, lightName) {
+  return [...(actor?.items ?? [])].find((item) => isPortableLampItem(item, lightName) && quantity(item) > 0) ?? null;
+}
+
+function itemDataForTransfer(item) {
+  const data = item.toObject();
+  delete data._id;
+  delete data._stats;
+  delete data.folder;
+  delete data.sort;
+  delete data.ownership;
+  data.system = foundry.utils.deepClone(data.system ?? {});
+  data.system.quantity = 1;
+  return data;
+}
+
+async function removeOneItem(item) {
+  const next = quantityAfterConsumption(item.system?.quantity);
+  if (next.delete) await item.delete();
+  else await item.update({ "system.quantity": next.quantity });
 }
 
 async function confirmConsumption(actor, item, kind, lightName) {
@@ -65,9 +96,7 @@ async function consumeForLight(actor, lightName) {
     return;
   }
   if (!(await confirmConsumption(actor, item, kind, lightName))) return;
-  const next = quantityAfterConsumption(item.system?.quantity);
-  if (next.delete) await item.delete();
-  else await item.update({ "system.quantity": next.quantity });
+  await removeOneItem(item);
   ui.notifications.info(`${actor.name}: ${kind === "torch" ? "1 tocha consumida" : "1 frasco de óleo consumido"}.`);
 }
 
@@ -98,13 +127,93 @@ function lightCreated(effect) {
   pendingPrompts.set(key, { timer, actorId: actor.id, itemName: light.itemName });
 }
 
+async function groundLightCreated(light) {
+  if (!integrationEnabled() || !activeGm()) return;
+  const ground = light.getFlag?.(LIGHT_SOURCES_MODULE_ID, GROUND_LIGHT_FLAG);
+  if (!portableLampName(ground?.itemName)) return;
+  const actor = foundry.utils.fromUuidSync?.(ground.actorUuid) ?? null;
+  const item = lampItem(actor, ground.itemName);
+  if (!item) {
+    ui.notifications.warn(`Não foi possível retirar ${ground.itemName} do inventário de ${actor?.name ?? "seu portador"}.`);
+    return;
+  }
+  const data = itemDataForTransfer(item);
+  try {
+    await light.setFlag(MODULE_ID, DROPPED_ITEM_FLAG, data);
+    await removeOneItem(item);
+    ui.notifications.info(`${ground.itemName} foi deixada no chão e removida do inventário de ${actor.name}.`);
+  } catch (error) {
+    console.error(`${MODULE_ID} | Falha ao largar o item da fonte de luz`, error);
+    ui.notifications.error(`Não foi possível transferir ${ground.itemName} para o chão.`);
+  }
+}
+
+function actorFromSpeaker(speaker = {}) {
+  const worldActor = game.actors?.get?.(speaker.actor);
+  if (worldActor) return worldActor;
+  const scene = game.scenes?.get?.(speaker.scene);
+  const token = scene?.tokens?.get?.(speaker.token);
+  if (token?.actor) return token.actor;
+  for (const candidate of game.scenes ?? []) {
+    for (const document of candidate.tokens ?? []) {
+      if (document.actor?.id === speaker.actor) return document.actor;
+    }
+  }
+  return null;
+}
+
+async function addTransferredItem(actor, data) {
+  const sourceId = data?.flags?.core?.sourceId;
+  const existing = [...(actor?.items ?? [])].find((item) =>
+    (sourceId && item.getFlag?.("core", "sourceId") === sourceId)
+    || (item.type === data.type && item.name === data.name)
+  );
+  if (existing) {
+    await existing.update({ "system.quantity": quantity(existing) + 1 });
+    return;
+  }
+  await actor.createEmbeddedDocuments("Item", [data]);
+}
+
+async function reconcileTransfers() {
+  const cutoff = Date.now() - 10000;
+  pendingTransfers = pendingTransfers.filter((entry) => entry.createdAt >= cutoff);
+  pendingPickups = pendingPickups.filter((entry) => entry.createdAt >= cutoff);
+  for (let pickupIndex = pendingPickups.length - 1; pickupIndex >= 0; pickupIndex -= 1) {
+    const pickup = pendingPickups[pickupIndex];
+    const transferIndex = pendingTransfers.findIndex((entry) => pickup.content.includes(entry.itemData.name));
+    if (transferIndex < 0) continue;
+    const [transfer] = pendingTransfers.splice(transferIndex, 1);
+    pendingPickups.splice(pickupIndex, 1);
+    try {
+      await addTransferredItem(pickup.actor, transfer.itemData);
+      ui.notifications.info(`${transfer.itemData.name} foi adicionada ao inventário de ${pickup.actor.name}.`);
+    } catch (error) {
+      console.error(`${MODULE_ID} | Falha ao recolher o item da fonte de luz`, error);
+      ui.notifications.error(`Não foi possível adicionar ${transfer.itemData.name} ao inventário de ${pickup.actor.name}.`);
+    }
+  }
+}
+
+function groundLightDeleted(light) {
+  if (!integrationEnabled() || !activeGm()) return;
+  const itemData = light.getFlag?.(MODULE_ID, DROPPED_ITEM_FLAG);
+  if (!portableLampName(itemData?.name)) return;
+  pendingTransfers.push({ itemData, createdAt: Date.now() });
+  reconcileTransfers().catch((error) => console.error(`${MODULE_ID} | Falha ao reconciliar luz recolhida`, error));
+}
+
 function chatCreated(message) {
-  if (!enabled() || !activeGm()) return;
+  if (!integrationEnabled() || !activeGm()) return;
   const pickupTitle = game.i18n.localize("LIGHTSOURCES.Chat.PickedUpTitle");
   const content = String(message.content ?? "");
   if (!content.includes(pickupTitle)) return;
   const actorId = message.speaker?.actor;
-  cancelPending((pending) => pending.actorId === actorId && content.includes(pending.itemName));
+  const actor = actorFromSpeaker(message.speaker);
+  if (enabled()) cancelPending((pending) => (pending.actorId === actorId || pending.actorId === actor?.id) && content.includes(pending.itemName));
+  if (!actor) return;
+  pendingPickups.push({ actor, content, createdAt: Date.now() });
+  reconcileTransfers().catch((error) => console.error(`${MODULE_ID} | Falha ao reconciliar luz recolhida`, error));
 }
 
 function actorsWithTokens() {
@@ -129,17 +238,22 @@ export async function expireSessionLights(event) {
     count += 1;
   }
   for (const scene of game.scenes ?? []) {
-    const ids = [...(scene.lights ?? [])]
-      .filter((light) => expiresWithSessionEvent(light.getFlag?.(LIGHT_SOURCES_MODULE_ID, "groundLight")?.itemName, event))
-      .map((light) => light.id);
-    if (!ids.length) continue;
-    await scene.deleteEmbeddedDocuments("AmbientLight", ids);
-    count += ids.length;
+    const matching = [...(scene.lights ?? [])]
+      .filter((light) => expiresWithSessionEvent(light.getFlag?.(LIGHT_SOURCES_MODULE_ID, GROUND_LIGHT_FLAG)?.itemName, event));
+    if (!matching.length) continue;
+    if (event === "lamp") {
+      await scene.updateEmbeddedDocuments("AmbientLight", matching.map((light) => ({ _id: light.id, hidden: true })));
+    } else {
+      await scene.deleteEmbeddedDocuments("AmbientLight", matching.map((light) => light.id));
+    }
+    count += matching.length;
   }
   return count;
 }
 
 export function installLightResourceTracking() {
   Hooks.on("createActiveEffect", lightCreated);
+  Hooks.on("createAmbientLight", (light) => groundLightCreated(light).catch((error) => console.error(`${MODULE_ID} | Falha ao registrar luz largada`, error)));
+  Hooks.on("deleteAmbientLight", groundLightDeleted);
   Hooks.on("createChatMessage", chatCreated);
 }
