@@ -187,10 +187,14 @@ async function consumeRations(actor, requested) {
 
 async function recoverActor(actor) {
   const spells = actor.items.filter((item) => item.type === "spell" && Object.keys(item.getFlag?.("olddragon2e", "spell")?.["daily-uses"] ?? {}).length);
+  const abilities = actor.items.filter((item) => ["class_ability", "race_ability"].includes(item.type)
+    && Object.keys(item.getFlag?.("olddragon2e", "daily-uses") ?? {}).length);
   if (spells.length) await actor.updateEmbeddedDocuments("Item", spells.map((item) => ({ _id: item.id, "flags.olddragon2e.spell.daily-uses": {} })));
+  if (abilities.length) await actor.updateEmbeddedDocuments("Item", abilities.map((item) => ({ _id: item.id, "flags.olddragon2e.daily-uses": {} })));
+  await game.od2Qdv?.classRaceAbilities?.rest?.(actor);
   if (game.od2Qdv?.effects?.rest) await game.od2Qdv.effects.rest(actor);
   else Hooks.callAll("od2QdvRestCompleted", actor);
-  return spells.length;
+  return { spells: spells.length, abilities: abilities.length };
 }
 
 async function performRest() {
@@ -220,7 +224,8 @@ async function performRest() {
   }
 
   const rows = actors.map((actor) => {
-    const details = [`${recovered.get(actor.uuid) ?? 0} magia(s) recuperada(s)`];
+    const recovery = recovered.get(actor.uuid) ?? { spells: 0, abilities: 0 };
+    const details = [`${recovery.spells} magia(s) recuperada(s)`, `${recovery.abilities} habilidade(s) diária(s) recuperada(s)`];
     if (consumedWater.has(actor.uuid)) details.push(`${consumedWater.get(actor.uuid)} odre(s) esvaziado(s)`);
     if (consumedFood.has(actor.uuid)) details.push(`${consumedFood.get(actor.uuid)} ração(ões) consumida(s)`);
     return `<li><strong>${escapeHtml(actor.name)}</strong>: ${details.join("; ")}.</li>`;

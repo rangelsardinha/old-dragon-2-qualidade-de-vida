@@ -868,6 +868,12 @@ async function removeFuryFromSource(sourceActor) {
   await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: sourceActor }), content: "<div class=\"title\">Encerrou o uso da <strong>Fúria</strong>.</div>" });
 }
 
+async function completeClassRaceAbilityRest(actor) {
+  if (!actor) return;
+  if ((actor.getFlag(MODULE_ID, "inspirationTargets") ?? []).length) await removeInspirationFromSource(actor);
+  if ((actor.getFlag(MODULE_ID, "furyTargets") ?? []).length) await removeFuryFromSource(actor);
+}
+
 function dwarfEffects(actor) {
   const race = actor.items?.find?.((item) => item.type === "race");
   const characterClass = actor.items?.find?.((item) => item.type === "class");
@@ -1425,6 +1431,8 @@ for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (i
 Hooks.once("ready", () => {
   if (!enabled()) return;
   console.log(`${MODULE_ID} | Automações de habilidades de classe e raça ativas`);
+  game.od2Qdv ??= {};
+  game.od2Qdv.classRaceAbilities = { rest: completeClassRaceAbilityRest };
   for (const combat of game.combats ?? []) previousCombatants.set(combat, combat.combatant?.actor?.id ?? null);
   breakImprovisedWeapons();
   migrateOptimizedArmorDescriptions();
