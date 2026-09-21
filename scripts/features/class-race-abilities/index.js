@@ -483,11 +483,19 @@ async function improviseWeapon(actor) {
   return item;
 }
 
-async function breakImprovisedWeapons(combat) {
-  if (!isPrimaryActiveGM() || !combat?.id || cleanedImprovisedCombats.has(combat.id)) return;
-  cleanedImprovisedCombats.add(combat.id);
+async function breakImprovisedWeapons(combat = null) {
+  if (!isPrimaryActiveGM()) return;
+  const combatId = combat?.id ?? null;
+  if (combatId && cleanedImprovisedCombats.has(combatId)) return;
+  if (combatId) cleanedImprovisedCombats.add(combatId);
   for (const actor of game.actors ?? []) {
-    const items = [...(actor.items ?? [])].filter((item) => item.getFlag?.(MODULE_ID, "improvisedWeapon") && item.getFlag(MODULE_ID, "improvisedWeaponCombatId") === combat.id);
+    const items = [...(actor.items ?? [])].filter((item) => {
+      if (!item.getFlag?.(MODULE_ID, "improvisedWeapon")) return false;
+      const itemCombatId = item.getFlag(MODULE_ID, "improvisedWeaponCombatId");
+      if (combatId) return itemCombatId === combatId;
+      const trackedCombat = game.combats?.get?.(itemCombatId);
+      return !trackedCombat || trackedCombat.started === false || trackedCombat.active === false;
+    });
     if (!items.length) continue;
     await actor.deleteEmbeddedDocuments("Item", items.map((item) => item.id));
     await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Arma Improvisada</strong><p>A arma improvisada de ${escapeHtml(actor.name)} quebrou ao fim do combate e foi removida do inventário.</p>` });
@@ -1290,6 +1298,7 @@ Hooks.on("createChatMessage", (message) => {
 });
 Hooks.on("updateCombat", async (combat, changed) => {
   if (!enabled() || !isPrimaryActiveGM()) return;
+  await breakImprovisedWeapons();
   if (changed?.active === false || changed?.started === false) {
     await breakImprovisedWeapons(combat);
     return;
@@ -1317,6 +1326,8 @@ Hooks.on("updateCombat", async (combat, changed) => {
   }
 });
 Hooks.on("deleteCombat", (combat) => breakImprovisedWeapons(combat));
+Hooks.on("combatEnd", (combat) => breakImprovisedWeapons(combat));
+Hooks.on("renderCombatTracker", () => breakImprovisedWeapons());
 // O sistema registra o uso da habilidade atualizando o Item (sem depender de combate
 // ou de um botão customizado). Esse caminho também cobre mensagens sem speaker.actor.
 for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (item, ...args) => {
@@ -1342,6 +1353,7 @@ Hooks.once("ready", () => {
   if (!enabled()) return;
   console.log(`${MODULE_ID} | Automações de habilidades de classe e raça ativas`);
   for (const combat of game.combats ?? []) previousCombatants.set(combat, combat.combatant?.actor?.id ?? null);
+  breakImprovisedWeapons();
   game.socket.on(SOCKET, async (payload) => {
     if (payload?.type === "inspirationRemove" && game.user.isGM) {
       const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
