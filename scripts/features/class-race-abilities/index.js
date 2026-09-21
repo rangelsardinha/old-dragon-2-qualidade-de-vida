@@ -10,6 +10,7 @@ const handledProfanadorSpellRequests = new Set();
 const handledProfanadorSpellMessages = new Set();
 const handledLayOnHandsMessages = new Set();
 const previousCombatants = new WeakMap();
+const cleanedImprovisedCombats = new Set();
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
 function isPrimaryActiveGM() {
@@ -448,6 +449,49 @@ async function rollCityFunds(actor, abilityId) {
   });
 }
 
+async function promptImprovisedWeaponDamage() {
+  const content = '<form><div class="form-group"><label>Dano da arma improvisada</label><input name="damage" type="text" value="1d6" placeholder="Ex.: 1d6" required></div><p>A arma improvisada recebe bônus de <strong>+2 no dano</strong>.</p></form>';
+  const damage = Number(game.release?.generation ?? 13) >= 14
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Dano da arma improvisada" }, content, ok: { label: "Criar arma", callback: (_event, button) => String(button.form.elements.damage.value ?? "").trim() } })
+    : await Dialog.prompt({ title: "Dano da arma improvisada", content, label: "Criar arma", callback: (html) => String(html[0].querySelector('[name="damage"]')?.value ?? "").trim(), rejectClose: false });
+  return damage && /^[0-9dD+*/().\s-]+$/.test(damage) ? damage : null;
+}
+
+async function improviseWeapon(actor) {
+  const combat = game.combat;
+  if (!combat?.id) return ui.notifications.warn("A habilidade só pode ser usada durante um combate ativo.");
+  const roll = new Roll("1d6");
+  if (Number(game.release?.generation ?? 13) >= 14) await roll.evaluate();
+  else await roll.roll({ async: true });
+  if (Number(roll.total) > 2) {
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), rolls: [roll], content: "<strong>Armamento Improvisado</strong><p>A tentativa falhou.</p>" });
+    return;
+  }
+  const damage = await promptImprovisedWeaponDamage();
+  if (!damage) return ui.notifications.warn("Informe um dano válido para a arma improvisada.");
+  const [item] = await actor.createEmbeddedDocuments("Item", [{
+    name: "Arma Improvisada",
+    type: "weapon",
+    img: "icons/weapons/melee/mace-runed.webp",
+    system: { type: "melee", damage, bonus_damage: 2, is_equipped: true, quantity: 1, description: "Arma improvisada. Quebra ao fim do combate. Bônus de +2 no dano." },
+    flags: { [MODULE_ID]: { improvisedWeapon: true, improvisedWeaponCombatId: combat.id } }
+  }]);
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), rolls: [roll], content: `<strong>Armamento Improvisado</strong><p>A tentativa foi bem-sucedida. A arma improvisada foi criada e equipada com dano <strong>${escapeHtml(damage)} + 2</strong>.</p>` });
+  actor.sheet?.render?.(false);
+  return item;
+}
+
+async function breakImprovisedWeapons(combat) {
+  if (!isPrimaryActiveGM() || !combat?.id || cleanedImprovisedCombats.has(combat.id)) return;
+  cleanedImprovisedCombats.add(combat.id);
+  for (const actor of game.actors ?? []) {
+    const items = [...(actor.items ?? [])].filter((item) => item.getFlag?.(MODULE_ID, "improvisedWeapon") && item.getFlag(MODULE_ID, "improvisedWeaponCombatId") === combat.id);
+    if (!items.length) continue;
+    await actor.deleteEmbeddedDocuments("Item", items.map((item) => item.id));
+    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Arma Improvisada</strong><p>A arma improvisada de ${escapeHtml(actor.name)} quebrou ao fim do combate e foi removida do inventário.</p>` });
+  }
+}
+
 async function rollTurnUndead(actor, level) {
   const origin = actor.getActiveTokens?.()[0] ?? null;
   if (!origin || !canvas?.tokens) return ui.notifications.warn("O clérigo precisa estar representado por um token.");
@@ -549,6 +593,9 @@ function isPatrolConvocationAbilityName(name) {
 }
 function isCityFundsAbilityName(name) {
   return normalizeAbilityName(name) === "fundos da cidade";
+}
+function isImprovisedWeaponAbilityName(name) {
+  return normalizeAbilityName(name) === "armamento improvisado";
 }
 function isRacialTrainingAbilityName(name) {
   return normalizeAbilityName(name) === "treinamento racial";
@@ -1062,6 +1109,13 @@ function enhanceAcademicAbilities(app, html) {
       }
     }
   }
+  if (normalizeAbilityName(actorClassName(actor)) === "gladiador") {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      if (!isImprovisedWeaponAbilityName(ability?.name) || row.querySelector("[data-improvise-weapon]")) continue;
+      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-improvise-weapon title="Improvisar armamento"><i class="fa-light fa-hammer-war fa-sm"></i>&nbsp;Improvisar armamento</a></div>`);
+    }
+  }
   if (isDwarfAdventurerName(actorClassName(actor))) {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -1110,8 +1164,9 @@ function enhanceAcademicAbilities(app, html) {
     const naturalEnemyChoice = event.target.closest?.("[data-natural-enemy-choice]");
     const patrolConvocation = event.target.closest?.("[data-patrol-convocation]");
     const cityFunds = event.target.closest?.("[data-city-funds]");
+    const improviseWeaponButton = event.target.closest?.("[data-improvise-weapon]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !elfRacialWeaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !cityFunds && !profanationMagic) return;
+    if (!button && !weaponChoice && !elfRacialWeaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !cityFunds && !improviseWeaponButton && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (elfRacialWeaponChoice) {
@@ -1189,6 +1244,12 @@ function enhanceAcademicAbilities(app, html) {
       app.render(false);
       return;
     }
+    if (improviseWeaponButton) {
+      improviseWeaponButton.classList.add("rolling");
+      try { await improviseWeapon(actor); } finally { improviseWeaponButton.classList.remove("rolling"); }
+      app.render(false);
+      return;
+    }
     if (profanationMagic) {
       profanationMagic.classList.add("rolling");
       try { await rollProfanationMagic(actor, profanationMagic.dataset.abilityId); } finally { profanationMagic.classList.remove("rolling"); }
@@ -1226,7 +1287,12 @@ Hooks.on("createChatMessage", (message) => {
   handleLayOnHandsMessage(message).catch((error) => console.error(`${MODULE_ID} | Falha ao processar Cura pelas Mãos`, error));
 });
 Hooks.on("updateCombat", async (combat, changed) => {
-  if (!enabled() || !Object.prototype.hasOwnProperty.call(changed ?? {}, "round") || !isPrimaryActiveGM()) return;
+  if (!enabled() || !isPrimaryActiveGM()) return;
+  if (changed?.active === false) {
+    await breakImprovisedWeapons(combat);
+    return;
+  }
+  if (!Object.prototype.hasOwnProperty.call(changed ?? {}, "round")) return;
   if (Object.prototype.hasOwnProperty.call(changed ?? {}, "round")) {
     const templates = [...(canvas?.scene?.getEmbeddedCollection?.("MeasuredTemplate") ?? [])].filter((template) => template.flags?.[MODULE_ID]?.turnUndead);
     if (templates.length) await canvas.scene.deleteEmbeddedDocuments("MeasuredTemplate", templates.map((template) => template.id));
@@ -1248,6 +1314,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
   }
 });
+Hooks.on("deleteCombat", (combat) => breakImprovisedWeapons(combat));
 // O sistema registra o uso da habilidade atualizando o Item (sem depender de combate
 // ou de um botão customizado). Esse caminho também cobre mensagens sem speaker.actor.
 for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (item, ...args) => {
