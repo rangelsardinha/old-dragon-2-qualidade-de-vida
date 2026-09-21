@@ -54,3 +54,13 @@ export function prototypeVisionUpdate(infravisionMeters, squareMeters) {
     "prototypeToken.sight.visionMode": "darkvision"
   };
 }
+
+export function tokenVisionUpdate(infravisionMeters, squareMeters) {
+  const range = gridVisionRange(infravisionMeters, squareMeters);
+  if (!range) return null;
+  return {
+    "sight.enabled": true,
+    "sight.range": range,
+    "sight.visionMode": "darkvision"
+  };
+}

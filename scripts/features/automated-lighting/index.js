@@ -1,4 +1,4 @@
-import { actorInfravisionMeters, gridVisionRange, prototypeVisionUpdate } from "./model.js";
+import { actorInfravisionMeters, gridVisionRange, prototypeVisionUpdate, tokenVisionUpdate } from "./model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const ACTOR_TYPES = new Set(["character", "monster", "retainer"]);
@@ -16,9 +16,7 @@ function dialogV2() {
 }
 
 async function askSquareSize() {
-  const sceneDistance = Number(canvas?.scene?.grid?.distance);
-  const initial = Number.isFinite(sceneDistance) && sceneDistance > 0 ? sceneDistance : 1.5;
-  const content = `<form><div class="form-group"><label>Tamanho do quadrado em metros</label><input type="number" name="squareMeters" min="0.01" step="0.01" value="${initial}"><p class="hint">Exemplo: em um mapa onde cada quadrado representa 1,5 metro, informe 1,5.</p></div></form>`;
+  const content = '<form><div class="form-group"><label>Tamanho do quadrado em metros</label><input type="number" name="squareMeters" min="0.01" step="0.01" value="1.5"><p class="hint">Exemplo: em um mapa onde cada quadrado representa 1,5 metro, informe 1,5.</p></div></form>';
   const read = (form) => Number(String(form.elements.squareMeters?.value ?? "").replace(",", "."));
   const V2 = dialogV2();
   if (V2) return V2.prompt({
@@ -44,6 +42,7 @@ export async function correctActorLighting() {
 
   const actors = [...(game.actors ?? [])].filter((actor) => ACTOR_TYPES.has(actor.type));
   const corrected = [];
+  const correctedTokens = [];
   const failures = [];
   for (const actor of actors) {
     const meters = actorInfravisionMeters(actor);
@@ -58,9 +57,24 @@ export async function correctActorLighting() {
     }
   }
 
-  if (!corrected.length && !failures.length) return ui.notifications.warn("Nenhum ator com infravisão foi encontrado.");
+  for (const token of canvas?.scene?.tokens ?? []) {
+    const actor = token.actor;
+    const meters = actorInfravisionMeters(actor);
+    if (!meters) continue;
+    const range = gridVisionRange(meters, squareMeters);
+    try {
+      await token.update(tokenVisionUpdate(meters, squareMeters));
+      correctedTokens.push({ token, actor, meters, range });
+    } catch (error) {
+      console.error(`${MODULE_ID} | Não foi possível corrigir a visão do token ${token.name}`, error);
+      failures.push(`token ${token.name}`);
+    }
+  }
+
+  if (!corrected.length && !correctedTokens.length && !failures.length) return ui.notifications.warn("Nenhum ator ou token com infravisão foi encontrado.");
   console.info(`${MODULE_ID} | Luz corrigida`, corrected.map(({ actor, meters, range }) => `${actor.name}: ${meters} m = ${range} quadrado(s)`));
-  ui.notifications.info(`${corrected.length} ator(es) com infravisão corrigido(s).`);
+  console.info(`${MODULE_ID} | Luz dos tokens corrigida`, correctedTokens.map(({ token, meters, range }) => `${token.name}: ${meters} m = ${range} quadrado(s)`));
+  ui.notifications.info(`${corrected.length} protótipo(s) e ${correctedTokens.length} token(s) com infravisão corrigido(s).`);
   if (failures.length) ui.notifications.error(`Não foi possível corrigir: ${failures.join(", ")}.`);
 }
 

@@ -117,9 +117,9 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 
 - Pode ser habilitada ou desabilitada nas configurações do módulo.
 - Adiciona ao diretório de Atores o botão **Corrigir luz dos atores**, disponível para o Mestre.
-- Solicita o tamanho, em metros, de cada quadrado do mapa e converte a infravisão para unidades de grade.
+- Solicita o tamanho, em metros, de cada quadrado do mapa, preenchido inicialmente com 1,5, e converte a infravisão para unidades de grade.
 - Lê a infravisão do item de raça de personagens e ajudantes e também das descrições de monstros e mercenários.
-- Habilita a visão do protótipo de token, seleciona **Visão no Escuro** e configura seu alcance calculado.
+- Habilita a visão dos protótipos e dos tokens presentes no mapa atual, seleciona **Visão no Escuro** e configura seu alcance calculado.
 
 ### Habilidades de raça e classe automatizadas
 

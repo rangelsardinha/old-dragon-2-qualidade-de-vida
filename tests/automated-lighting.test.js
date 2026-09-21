@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { actorInfravisionMeters, gridVisionRange, infravisionFromText, prototypeVisionUpdate } from "../scripts/features/automated-lighting/model.js";
+import { actorInfravisionMeters, gridVisionRange, infravisionFromText, prototypeVisionUpdate, tokenVisionUpdate } from "../scripts/features/automated-lighting/model.js";
 
 test("lê infravisão registrada na raça do personagem ou ajudante", () => {
   const race = { type: "race", system: { infravision: 18 } };
@@ -23,5 +23,10 @@ test("converte metros de infravisão em unidades de grade", () => {
     "prototypeToken.sight.enabled": true,
     "prototypeToken.sight.range": 12,
     "prototypeToken.sight.visionMode": "darkvision"
+  });
+  assert.deepEqual(tokenVisionUpdate(18, 1.5), {
+    "sight.enabled": true,
+    "sight.range": 12,
+    "sight.visionMode": "darkvision"
   });
 });
