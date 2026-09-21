@@ -87,6 +87,7 @@ export function normalizedLightName(value) {
 export function lightResourceKind(itemName) {
   const name = normalizedLightName(itemName);
   if (name === "tocha") return "torch";
+  if (name === "vela") return "candle";
   if (name === "lamparina" || name === "lanterna furta-fogo") return "oil";
   return null;
 }
@@ -95,6 +96,7 @@ export function inventoryResourceKind(item) {
   const id = normalizedLightName(item?.system?.odo_id);
   const name = normalizedLightName(item?.name);
   if (id === "tocha" || name === "tocha") return "torch";
+  if (id === "vela" || name === "vela") return "candle";
   if (id === "oleo" || name === "oleo") return "oil";
   return null;
 }
@@ -106,7 +108,7 @@ export function quantityAfterConsumption(value) {
 
 export function expiresWithSessionEvent(itemName, event) {
   const name = normalizedLightName(itemName);
-  if (event === "torch") return name === "tocha";
+  if (event === "torch") return name === "tocha" || name === "vela";
   if (event === "lamp") return name === "lamparina" || name === "lanterna furta-fogo";
   return false;
 }

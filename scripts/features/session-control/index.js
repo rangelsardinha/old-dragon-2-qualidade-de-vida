@@ -124,7 +124,7 @@ async function triggerEvents(key) {
     if (event === "D") await publicMessage("Descanso necessário", "O grupo deve descansar. Sem descanso curto, os testes subsequentes são difíceis (-2) até que descansem.");
     if (event === "T") {
       const count = await expireSessionLights("torch");
-      await publicMessage("Tochas queimaram", `As tochas se apagaram ao fim deste turno.${count ? ` ${count} fonte(s) de luz apagada(s).` : ""}`);
+      await publicMessage("Tochas e velas queimaram", `As tochas e velas se apagaram ao fim deste turno.${count ? ` ${count} fonte(s) de luz apagada(s).` : ""}`);
     }
     if (event === "L") {
       const count = await expireSessionLights("lamp");

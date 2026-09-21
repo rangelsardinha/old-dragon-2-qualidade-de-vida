@@ -167,8 +167,8 @@ async function removeOneItem(actor, item) {
 
 async function confirmConsumption(actor, item, kind, lightName) {
   const amount = quantity(item);
-  const resource = kind === "torch" ? "uma tocha" : "um frasco de óleo";
-  const title = kind === "torch" ? "Consumir tocha?" : "Consumir óleo?";
+  const resource = kind === "torch" ? "uma tocha" : kind === "candle" ? "uma vela" : "um frasco de óleo";
+  const title = kind === "torch" ? "Consumir tocha?" : kind === "candle" ? "Consumir vela?" : "Consumir óleo?";
   const content = `<p><strong>${escapeHtml(actor.name)}</strong> acendeu <strong>${escapeHtml(lightName)}</strong>.</p><p>Deseja remover ${resource} do inventário? Quantidade disponível: <strong>${amount}</strong>.</p>`;
   const DialogV2 = Number(game.release?.generation ?? 13) >= 14 ? foundry.applications?.api?.DialogV2 : null;
   if (DialogV2) {
@@ -187,13 +187,14 @@ async function consumeForLight(actor, lightName) {
   if (!kind) return;
   const item = resourceItem(inventoryOwner, kind);
   if (!item) {
-    const resource = kind === "torch" ? "tochas" : "frascos de óleo";
+    const resource = kind === "torch" ? "tochas" : kind === "candle" ? "velas" : "frascos de óleo";
     ui.notifications.warn(`${inventoryOwner?.name ?? actor.name} não possui ${resource} no inventário.`);
     return;
   }
   if (!(await confirmConsumption(inventoryOwner, item, kind, lightName))) return;
   await removeOneItem(actor, item);
-  ui.notifications.info(`${inventoryOwner.name}: ${kind === "torch" ? "1 tocha consumida" : "1 frasco de óleo consumido"}.`);
+  const consumed = kind === "torch" ? "1 tocha consumida" : kind === "candle" ? "1 vela consumida" : "1 frasco de óleo consumido";
+  ui.notifications.info(`${inventoryOwner.name}: ${consumed}.`);
 }
 
 function cancelPending(predicate) {

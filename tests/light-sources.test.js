@@ -66,11 +66,13 @@ test("migra apenas o padrão antigo de tipos de item", () => {
 
 test("identifica os recursos consumidos pelas fontes físicas", () => {
   assert.equal(lightResourceKind("Tocha"), "torch");
+  assert.equal(lightResourceKind("Vela"), "candle");
   assert.equal(lightResourceKind("Lamparina"), "oil");
   assert.equal(lightResourceKind("Lanterna furta-fogo"), "oil");
   assert.equal(lightResourceKind("Luz Contínua"), null);
   assert.equal(inventoryResourceKind({ name: "Óleo", system: { odo_id: "oleo" } }), "oil");
   assert.equal(inventoryResourceKind({ name: "Tocha", system: { odo_id: "tocha" } }), "torch");
+  assert.equal(inventoryResourceKind({ name: "Vela", system: { odo_id: "vela" } }), "candle");
 });
 
 test("reduz pilhas e remove a última unidade do recurso", () => {
@@ -81,6 +83,7 @@ test("reduz pilhas e remove a última unidade do recurso", () => {
 
 test("eventos da carta apagam somente a fonte correspondente", () => {
   assert.equal(expiresWithSessionEvent("Tocha", "torch"), true);
+  assert.equal(expiresWithSessionEvent("Vela", "torch"), true);
   assert.equal(expiresWithSessionEvent("Lamparina", "torch"), false);
   assert.equal(expiresWithSessionEvent("Lamparina", "lamp"), true);
   assert.equal(expiresWithSessionEvent("Lanterna furta-fogo", "lamp"), true);
