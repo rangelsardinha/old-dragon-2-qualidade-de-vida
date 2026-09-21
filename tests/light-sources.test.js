@@ -83,7 +83,10 @@ test("reduz pilhas e remove a última unidade do recurso", () => {
 
 test("eventos da carta apagam somente a fonte correspondente", () => {
   assert.equal(expiresWithSessionEvent("Tocha", "torch"), true);
-  assert.equal(expiresWithSessionEvent("Vela", "torch"), true);
+  assert.equal(expiresWithSessionEvent("Vela", "torch", 1), false);
+  assert.equal(expiresWithSessionEvent("Vela", "torch", 2), true);
+  assert.equal(expiresWithSessionEvent("Vela", "torch", 4), true);
+  assert.equal(expiresWithSessionEvent("Tocha", "torch", 1), true);
   assert.equal(expiresWithSessionEvent("Lamparina", "torch"), false);
   assert.equal(expiresWithSessionEvent("Lamparina", "lamp"), true);
   assert.equal(expiresWithSessionEvent("Lanterna furta-fogo", "lamp"), true);

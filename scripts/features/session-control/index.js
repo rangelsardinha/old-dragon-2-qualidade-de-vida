@@ -77,7 +77,7 @@ function cardHtml(entry) {
     const key = `${hour + 1}-${turn.n}`, passed = turns[key] === "passed";
     return `<div class="od2sc-turn"><select data-od2sc-turn="${key}" ${game.user.isGM ? "" : "disabled"}><option value="" ${passed ? "" : "selected"}>${turn.n}</option><option value="passed" ${passed ? "selected" : ""}>✔</option></select><div class="od2sc-events">${turn.events.map(e => `<span class="od2sc-event od2sc-${e.toLowerCase()}">${e}</span>`).join("")}</div></div>`;
   }).join("")}</div></section>`).join("");
-  return `<article class="od2sc-card"><header><h1>Cartão de Controle de Sessão</h1><strong>Old Dragon</strong></header><p class="od2sc-help"><b>Relógio:</b> cada espaço equivale a 1 turno de 10 minutos. E: encontro; D: descanso; T: tocha; L: lanterna.</p><section class="od2sc-hours">${hours}</section><section class="od2sc-notes"><label>Notas públicas<textarea data-od2sc-notes="public" ${game.user.isGM ? "" : "disabled"}>${escapeHtml(value(entry, "public", ""))}</textarea></label>${game.user.isGM ? `<label>Notas privadas do Mestre<textarea data-od2sc-notes="private">${escapeHtml(value(entry, "private", ""))}</textarea></label><div class="od2sc-actions"><button type="button" data-action="save"><i class="fas fa-save"></i> Salvar notas</button><button type="button" data-action="new"><i class="fas fa-plus"></i> Nova carta</button></div>` : ""}</section></article>`;
+  return `<article class="od2sc-card"><header><h1>Cartão de Controle de Sessão</h1><strong>Old Dragon</strong></header><p class="od2sc-help"><b>Relógio:</b> cada espaço equivale a 1 turno de 10 minutos. E: encontro; D: descanso; T: tocha/vela; L: lanterna.</p><section class="od2sc-hours">${hours}</section><section class="od2sc-notes"><label>Notas públicas<textarea data-od2sc-notes="public" ${game.user.isGM ? "" : "disabled"}>${escapeHtml(value(entry, "public", ""))}</textarea></label>${game.user.isGM ? `<label>Notas privadas do Mestre<textarea data-od2sc-notes="private">${escapeHtml(value(entry, "private", ""))}</textarea></label><div class="od2sc-actions"><button type="button" data-action="save"><i class="fas fa-save"></i> Salvar notas</button><button type="button" data-action="new"><i class="fas fa-plus"></i> Nova carta</button></div>` : ""}</section></article>`;
 }
 
 function bindCard(card, entry) {
@@ -123,8 +123,9 @@ async function triggerEvents(key) {
     if (event === "E") await encounter(hour, number);
     if (event === "D") await publicMessage("Descanso necessário", "O grupo deve descansar. Sem descanso curto, os testes subsequentes são difíceis (-2) até que descansem.");
     if (event === "T") {
-      const count = await expireSessionLights("torch");
-      await publicMessage("Tochas e velas queimaram", `As tochas e velas se apagaram ao fim deste turno.${count ? ` ${count} fonte(s) de luz apagada(s).` : ""}`);
+      const count = await expireSessionLights("torch", hour);
+      const candles = [2, 4].includes(hour);
+      await publicMessage(candles ? "Tochas e velas queimaram" : "Tochas queimaram", `${candles ? "As tochas e velas" : "As tochas"} se apagaram ao fim deste turno.${count ? ` ${count} fonte(s) de luz apagada(s).` : ""}`);
     }
     if (event === "L") {
       const count = await expireSessionLights("lamp");

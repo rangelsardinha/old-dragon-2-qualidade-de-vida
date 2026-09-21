@@ -106,9 +106,9 @@ export function quantityAfterConsumption(value) {
   return quantity <= 1 ? { delete: true, quantity: 0 } : { delete: false, quantity: quantity - 1 };
 }
 
-export function expiresWithSessionEvent(itemName, event) {
+export function expiresWithSessionEvent(itemName, event, hour) {
   const name = normalizedLightName(itemName);
-  if (event === "torch") return name === "tocha" || name === "vela";
+  if (event === "torch") return name === "tocha" || (name === "vela" && [2, 4].includes(Number(hour)));
   if (event === "lamp") return name === "lamparina" || name === "lanterna furta-fogo";
   return false;
 }

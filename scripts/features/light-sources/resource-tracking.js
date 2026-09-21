@@ -325,20 +325,20 @@ function actorsWithTokens() {
   return [...actors.values()];
 }
 
-export async function expireSessionLights(event) {
+export async function expireSessionLights(event, hour) {
   if (!enabled() || !activeGm()) return 0;
   const api = game.modules.get(LIGHT_SOURCES_MODULE_ID)?.api ?? game.lightSources;
   if (!api?.getActive || !api?.deactivate) return 0;
   let count = 0;
   for (const actor of actorsWithTokens()) {
     const active = api.getActive(actor);
-    if (!expiresWithSessionEvent(active?.itemName, event)) continue;
+    if (!expiresWithSessionEvent(active?.itemName, event, hour)) continue;
     await api.deactivate(actor);
     count += 1;
   }
   for (const scene of game.scenes ?? []) {
     const matching = [...(scene.lights ?? [])]
-      .filter((light) => expiresWithSessionEvent(light.getFlag?.(LIGHT_SOURCES_MODULE_ID, GROUND_LIGHT_FLAG)?.itemName, event));
+      .filter((light) => expiresWithSessionEvent(light.getFlag?.(LIGHT_SOURCES_MODULE_ID, GROUND_LIGHT_FLAG)?.itemName, event, hour));
     if (!matching.length) continue;
     if (event === "lamp") {
       await scene.updateEmbeddedDocuments("AmbientLight", matching.map((light) => ({ _id: light.id, hidden: true })));
