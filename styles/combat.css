@@ -7,6 +7,16 @@
   font-weight: 700;
 }
 
+/* Respeita a cor do tema do chat, inclusive nos temas escuros. */
+.od2ca-card strong,
+.od2ca-card b {
+  color: inherit !important;
+}
+
+.od2ca-card dt {
+  color: inherit !important;
+}
+
 .od2ca-card .od2ca-hit {
   color: #16713a;
   font-weight: 700;

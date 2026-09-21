@@ -102,7 +102,7 @@
 }
 
 .tomo-stat strong {
-  color: var(--color-text-dark-secondary);
+  color: inherit !important;
   font-size: 10px;
   text-transform: uppercase;
 }
