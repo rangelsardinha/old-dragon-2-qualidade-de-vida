@@ -32,6 +32,10 @@ function isWaterskin(item) {
   return /^odre(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
 }
 
+function canContainItems(item) {
+  return item?.type === "container" && !isWaterskin(item);
+}
+
 function enhanceWaterskinSheet(app, root) {
   const item = app.item ?? app.document;
   if (!isWaterskin(item) || !item?.isOwner || root.querySelector("[data-od2qdv-waterskin-full]")) return;
@@ -147,6 +151,10 @@ async function setParent(item, newParentId) {
 }
 
 async function nestExistingItem(item, container) {
+  if (!canContainItems(container)) {
+    ui.notifications.warn("Odres não podem armazenar itens.");
+    return true;
+  }
   const actor = container.actor;
   if (!item?.actor || item.actor.id !== actor.id) return false;
   if (!INVENTORY_TYPES.has(item.type)) {
@@ -183,6 +191,11 @@ export async function transferEmbeddedTree(rootItem, targetActor, targetParentId
     return;
   }
 
+  if (targetParentId && !canContainItems(targetActor.items.get(targetParentId))) {
+    ui.notifications.warn("Odres não podem armazenar itens.");
+    return;
+  }
+
   const sourceItems = subtree(sourceActor, rootItem.id);
   const idMap = new Map();
   for (const source of sourceItems) {
@@ -209,6 +222,10 @@ export async function transferEmbeddedTree(rootItem, targetActor, targetParentId
 }
 
 async function createInsideContainer(sourceItem, container) {
+  if (!canContainItems(container)) {
+    ui.notifications.warn("Odres não podem armazenar itens.");
+    return;
+  }
   if (!INVENTORY_TYPES.has(sourceItem.type)) {
     ui.notifications.warn("Somente equipamentos podem ser colocados em recipientes.");
     return;
@@ -229,6 +246,10 @@ async function handleDrop(event, targetActor, targetContainer = null) {
   if (!sourceItem) return false;
 
   if (targetContainer) {
+    if (!canContainItems(targetContainer)) {
+      ui.notifications.warn("Odres não podem armazenar itens.");
+      return true;
+    }
     if (!canStoreItem(sourceItem, allowsEquippedAmmunition(targetContainer))) {
       ui.notifications.warn(`${sourceItem.name} está equipado. Apenas munições podem ser guardadas equipadas em recipientes configurados para isso.`);
       return true;
@@ -313,7 +334,7 @@ function renderTree(actor, rootContainer, depth = 0) {
   if (!children.length) return `<div class="od2qdv-container-empty">Vazio</div>`;
   const header = depth === 0 ? `<div class="od2qdv-container-contents-header"><span></span><span>Item</span><span>Qtd</span><span>Peso T.</span><span>Valor T.</span><span></span></div>` : "";
   return `${header}<ol class="od2qdv-container-contents">${children.map((item) => {
-    const nested = item.type === "container" ? renderTree(actor, item, depth + 1) : "";
+    const nested = canContainItems(item) ? renderTree(actor, item, depth + 1) : "";
     const ammoToggle = allowsEquippedAmmunition(rootContainer) && isAmmunition(item)
       ? `<button type="button" data-od2qdv-action="toggle-ammunition" data-item-id="${item.id}" title="${item.system?.is_equipped ? "Desequipar" : "Equipar"} munição"><i class="fas ${item.system?.is_equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i></button>`
       : "";
@@ -322,7 +343,7 @@ function renderTree(actor, rootContainer, depth = 0) {
       <button type="button" data-od2qdv-action="open-item" data-item-id="${item.id}">${escapeHtml(item.name)}</button>
       <span class="od2qdv-contained-quantity">${escapeHtml(containedQuantity(item))}</span>
       <span class="od2qdv-contained-weight">${escapeHtml(containedWeight(item))}</span>
-      <span class="od2qdv-contained-value">${escapeHtml(item.type === "container" ? coinLabel(containerCoins(item)) : containedValue(item))}</span>
+      <span class="od2qdv-contained-value">${escapeHtml(canContainItems(item) ? coinLabel(containerCoins(item)) : containedValue(item))}</span>
       <span class="od2qdv-contained-controls">${ammoToggle}<button type="button" data-od2qdv-action="remove-item" data-item-id="${item.id}" title="Retirar do recipiente"><i class="fas fa-eject"></i></button><button type="button" data-od2qdv-action="delete-item" data-item-id="${item.id}" title="Excluir"><i class="fas fa-trash"></i></button></span>
       ${nested}
   </li>`;
@@ -350,7 +371,7 @@ export function enhanceActorSheet(app, html) {
   }
   for (const row of root.querySelectorAll(".item[data-item-id]")) {
     const container = actor.items.get(row.dataset.itemId);
-    if (container?.type !== "container" || parentId(container)) continue;
+    if (!canContainItems(container) || parentId(container)) continue;
     if (row.querySelector(":scope > .od2qdv-container-summary")) continue;
     row.classList.add("od2qdv-container-row");
     row.insertAdjacentHTML("beforeend", `<div class="od2qdv-container-summary"><span><i class="fas fa-box-open"></i> ${subtree(actor, container.id).length - 1} item(ns) · ${coinLabel(containerCoins(container))}</span><span><button type="button" data-od2qdv-action="transfer" title="Transferir recipiente e conteúdo"><i class="fas fa-people-arrows"></i> Transferir</button><button type="button" data-od2qdv-action="empty" title="Esvaziar recipiente"><i class="fas fa-box-open"></i> Esvaziar</button></span></div>${renderTree(actor, container)}`);
@@ -364,12 +385,17 @@ export function enhanceActorSheet(app, html) {
     let dropData;
     try { dropData = JSON.parse(event.dataTransfer?.getData("text/plain")); } catch { return; }
     if (dropData?.type !== "Item") return;
-    const isContainerTarget = target?.type === "container";
+    const isRejectedWaterskinTarget = target?.type === "container" && isWaterskin(target);
+    const isContainerTarget = canContainItems(target);
     const dragged = globalThis.fromUuidSync?.(dropData.uuid);
     const isExternalContainer = dragged?.type === "container" && Boolean(dragged.actor) && dragged.actor.id !== actor.id;
-    if (!isContainerTarget && !isExternalContainer) return;
+    if (!isContainerTarget && !isExternalContainer && !isRejectedWaterskinTarget) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
-    const handled = await handleDrop(event, actor, target?.type === "container" ? target : null);
+    if (isRejectedWaterskinTarget) {
+      ui.notifications.warn("Odres não podem armazenar itens.");
+      return;
+    }
+    const handled = await handleDrop(event, actor, isContainerTarget ? target : null);
     if (handled) {
       app.render(false);
     }
@@ -439,7 +465,7 @@ function enhanceItemSheet(app, html) {
   if (!root) return;
   enhanceWaterskinSheet(app, root);
   if (!enabled()) return;
-  if (app.item?.type !== "container" || !app.item.actor || !app.item.isOwner) return;
+  if (!canContainItems(app.item) || !app.item.actor || !app.item.isOwner) return;
   if (!root || root.querySelector(".od2qdv-container-sheet")) return;
   const form = root.matches?.("form") ? root : root.querySelector("form");
   if (!form) return;
