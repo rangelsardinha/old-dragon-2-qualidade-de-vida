@@ -115,11 +115,13 @@ function availableCount(items) {
   return items.reduce((total, item) => total + itemQuantity(item), 0);
 }
 
-async function resourceChoices(actors, type) {
+async function resourceChoices(actors, type, { darkSun = false } = {}) {
   const water = type === "water";
   const data = actors.map((actor) => ({ actor, available: availableCount(water ? fullWaterskins(actor) : rations(actor)) }));
   const note = water
-    ? "Personagens consomem 4 litros de água por dia. Thri-kreen consome 1 litro de água. Meio-gigantes consomem 8 litros."
+    ? darkSun
+      ? "Personagens consomem 4 litros de água por dia. Thri-kreen consome 1 litro de água. Meio-gigantes consomem 8 litros."
+      : "Personagens consomem 2 litros de água por dia."
     : "Personagens consomem 1 ração por dia. Thri-kreen consome 1 ração a cada 2 dias. Meio-gigantes consomem 2 rações.";
   const unit = water ? "odres cheios" : "rações";
   const rows = data.map(({ actor, available }, index) => `<tr><td>${escapeHtml(actor.name)}</td><td>${available} ${unit}</td><td><input type="number" name="amount-${index}" min="0" max="${available}" step="1" value="0"></td></tr>`).join("");
@@ -208,17 +210,18 @@ async function performRest() {
   for (const actor of actors) recovered.set(actor.uuid, await recoverActor(actor));
 
   const consumedWater = new Map();
+  const darkSun = darkSunEnabled();
   const hasWater = await askSource("Fonte de água", "Existe uma fonte de água disponível?");
   if (hasWater === null) return;
-  if (!hasWater && darkSunEnabled()) {
-    const choices = await resourceChoices(actors, "water");
+  if (!hasWater) {
+    const choices = await resourceChoices(actors, "water", { darkSun });
     if (choices) for (const { actor, amount } of choices) consumedWater.set(actor.uuid, await emptyWaterskins(actor, amount));
   }
 
   const consumedFood = new Map();
   const hasFood = await askSource("Fonte de comida ou caça", "Existe uma fonte de comida ou caça disponível?");
   if (hasFood === null) return;
-  if (!hasFood && darkSunEnabled()) {
+  if (!hasFood && darkSun) {
     const choices = await resourceChoices(actors, "food");
     if (choices) for (const { actor, amount } of choices) consumedFood.set(actor.uuid, await consumeRations(actor, amount));
   }
