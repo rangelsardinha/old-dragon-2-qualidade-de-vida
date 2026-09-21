@@ -103,10 +103,6 @@ function fullWaterskins(actor) {
   return actor.items.filter((item) => isWaterskin(item) && item.getFlag(MODULE_ID, WATERSKIN_FULL_FLAG) === true);
 }
 
-function emptyWaterskinStacks(actor) {
-  return actor.items.filter((item) => isWaterskin(item) && item.getFlag(MODULE_ID, WATERSKIN_FULL_FLAG) !== true);
-}
-
 function rations(actor) {
   return actor.items.filter(isRation);
 }
@@ -142,19 +138,13 @@ async function resourceChoices(actors, type, { darkSun = false } = {}) {
 async function emptyWaterskins(actor, requested) {
   let remaining = Math.max(0, Math.trunc(Number(requested) || 0));
   let emptied = 0;
-  let emptyStack = emptyWaterskinStacks(actor)[0] ?? null;
   for (const item of fullWaterskins(actor)) {
     if (!remaining) break;
     const quantity = itemQuantity(item);
     const amount = Math.min(quantity, remaining);
     if (!amount) continue;
-    if (emptyStack) {
-      await emptyStack.update({ "system.quantity": itemQuantity(emptyStack) + amount });
-      if (amount === quantity) await actor.deleteEmbeddedDocuments("Item", [item.id]);
-      else await item.update({ "system.quantity": quantity - amount });
-    } else if (amount === quantity) {
+    if (amount === quantity) {
       await item.setFlag(MODULE_ID, WATERSKIN_FULL_FLAG, false);
-      emptyStack = item;
     } else {
       await item.update({ "system.quantity": quantity - amount });
       const data = item.toObject();
@@ -163,7 +153,7 @@ async function emptyWaterskins(actor, requested) {
       data.flags ??= {};
       data.flags[MODULE_ID] ??= {};
       data.flags[MODULE_ID][WATERSKIN_FULL_FLAG] = false;
-      [emptyStack] = await actor.createEmbeddedDocuments("Item", [data]);
+      await actor.createEmbeddedDocuments("Item", [data]);
     }
     emptied += amount;
     remaining -= amount;
