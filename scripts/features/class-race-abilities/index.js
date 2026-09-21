@@ -488,7 +488,13 @@ async function breakImprovisedWeapons(combat = null) {
   const combatId = combat?.id ?? null;
   if (combatId && cleanedImprovisedCombats.has(combatId)) return;
   if (combatId) cleanedImprovisedCombats.add(combatId);
-  for (const actor of game.actors ?? []) {
+  const actors = new Map();
+  const addActor = (actor) => { if (actor) actors.set(actor.uuid ?? `${actor.id}:${actor.name}`, actor); };
+  for (const actor of game.actors ?? []) addActor(actor);
+  for (const combatant of combat?.combatants ?? []) addActor(combatant.actor);
+  for (const existingCombat of game.combats ?? []) for (const combatant of existingCombat.combatants ?? []) addActor(combatant.actor);
+  for (const token of canvas?.tokens?.placeables ?? []) addActor(token.actor);
+  for (const actor of actors.values()) {
     const items = [...(actor.items ?? [])].filter((item) => {
       if (!item.getFlag?.(MODULE_ID, "improvisedWeapon")) return false;
       const itemCombatId = item.getFlag(MODULE_ID, "improvisedWeaponCombatId");
@@ -1328,6 +1334,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
 Hooks.on("deleteCombat", (combat) => breakImprovisedWeapons(combat));
 Hooks.on("combatEnd", (combat) => breakImprovisedWeapons(combat));
 Hooks.on("renderCombatTracker", () => breakImprovisedWeapons());
+Hooks.on("canvasReady", () => breakImprovisedWeapons());
 // O sistema registra o uso da habilidade atualizando o Item (sem depender de combate
 // ou de um botão customizado). Esse caminho também cobre mensagens sem speaker.actor.
 for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (item, ...args) => {
