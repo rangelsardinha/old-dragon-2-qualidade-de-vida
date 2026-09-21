@@ -120,7 +120,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Solicita o tamanho, em metros, de cada quadrado do mapa, preenchido inicialmente com 1,5, e converte a infravisão para unidades de grade.
 - Lê a infravisão do item de raça de personagens e ajudantes e também das descrições de monstros e mercenários.
 - Habilita a visão dos protótipos e dos tokens presentes no mapa atual, seleciona **Visão no Escuro** e configura seu alcance calculado.
-- Requer o módulo **Light Sources 0.0.9 ou superior**, traduz sua interface para português e registra as configurações de Lamparina, Lanterna furta-fogo, Vela e Tocha preparadas no mundo de teste.
+- Requer o módulo **Light Sources 0.0.9 ou superior**, traduz sua interface para português e registra as configurações de Lamparina, Lanterna furta-fogo, Vela, Tocha e das magias Luz e Luz Contínua preparadas no mundo de teste.
 
 ### Habilidades de raça e classe automatizadas
 

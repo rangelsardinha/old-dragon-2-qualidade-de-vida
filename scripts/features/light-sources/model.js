@@ -37,7 +37,7 @@ function source(uuid, lightData) {
 }
 
 export const OD2_LIGHT_SOURCE_COMPATIBILITY = Object.freeze({
-  itemTypes: Object.freeze(["misc"]),
+  itemTypes: Object.freeze(["misc", "spell"]),
   actorTypes: Object.freeze([]),
   quantityPath: ""
 });
@@ -58,5 +58,20 @@ export const OD2_LIGHT_SOURCES = Object.freeze([
   source(
     "Compendium.olddragon2e.equipment.Item.D20RuafQR6u26MF1",
     light({ dim: 6, bright: 12, angle: 330, alpha: 0.4, type: "flame", intensity: 5 })
+  ),
+  source(
+    "Compendium.olddragon2e.spells.Item.R8L5MhdnzRM5k3BR",
+    light({ dim: 4, bright: 8, angle: 360, alpha: 0.4, type: "flame", intensity: 5 })
+  ),
+  source(
+    "Compendium.olddragon2e.spells.Item.MJEu3lz6sXtfEiDz",
+    light({ dim: 4, bright: 8, angle: 360, alpha: 0.4, type: "flame", intensity: 5 })
   )
 ]);
+
+export function upgradedItemTypes(current, presetVersion) {
+  if (Number(presetVersion) >= 2) return current;
+  const values = Array.isArray(current) ? current : [];
+  if (values.length === 1 && values[0] === "misc") return ["misc", "spell"];
+  return values;
+}

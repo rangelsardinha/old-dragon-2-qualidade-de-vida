@@ -1,10 +1,21 @@
 import {
   LIGHT_SOURCES_MODULE_ID,
   OD2_LIGHT_SOURCE_COMPATIBILITY,
-  OD2_LIGHT_SOURCES
+  OD2_LIGHT_SOURCES,
+  upgradedItemTypes
 } from "./model.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
+const PRESET_VERSION = 2;
+
+Hooks.once("init", () => {
+  game.settings.register(MODULE_ID, "lightSourcesPresetVersion", {
+    scope: "world",
+    config: false,
+    type: Number,
+    default: 0
+  });
+});
 
 async function waitForApi(retries = 20, delayMs = 250) {
   for (let attempt = 0; attempt < retries; attempt += 1) {
@@ -33,6 +44,15 @@ Hooks.once("ready", async () => {
   }
 
   await api.registerCompatibility(OD2_LIGHT_SOURCE_COMPATIBILITY);
+  const presetVersion = game.settings.get(MODULE_ID, "lightSourcesPresetVersion");
+  const currentItemTypes = game.settings.get(LIGHT_SOURCES_MODULE_ID, "itemTypes");
+  const itemTypes = upgradedItemTypes(currentItemTypes, presetVersion);
+  if (itemTypes !== currentItemTypes) {
+    await game.settings.set(LIGHT_SOURCES_MODULE_ID, "itemTypes", itemTypes);
+  }
   await api.registerSources(OD2_LIGHT_SOURCES, { managedBy: MODULE_ID });
+  if (presetVersion < PRESET_VERSION) {
+    await game.settings.set(MODULE_ID, "lightSourcesPresetVersion", PRESET_VERSION);
+  }
   console.info(`${MODULE_ID} | Fontes de luz do Old Dragon 2 registradas no Light Sources.`);
 });
