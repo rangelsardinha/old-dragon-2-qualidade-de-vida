@@ -623,7 +623,18 @@ async function handleAttack(actor, button) {
   const naturalD20 = getNaturalD20(attackRoll);
   const triggerContext = { item, weapon: item, ammunition: ammunition.item, attackMode: attackData.attackMode, attackBasis: attackData.ba, targetActor: target?.actor, roll: attackRoll };
   await game.od2Qdv?.effects?.trigger?.(actor, 'attack', triggerContext);
-  if (naturalD20 === 20) await game.od2Qdv?.effects?.trigger?.(actor, 'natural20', triggerContext);
+  if (naturalD20 === 20) {
+    await game.od2Qdv?.effects?.trigger?.(actor, 'natural20', triggerContext);
+    if (target?.actor) {
+      Hooks.callAll(`${MODULE_ID}.targetNatural20`, target.actor);
+      if (!game.user?.isGM || !isPrimaryActiveGm()) game.socket.emit(`module.${MODULE_ID}`, {
+        type: 'optimizedArmorNatural20',
+        targetActorId: target.actor.id,
+        targetActorUuid: target.actor.uuid,
+        targetTokenUuid: target.document?.uuid ?? target.uuid
+      });
+    }
+  }
   const fumble = naturalD20 === 1 ? await requestFumbleRule() : null;
   const critical = naturalD20 === 20 ? await requestCriticalRule() : null;
   if (!target) {

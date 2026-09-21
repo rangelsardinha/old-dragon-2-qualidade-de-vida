@@ -508,6 +508,40 @@ async function breakImprovisedWeapons(combat = null) {
   }
 }
 
+async function optimizeArmor(actor) {
+  const equipped = [...(actor.items ?? [])].filter((item) => item.type === "armor" && item.system?.is_equipped);
+  if (!equipped.length) return ui.notifications.warn("O Gladiador não possui armaduras equipadas.");
+  const available = equipped.filter((item) => !item.getFlag?.(MODULE_ID, "armorOptimized"));
+  if (!available.length) return ui.notifications.warn("Todas as armaduras equipadas já estão otimizadas.");
+  const content = `<form><div class="form-group"><label>Armadura equipada</label><select name="armorId">${available.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} — CA +${Number(item.system?.bonus_ca) || 0}</option>`).join("")}</select></div><p>A armadura receberá <strong>+2 no bônus de CA</strong>.</p></form>`;
+  const armorId = Number(game.release?.generation ?? 13) >= 14
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Otimizar armadura" }, content, ok: { label: "Otimizar", callback: (_event, button) => button.form.elements.armorId.value } })
+    : await Dialog.prompt({ title: "Otimizar armadura", content, label: "Otimizar", callback: (html) => html[0].querySelector('[name="armorId"]').value, rejectClose: false });
+  const armor = actor.items?.get?.(armorId);
+  if (!armor || armor.type !== "armor" || !armor.system?.is_equipped) return ui.notifications.warn("A armadura selecionada não está mais equipada.");
+  if (armor.getFlag?.(MODULE_ID, "armorOptimized")) return ui.notifications.warn("Essa armadura já foi otimizada.");
+  const currentBonus = Number(armor.system?.bonus_ca) || 0;
+  const currentDescription = String(armor.system?.description ?? "");
+  const optimizationNote = '<p><strong>Armadura otimizada:</strong> recebe +2 no bônus de CA. Quebra se o Gladiador for alvo de um ataque com 20 natural.</p>';
+  await armor.update({
+    "system.bonus_ca": currentBonus + 2,
+    "system.description": `${currentDescription}${currentDescription ? "\n" : ""}${optimizationNote}`,
+    [`flags.${MODULE_ID}.armorOptimized`]: true
+  });
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Otimização de Armadura</strong><p>${escapeHtml(armor.name)} foi otimizada e recebeu <strong>+2 no bônus de CA</strong>.</p>` });
+  actor.sheet?.render?.(false);
+}
+
+async function breakOptimizedArmor(actor) {
+  if (!isPrimaryActiveGM() || normalizeAbilityName(actorClassName(actor)) !== "gladiador") return;
+  const armor = [...(actor.items ?? [])].find((item) => item.type === "armor" && item.system?.is_equipped && item.getFlag?.(MODULE_ID, "armorOptimized"));
+  if (!armor) return;
+  const armorName = armor.name;
+  await actor.deleteEmbeddedDocuments("Item", [armor.id]);
+  await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Armadura Otimizada Quebrada</strong><p>${escapeHtml(armorName)} quebrou após ${escapeHtml(actor.name)} ser alvo de um ataque com <strong>20 natural</strong> e foi removida dos equipamentos.</p>` });
+  actor.sheet?.render?.(false);
+}
+
 async function rollTurnUndead(actor, level) {
   const origin = actor.getActiveTokens?.()[0] ?? null;
   if (!origin || !canvas?.tokens) return ui.notifications.warn("O clérigo precisa estar representado por um token.");
@@ -612,6 +646,9 @@ function isCityFundsAbilityName(name) {
 }
 function isImprovisedWeaponAbilityName(name) {
   return normalizeAbilityName(name) === "armamento improvisado";
+}
+function isArmorOptimizationAbilityName(name) {
+  return normalizeAbilityName(name) === "otimizacao de armadura";
 }
 function isRacialTrainingAbilityName(name) {
   return normalizeAbilityName(name) === "treinamento racial";
@@ -1128,8 +1165,12 @@ function enhanceAcademicAbilities(app, html) {
   if (normalizeAbilityName(actorClassName(actor)) === "gladiador") {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
-      if (!isImprovisedWeaponAbilityName(ability?.name) || row.querySelector("[data-improvise-weapon]")) continue;
-      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-improvise-weapon title="Improvisar armamento"><i class="fa-light fa-hammer-war fa-sm"></i>&nbsp;Improvisar armamento</a></div>`);
+      if (isImprovisedWeaponAbilityName(ability?.name) && !row.querySelector("[data-improvise-weapon]")) {
+        (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-improvise-weapon title="Improvisar armamento"><i class="fa-light fa-hammer-war fa-sm"></i>&nbsp;Improvisar armamento</a></div>`);
+      }
+      if (isArmorOptimizationAbilityName(ability?.name) && !row.querySelector("[data-optimize-armor]")) {
+        (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-optimize-armor title="Otimizar armadura"><i class="fa-light fa-shield-halved fa-sm"></i>&nbsp;Otimizar armadura</a></div>`);
+      }
     }
   }
   if (isDwarfAdventurerName(actorClassName(actor))) {
@@ -1181,8 +1222,9 @@ function enhanceAcademicAbilities(app, html) {
     const patrolConvocation = event.target.closest?.("[data-patrol-convocation]");
     const cityFunds = event.target.closest?.("[data-city-funds]");
     const improviseWeaponButton = event.target.closest?.("[data-improvise-weapon]");
+    const optimizeArmorButton = event.target.closest?.("[data-optimize-armor]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !elfRacialWeaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !cityFunds && !improviseWeaponButton && !profanationMagic) return;
+    if (!button && !weaponChoice && !elfRacialWeaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !cityFunds && !improviseWeaponButton && !optimizeArmorButton && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
     if (elfRacialWeaponChoice) {
@@ -1266,6 +1308,12 @@ function enhanceAcademicAbilities(app, html) {
       app.render(false);
       return;
     }
+    if (optimizeArmorButton) {
+      optimizeArmorButton.classList.add("rolling");
+      try { await optimizeArmor(actor); } finally { optimizeArmorButton.classList.remove("rolling"); }
+      app.render(false);
+      return;
+    }
     if (profanationMagic) {
       profanationMagic.classList.add("rolling");
       try { await rollProfanationMagic(actor, profanationMagic.dataset.abilityId); } finally { profanationMagic.classList.remove("rolling"); }
@@ -1335,6 +1383,7 @@ Hooks.on("deleteCombat", (combat) => breakImprovisedWeapons(combat));
 Hooks.on("combatEnd", (combat) => breakImprovisedWeapons(combat));
 Hooks.on("renderCombatTracker", () => breakImprovisedWeapons());
 Hooks.on("canvasReady", () => breakImprovisedWeapons());
+Hooks.on(`${MODULE_ID}.targetNatural20`, (actor) => breakOptimizedArmor(actor));
 // O sistema registra o uso da habilidade atualizando o Item (sem depender de combate
 // ou de um botão customizado). Esse caminho também cobre mensagens sem speaker.actor.
 for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, (item, ...args) => {
@@ -1362,6 +1411,12 @@ Hooks.once("ready", () => {
   for (const combat of game.combats ?? []) previousCombatants.set(combat, combat.combatant?.actor?.id ?? null);
   breakImprovisedWeapons();
   game.socket.on(SOCKET, async (payload) => {
+    if (payload?.type === "optimizedArmorNatural20" && game.user.isGM && isPrimaryActiveGM()) {
+      const targetDoc = payload.targetTokenUuid ? await fromUuid(payload.targetTokenUuid) : null;
+      const actor = targetDoc?.actor ?? (payload.targetActorUuid ? await fromUuid(payload.targetActorUuid) : game.actors?.get(payload.targetActorId));
+      if (actor) await breakOptimizedArmor(actor);
+      return;
+    }
     if (payload?.type === "inspirationRemove" && game.user.isGM) {
       const actor = game.actors?.get(payload.actorId) ?? (payload.actorUuid ? await fromUuid(payload.actorUuid) : null);
       if (actor) await removeInspirationFromSource(actor);
