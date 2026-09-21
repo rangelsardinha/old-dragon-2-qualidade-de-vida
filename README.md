@@ -132,6 +132,7 @@ O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Mora
 - Habilita a visão dos protótipos e dos tokens presentes no mapa atual, seleciona **Visão no Escuro** e configura seu alcance calculado.
 - Requer o módulo **Light Sources 0.0.9 ou superior**, traduz sua interface para português e registra as configurações de Lamparina, Lanterna furta-fogo, Vela, Tocha e das magias Luz e Luz Contínua preparadas no mundo de teste.
 - A opção **Contabilizar tochas e óleo** pede ao Mestre confirmação para consumir uma Tocha ao acendê-la ou um frasco de Óleo ao acender Lamparina e Lanterna furta-fogo; pilhas com uma única unidade são removidas.
+- Com essa opção ativa, Lamparina e Lanterna furta-fogo não acendem quando o personagem não possui frasco de Óleo disponível; recolher uma fonte já acesa continua permitido.
 - Com essa opção ativa, os campos `T` da Carta de Controle apagam as tochas acesas, e o campo 6 da 4ª hora também apaga lamparinas e lanternas furta-fogo.
 - Ao largar uma Lamparina ou Lanterna furta-fogo, uma unidade sai do inventário e permanece vinculada à luz no chão; quando outro personagem a recolhe, o item é adicionado ao inventário dele.
 - Lamparinas e lanternas furta-fogo só podem ser acesas se o personagem possuir uma Pederneira disponível ou estiver no mesmo quadrado/adjacente a outra fonte de luz acesa.

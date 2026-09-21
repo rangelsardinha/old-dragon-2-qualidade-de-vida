@@ -112,7 +112,13 @@ function requireIgnition(effect) {
   const light = effect.getFlag?.(LIGHT_SOURCES_MODULE_ID, LIGHT_FLAG);
   if (!portableLampName(light?.itemName)) return;
   const actor = effect.parent;
-  if (hasFlint(actor) || touchesLitSource(actor) || recentlyPickedUpLitGroundSource(light.sourceId)) return;
+  if (recentlyPickedUpLitGroundSource(light.sourceId)) return;
+  if (enabled() && lightResourceKind(light.itemName) === "oil" && !resourceItem(actor, "oil")) {
+    blockedAnnouncements.push({ actorId: actor?.id, itemName: light.itemName, createdAt: Date.now() });
+    ui.notifications.warn(`${light.itemName} não pode ser acesa: ${actor?.name ?? "o personagem"} não possui frasco de óleo disponível.`);
+    return false;
+  }
+  if (hasFlint(actor) || touchesLitSource(actor)) return;
   blockedAnnouncements.push({ actorId: actor?.id, itemName: light.itemName, createdAt: Date.now() });
   ui.notifications.warn(`${light.itemName} só pode ser acesa com uma Pederneira ou ao lado de outra fonte de luz acesa.`);
   return false;
