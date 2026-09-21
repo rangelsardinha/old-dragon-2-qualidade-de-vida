@@ -798,6 +798,12 @@ function barbarianEffects(actor) {
   return [effectTemplate({ name: "Bárbaro: Maestria em armas", origin: "classe", association: { type: "class", id: cls?.id, name: cls?.name || "Bárbaro" }, key: "damage", mode: "add", value: 1, condition: { left: "attack.itemNamed", name: weapon } })];
 }
 
+function gladiatorEffects(actor) {
+  const cls = actor.items?.find?.((item) => item.type === "class");
+  if (normalizeAbilityName(actorClassName(actor)) !== "gladiador") return [];
+  return [effectTemplate({ name: "Combatente Completo", origin: "habilidade da classe", association: { type: "class", id: cls?.id, name: cls?.name || "Gladiador" }, key: "damage", mode: "add", value: 1 })];
+}
+
 function halflingAdventurerEffects(actor) {
   const cls = actor.items?.find?.((item) => item.type === "class");
   const weapon = actor.getFlag(MODULE_ID, "halflingAdventurerRacialWeapon");
@@ -850,9 +856,9 @@ function gnomeAndHalflingEffects(actor) {
 
 async function syncDwarfEffects(actor) {
   if (!game.settings.get(MODULE_ID, "enableEffectManager")) return;
-  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Halfling Aventureiro: Arma Racial", "Halfling Aventureiro: No Alvo", "Elfo: Arma Racial", "Elfo Aventureiro: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Paladino: Maestria em armas", "Guerreiro: Maestria em armas", "Guerreiro: Maestria em grupo de armas", "Treinamento em combate"]);
+  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Halfling Aventureiro: Arma Racial", "Halfling Aventureiro: No Alvo", "Elfo: Arma Racial", "Elfo Aventureiro: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Combatente Completo", "Paladino: Maestria em armas", "Guerreiro: Maestria em armas", "Guerreiro: Maestria em grupo de armas", "Treinamento em combate"]);
   const current = actor.getFlag(MODULE_ID, "effects") || [];
-  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...halflingAdventurerEffects(actor), ...barbarianEffects(actor), ...paladinEffects(actor), ...warriorEffects(actor), ...outcastEffects(actor)];
+  const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...halflingAdventurerEffects(actor), ...barbarianEffects(actor), ...gladiatorEffects(actor), ...paladinEffects(actor), ...warriorEffects(actor), ...outcastEffects(actor)];
   const retained = current.filter((effect) => !managedNames.has(effect.name));
   const next = [...retained, ...desired].filter((effect, index, list) => list.findIndex((entry) => entry.id === effect.id || (entry.name && entry.name === effect.name)) === index);
   if (JSON.stringify(current) !== JSON.stringify(next)) await actor.setFlag(MODULE_ID, "effects", next);
