@@ -550,6 +550,12 @@ function isPatrolConvocationAbilityName(name) {
 function isCityFundsAbilityName(name) {
   return normalizeAbilityName(name) === "fundos da cidade";
 }
+function isRacialTrainingAbilityName(name) {
+  return normalizeAbilityName(name) === "treinamento racial";
+}
+function isElfAdventurer(name) {
+  return normalizeAbilityName(name) === "elfo aventureiro";
+}
 function isOutcast(name) {
   return normalizeAbilityName(name).startsWith("proscrito");
 }
@@ -779,6 +785,9 @@ function elfAndArcherEffects(actor) {
   const mastery = actor.getFlag(MODULE_ID, "archerMasteryWeapon");
   if (isArcherName(actorClassName(actor)) && mastery) effects.push(effectTemplate({ name: "Arqueiro: Maestria em Armas(1)", origin: "classe", association: { type: "class", id: characterClass?.id, name: characterClass?.name || "Arqueiro" }, key: "damage", mode: "add", value: 1, condition: { left: "attack.itemNamed", name: mastery } }));
   if (isArcherName(actorClassName(actor)) && Number(actor.system?.level) >= 3) effects.push(effectTemplate({ name: "Arqueiro: Puxada Aprimorada(3)", origin: "classe", association: { type: "class", id: characterClass?.id, name: characterClass?.name || "Arqueiro" }, key: "damage.strength", mode: "add", value: 1, condition: { left: "attack.weaponRanged", name: "arco|besta" } }));
+  const racialWeapon = actor.getFlag(MODULE_ID, "elfAdventurerRacialWeapon");
+  const racialWeaponCondition = { Cimitarras: "cimitarra|cimitarras", Arcos: "arco|arcos" }[racialWeapon];
+  if (isElfAdventurer(actorClassName(actor)) && racialWeaponCondition) effects.push(effectTemplate({ name: "Elfo Aventureiro: Arma Racial", origin: "habilidade da classe", association: { type: "class", id: characterClass?.id, name: characterClass?.name || "Elfo Aventureiro" }, key: "damage", mode: "add", value: 2, condition: { left: "attack.itemNamed", name: racialWeaponCondition } }));
   return effects;
 }
 
@@ -838,7 +847,7 @@ function gnomeAndHalflingEffects(actor) {
 
 async function syncDwarfEffects(actor) {
   if (!game.settings.get(MODULE_ID, "enableEffectManager")) return;
-  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Halfling Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Paladino: Maestria em armas", "Guerreiro: Maestria em armas", "Guerreiro: Maestria em grupo de armas", "Treinamento em combate"]);
+  const managedNames = new Set(["Anão: Inimigos", "Anão Aventureiro: Bastião Racial(6)", "Anão Aventureiro: Arma Racial", "Halfling Aventureiro: Arma Racial", "Elfo: Arma Racial", "Elfo Aventureiro: Arma Racial", "Elfo: Imunidade", "Meio-Elfo: Imunidade", "Arqueiro: Maestria em Armas(1)", "Arqueiro: Puxada Aprimorada(3)", "Halfling: Furtivos", "Halfling: Bons de mira", "Halfling: Pequenos", "Meio-Gigante: Força descomunal", "Meio-Gigante: Força descomunal (Dano)", "Aarakocra: Nascidos dos Céus", "Aarakocra: Nascidos dos Céus (Dano)", "Bárbaro: Maestria em armas", "Paladino: Maestria em armas", "Guerreiro: Maestria em armas", "Guerreiro: Maestria em grupo de armas", "Treinamento em combate"]);
   const current = actor.getFlag(MODULE_ID, "effects") || [];
   const desired = [...dwarfEffects(actor), ...elfAndArcherEffects(actor), ...gnomeAndHalflingEffects(actor), ...halflingAdventurerEffects(actor), ...barbarianEffects(actor), ...paladinEffects(actor), ...warriorEffects(actor), ...outcastEffects(actor)];
   const retained = current.filter((effect) => !managedNames.has(effect.name));
@@ -856,6 +865,16 @@ async function chooseRacialWeapon(actor) {
   }
   if (!selected) return;
   await actor.setFlag(MODULE_ID, "dwarfRacialWeapon", selected);
+  await syncDwarfEffects(actor);
+}
+
+async function chooseElfAdventurerRacialWeapon(actor) {
+  const content = '<div class="form-group"><label>Arma racial</label><select name="weapon"><option value="Cimitarras">Cimitarras</option><option value="Arcos">Arcos</option></select></div>';
+  const selected = Number(game.release?.generation ?? 13) >= 14
+    ? await foundry.applications.api.DialogV2.prompt({ window: { title: "Escolher arma racial" }, content, ok: { label: "Confirmar", callback: (_event, button) => button.form.elements.weapon.value } })
+    : await Dialog.prompt({ title: "Escolher arma racial", content: `<form>${content}</form>`, label: "Confirmar", callback: (html) => html[0].querySelector('[name="weapon"]').value, rejectClose: false });
+  if (!selected) return;
+  await actor.setFlag(MODULE_ID, "elfAdventurerRacialWeapon", selected);
   await syncDwarfEffects(actor);
 }
 
@@ -1042,6 +1061,14 @@ function enhanceAcademicAbilities(app, html) {
       (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-racial-weapon-choice><i class="fas fa-hammer"></i> Arma racial: ${escapeHtml(selected)}</a></div>`);
     }
   }
+  if (isElfAdventurer(actorClassName(actor))) {
+    for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
+      const ability = actor.items?.get?.(row.dataset.itemId);
+      if (!isRacialTrainingAbilityName(ability?.name) || row.querySelector("[data-elf-racial-weapon-choice]")) continue;
+      const selected = actor.getFlag(MODULE_ID, "elfAdventurerRacialWeapon") || "Não escolhida";
+      (row.querySelector(":scope > .ability") ?? row).insertAdjacentHTML("afterend", `<div class="od2qdv-academic-roll"><a data-elf-racial-weapon-choice><i class="fas fa-swords"></i> Arma racial: ${escapeHtml(selected)}</a></div>`);
+    }
+  }
   if (normalizeAbilityName(actorClassName(actor)) === "halfling aventureiro") {
     for (const row of root.querySelectorAll(".character-tab-class .class-abilities li.item[data-item-id]")) {
       const ability = actor.items?.get?.(row.dataset.itemId);
@@ -1063,6 +1090,7 @@ function enhanceAcademicAbilities(app, html) {
   root.addEventListener("click", async (event) => {
     const button = event.target.closest?.("[data-academic-ability]");
     const weaponChoice = event.target.closest?.("[data-racial-weapon-choice]");
+    const elfRacialWeaponChoice = event.target.closest?.("[data-elf-racial-weapon-choice]");
     const halflingWeaponChoice = event.target.closest?.("[data-halfling-racial-weapon-choice]");
     const masteryChoice = event.target.closest?.("[data-archer-mastery-choice]");
     const barbarianMasteryChoice = event.target.closest?.("[data-barbarian-mastery-choice]");
@@ -1074,9 +1102,15 @@ function enhanceAcademicAbilities(app, html) {
     const patrolConvocation = event.target.closest?.("[data-patrol-convocation]");
     const cityFunds = event.target.closest?.("[data-city-funds]");
     const profanationMagic = event.target.closest?.("[data-profanation-magic]");
-    if (!button && !weaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !cityFunds && !profanationMagic) return;
+    if (!button && !weaponChoice && !elfRacialWeaponChoice && !halflingWeaponChoice && !masteryChoice && !barbarianMasteryChoice && !warriorMasteryChoice && !paladinMasteryChoice && !inspirationChoice && !furyChoice && !naturalEnemyChoice && !patrolConvocation && !cityFunds && !profanationMagic) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (weaponChoice) { await chooseRacialWeapon(actor); app.render(false); return; }
+    if (elfRacialWeaponChoice) {
+      if (actor.getFlag(MODULE_ID, "elfAdventurerRacialWeapon") && !game.user.isGM) { ui.notifications.warn("A arma racial já foi escolhida. Somente o Mestre pode alterá-la."); return; }
+      await chooseElfAdventurerRacialWeapon(actor);
+      app.render(false);
+      return;
+    }
     if (halflingWeaponChoice) {
       if (actor.getFlag(MODULE_ID, "halflingAdventurerRacialWeapon") && !game.user.isGM) { ui.notifications.warn("A arma racial já foi escolhida. Somente o Mestre pode alterá-la."); return; }
       await chooseArcherMastery(actor, false, "halflingAdventurerRacialWeapon", (name) => /arremess|adaga|azagaia|dardo|funda|lança|chaktcha|chakthcha|machado|martelo/i.test(name));
