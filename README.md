@@ -71,6 +71,14 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Pode ser habilitado ou desabilitado independentemente das demais funções do QdV.
 - Ao usar esta versão incorporada, desative o módulo separado `tomo-de-magia-od2` para evitar duplicidades.
 
+### Eixo de alinhamento
+
+Quando habilitado nas configurações, adiciona a todos os atores o eixo moral **Bom, Neutro ou Mal**, separado do alinhamento tradicional Caótico/Neutro/Ordeiro. Atores existentes recebem Neutro automaticamente.
+
+### Afastar Mortos-vivos
+
+O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Moral dos mortos-vivos identificados pelo conceito **Morto-Vivo**, aplica o status de amedrontado e trata duplas de 4, 5 ou 6 como destruição imediata. A área é removida na mudança de rodada e criaturas amedrontadas testam Moral ao final da rodada para recuperar sua ação.
+
 ### Gerador de pergaminhos
 
 - Agradecimento especial a **Henrique de Freitas Martins** pela colaboração no desenvolvimento do Gerador de Pergaminhos.
@@ -180,9 +188,3 @@ A implementação inicial foi consolidada a partir de [OD2 Automação de Combat
 ### Agradecimentos
 
 Agradecimento geral à comunidade do **Old Dragon 2** pelas ideias, testes e feedbacks que contribuíram para a criação e o aprimoramento deste módulo.
-
-### Eixo de alinhamento
-Quando habilitado nas configurações, adiciona a todos os atores o eixo moral **Bom, Neutro ou Mal**, separado do alinhamento tradicional Caótico/Neutro/Ordeiro. Atores existentes recebem Neutro automaticamente.
-
-### Afastar Mortos-vivos
-O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Moral dos mortos-vivos identificados pelo conceito **Morto-Vivo**, aplica o status de amedrontado e trata duplas de 4, 5 ou 6 como destruição imediata. A área é removida na mudança de rodada e criaturas amedrontadas testam Moral ao final da rodada para recuperar sua ação.
