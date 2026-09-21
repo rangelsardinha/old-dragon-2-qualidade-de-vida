@@ -5,6 +5,7 @@ import {
 } from "./model.js";
 import { actorCoins } from "../equipment-containers/index.js";
 import { carriedLoad } from "../equipment-containers/model.js";
+import { inventoryActor, updateInventoryItem } from "../../utils/actor-inventory.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const FLAG = "effects";
@@ -614,12 +615,13 @@ async function executeEventAction(actor, effect, context = {}) {
     detail = `${action.type === "heal" ? "Cura" : "Dano"} (${action.formula} = ${value})<br>${results.join("<br>")}`;
   }
   if (action.type === "consumeItem") {
-    const item = [...actor.items].find((entry) => sameName(entry.name, action.resourceName));
+    const inventoryOwner = inventoryActor(actor);
+    const item = [...inventoryOwner.items].find((entry) => sameName(entry.name, action.resourceName));
     if (!item) { ui.notifications.warn(`Item/recurso “${action.resourceName}” não encontrado em ${actor.name}.`); return false; }
     const before = Math.max(0, Number(item.system.quantity ?? item.system.uses?.value) || 0);
     const after = Math.max(0, before - Math.max(1, Math.trunc(value)));
     const path = item.system.quantity !== undefined ? "system.quantity" : "system.uses.value";
-    await item.update({ [path]: after });
+    await updateInventoryItem(actor, item, { [path]: after });
     detail = `${escapeHtml(item.name)}: <strong>${before} → ${after}</strong>`;
   }
   if (action.type === "applyEffect") {

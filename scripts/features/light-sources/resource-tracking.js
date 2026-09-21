@@ -7,6 +7,7 @@ import {
   quantityAfterConsumption,
   expiresWithSessionEvent
 } from "./model.js";
+import { deleteInventoryItem, inventoryActor, updateInventoryItem } from "../../utils/actor-inventory.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const LIGHT_SOURCES_MODULE_ID = "light-sources";
@@ -48,15 +49,15 @@ function quantity(item) {
 }
 
 function resourceItem(actor, kind) {
-  return [...(actor?.items ?? [])].find((item) => inventoryResourceKind(item) === kind && quantity(item) > 0) ?? null;
+  return [...(inventoryActor(actor)?.items ?? [])].find((item) => inventoryResourceKind(item) === kind && quantity(item) > 0) ?? null;
 }
 
 function lampItem(actor, lightName) {
-  return [...(actor?.items ?? [])].find((item) => isPortableLampItem(item, lightName) && quantity(item) > 0) ?? null;
+  return [...(inventoryActor(actor)?.items ?? [])].find((item) => isPortableLampItem(item, lightName) && quantity(item) > 0) ?? null;
 }
 
 function hasFlint(actor) {
-  return [...(actor?.items ?? [])].some(isFlintItem);
+  return [...(inventoryActor(actor)?.items ?? [])].some(isFlintItem);
 }
 
 function sameOrAdjacent(origin, destination) {
@@ -152,10 +153,10 @@ function itemDataForTransfer(item) {
   return data;
 }
 
-async function removeOneItem(item) {
+async function removeOneItem(actor, item) {
   const next = quantityAfterConsumption(item.system?.quantity);
-  if (next.delete) await item.delete();
-  else await item.update({ "system.quantity": next.quantity });
+  if (next.delete) await deleteInventoryItem(actor, item);
+  else await updateInventoryItem(actor, item, { "system.quantity": next.quantity });
 }
 
 async function confirmConsumption(actor, item, kind, lightName) {
@@ -175,17 +176,18 @@ async function confirmConsumption(actor, item, kind, lightName) {
 }
 
 async function consumeForLight(actor, lightName) {
+  const inventoryOwner = inventoryActor(actor);
   const kind = lightResourceKind(lightName);
   if (!kind) return;
-  const item = resourceItem(actor, kind);
+  const item = resourceItem(inventoryOwner, kind);
   if (!item) {
     const resource = kind === "torch" ? "tochas" : "frascos de óleo";
-    ui.notifications.warn(`${actor.name} não possui ${resource} no inventário.`);
+    ui.notifications.warn(`${inventoryOwner?.name ?? actor.name} não possui ${resource} no inventário.`);
     return;
   }
-  if (!(await confirmConsumption(actor, item, kind, lightName))) return;
-  await removeOneItem(item);
-  ui.notifications.info(`${actor.name}: ${kind === "torch" ? "1 tocha consumida" : "1 frasco de óleo consumido"}.`);
+  if (!(await confirmConsumption(inventoryOwner, item, kind, lightName))) return;
+  await removeOneItem(actor, item);
+  ui.notifications.info(`${inventoryOwner.name}: ${kind === "torch" ? "1 tocha consumida" : "1 frasco de óleo consumido"}.`);
 }
 
 function cancelPending(predicate) {
@@ -219,7 +221,8 @@ async function groundLightCreated(light) {
   if (!integrationEnabled() || !activeGm()) return;
   const ground = light.getFlag?.(LIGHT_SOURCES_MODULE_ID, GROUND_LIGHT_FLAG);
   if (!portableLampName(ground?.itemName)) return;
-  const actor = foundry.utils.fromUuidSync?.(ground.actorUuid) ?? null;
+  const sourceActor = foundry.utils.fromUuidSync?.(ground.actorUuid) ?? null;
+  const actor = inventoryActor(sourceActor);
   const item = lampItem(actor, ground.itemName);
   if (!item) {
     ui.notifications.warn(`Não foi possível retirar ${ground.itemName} do inventário de ${actor?.name ?? "seu portador"}.`);
@@ -228,7 +231,7 @@ async function groundLightCreated(light) {
   const data = itemDataForTransfer(item);
   try {
     await light.setFlag(MODULE_ID, DROPPED_ITEM_FLAG, data);
-    await removeOneItem(item);
+    await removeOneItem(sourceActor ?? actor, item);
     ui.notifications.info(`${ground.itemName} foi deixada no chão e removida do inventário de ${actor.name}.`);
   } catch (error) {
     console.error(`${MODULE_ID} | Falha ao largar o item da fonte de luz`, error);
@@ -251,6 +254,7 @@ function actorFromSpeaker(speaker = {}) {
 }
 
 async function addTransferredItem(actor, data) {
+  actor = inventoryActor(actor);
   const sourceId = data?.flags?.core?.sourceId;
   const existing = [...(actor?.items ?? [])].find((item) =>
     (sourceId && item.getFlag?.("core", "sourceId") === sourceId)

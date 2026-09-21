@@ -50,6 +50,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Cada equipamento possui um ícone de transferência ao lado dos controles de edição; itens equipados precisam ser desequipados antes da transferência.
 - **Esvaziar recipiente** devolve todos os itens à lista principal e mantém as moedas com o personagem.
 - A exclusão de um recipiente preenchido exige confirmação e remove seu conteúdo em conjunto.
+- Consumos de munições, rações, odres, tochas, óleo e outros recursos são persistidos no inventário do ator-base, inclusive quando a ação começa pela ficha de um token.
 
 ### Monstros carregam itens
 

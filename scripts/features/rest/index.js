@@ -1,5 +1,6 @@
 import { darkSunEnabled } from "../../integrations/dark-sun.js";
 import { emptyWaterskinStates, normalizeWaterskinStates } from "../equipment-containers/model.js";
+import { deleteInventoryItem, inventoryActor, updateInventoryItem } from "../../utils/actor-inventory.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const WATERSKIN_FULL_FLAG = "waterskinFull";
@@ -44,7 +45,7 @@ function candidateActors() {
   const actors = new Map();
   for (const actor of game.actors ?? []) if (actor.type === "character") actors.set(actor.uuid, actor);
   for (const token of canvas?.scene?.tokens ?? []) {
-    const actor = game.actors?.get(token.actorId) ?? token.actor;
+    const actor = inventoryActor(token.actor);
     if (actor?.type === "character" && !actors.has(actor.uuid)) actors.set(actor.uuid, actor);
   }
   return [...actors.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
@@ -77,7 +78,7 @@ async function chooseActors() {
 async function resolveActors(uuids) {
   const actors = [];
   for (const uuid of uuids ?? []) {
-    const actor = await fromUuid(uuid).catch(() => null);
+    const actor = inventoryActor(await fromUuid(uuid).catch(() => null));
     if (actor?.type === "character" && !actors.some((entry) => entry.uuid === actor.uuid)) actors.push(actor);
   }
   return actors;
@@ -106,11 +107,11 @@ function waterskinStates(item) {
 }
 
 function fullWaterskinCount(actor) {
-  return actor.items.filter(isWaterskin).reduce((total, item) => total + waterskinStates(item).filter(Boolean).length, 0);
+  return inventoryActor(actor).items.filter(isWaterskin).reduce((total, item) => total + waterskinStates(item).filter(Boolean).length, 0);
 }
 
 function rations(actor) {
-  return actor.items.filter(isRation);
+  return inventoryActor(actor).items.filter(isRation);
 }
 
 function availableCount(items) {
@@ -142,11 +143,12 @@ async function resourceChoices(actors, type, { darkSun = false } = {}) {
 }
 
 async function updateActorItem(actor, item, changes) {
-  const updated = await actor.updateEmbeddedDocuments("Item", [{ _id: item.id, ...changes }]);
-  return updated?.[0] ?? actor.items?.get?.(item.id) ?? null;
+  return updateInventoryItem(actor, item, changes);
 }
 
 export async function emptyWaterskins(actor, requested) {
+  const sourceActor = actor;
+  actor = inventoryActor(actor);
   let remaining = Math.max(0, Math.trunc(Number(requested) || 0));
   let emptied = 0;
   for (const item of actor.items.filter(isWaterskin)) {
@@ -154,7 +156,7 @@ export async function emptyWaterskins(actor, requested) {
     const previousStates = waterskinStates(item);
     const result = emptyWaterskinStates(previousStates, remaining);
     if (!result.emptied) continue;
-    const updatedItem = await updateActorItem(actor, item, {
+    const updatedItem = await updateActorItem(sourceActor, item, {
       [`flags.${MODULE_ID}.${WATERSKIN_STATES_FLAG}`]: result.states,
       [`flags.${MODULE_ID}.${WATERSKIN_FULL_FLAG}`]: result.states.length > 0 && result.states.every(Boolean)
     });
@@ -168,6 +170,8 @@ export async function emptyWaterskins(actor, requested) {
 }
 
 export async function consumeRations(actor, requested) {
+  const sourceActor = actor;
+  actor = inventoryActor(actor);
   let remaining = Math.max(0, Math.trunc(Number(requested) || 0));
   let consumed = 0;
   for (const item of rations(actor)) {
@@ -178,11 +182,11 @@ export async function consumeRations(actor, requested) {
     const nextQuantity = Math.max(0, quantity - amount);
     let persisted = 0;
     if (nextQuantity === 0) {
-      const deleted = await actor.deleteEmbeddedDocuments("Item", [item.id]);
+      const deleted = await deleteInventoryItem(sourceActor, item);
       const stillExists = actor.items?.get?.(item.id) ?? actor.items?.find?.((entry) => entry.id === item.id);
-      if (deleted?.length || !stillExists) persisted = quantity;
+      if (deleted || !stillExists) persisted = quantity;
     } else {
-      const updatedItem = await updateActorItem(actor, item, { "system.quantity": nextQuantity });
+      const updatedItem = await updateActorItem(sourceActor, item, { "system.quantity": nextQuantity });
       if (updatedItem) persisted = Math.max(0, quantity - itemQuantity(updatedItem));
     }
     consumed += persisted;
@@ -202,6 +206,7 @@ function resetDailyUses(uses) {
 }
 
 export async function recoverActor(actor) {
+  actor = inventoryActor(actor);
   const spells = actor.items.map((item) => ({ item, uses: item.type === "spell" ? usedDailyUses(item, true) : {} }))
     .filter(({ uses }) => Object.keys(uses).length);
   const abilities = actor.items.map((item) => ({ item, uses: ["class_ability", "race_ability"].includes(item.type) ? usedDailyUses(item) : {} }))

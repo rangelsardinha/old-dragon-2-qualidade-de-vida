@@ -1,6 +1,7 @@
 import {
   COIN_KEYS, actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, descendantIds, isAmmunition, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
 } from "./model.js";
+import { updateInventoryItem } from "../../utils/actor-inventory.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const PARENT_FLAG = "parentContainerId";
@@ -75,7 +76,7 @@ function enhanceWaterskinSheet(app, root) {
     const next = checkboxes.map((checkbox) => checkbox.checked);
     const scroller = itemSheetScroller(root);
     waterskinScrollPositions.set(scrollKey, { top: scroller.scrollTop, left: scroller.scrollLeft });
-    await item.update({
+    await updateInventoryItem(item.parent, item, {
       [`flags.${MODULE_ID}.${WATERSKIN_STATES_FLAG}`]: next,
       [`flags.${MODULE_ID}.${WATERSKIN_FULL_FLAG}`]: next.length > 0 && next.every(Boolean)
     }, { render: false });

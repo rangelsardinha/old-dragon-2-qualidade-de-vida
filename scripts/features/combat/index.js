@@ -1,4 +1,5 @@
 import { applyModifiers, shiftDamageDice, shiftDifficulty } from '../effect-manager/model.js';
+import { inventoryActor, updateInventoryItem } from '../../utils/actor-inventory.js';
 
 const MODULE_ID = 'old-dragon-2-qualidade-de-vida';
 
@@ -611,14 +612,14 @@ async function handleAttack(actor, button) {
   if (ammunition.item) {
     const quantity = Math.max(0, Math.trunc(Number(ammunition.item.system?.quantity) || 0));
     if (quantity < 1) return ui.notifications.warn(`${ammunition.item.name} não possui unidades disponíveis.`);
-    await ammunition.item.update({ 'system.quantity': quantity - 1 });
+    await updateInventoryItem(actor, ammunition.item, { 'system.quantity': quantity - 1 });
   }
 
   const attackRoll = await rollAttack(actor, item, attackData);
   // Armas de arremesso usadas em BAC continuam equipadas e disponíveis para
   // combate corpo a corpo; somente o disparo em BAD as consome/retira do uso.
   if (item.system?.type === 'throwing' && attackData.ba === 'bad' && !normalizedItemName(item).includes('funda')) {
-    await item.update({ 'system.is_equipped': false });
+    await updateInventoryItem(actor, item, { 'system.is_equipped': false });
   }
   const naturalD20 = getNaturalD20(attackRoll);
   const triggerContext = { item, weapon: item, ammunition: ammunition.item, attackMode: attackData.attackMode, attackBasis: attackData.ba, targetActor: target?.actor, roll: attackRoll };
@@ -762,7 +763,8 @@ function ammunitionFilterForWeapon(weapon, attackButton) {
 async function chooseAmmunition(actor, weapon, attackButton) {
   const matchesWeapon = ammunitionFilterForWeapon(weapon, attackButton);
   if (!matchesWeapon) return { required: false, item: null };
-  const choices = actor.items.filter((item) =>
+  const inventoryOwner = inventoryActor(actor);
+  const choices = inventoryOwner.items.filter((item) =>
     item.type === 'weapon'
     && item.system?.type === 'ammunition'
     && item.system?.is_equipped
@@ -788,7 +790,7 @@ async function chooseAmmunition(actor, weapon, attackButton) {
       callback: (html) => html.find('[name="ammunition"]').val(), rejectClose: false
     });
   }
-  return { required: true, item: actor.items.get(itemId) ?? null };
+  return { required: true, item: inventoryOwner.items.get(itemId) ?? null };
 }
 
 function getSingleTarget(allowMissing = false) {
