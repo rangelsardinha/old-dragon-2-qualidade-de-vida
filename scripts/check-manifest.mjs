@@ -14,4 +14,8 @@ for (const [key, value] of Object.entries(expectedCompatibility)) {
 for (const path of [...manifest.esmodules, ...manifest.styles, ...manifest.languages.map(({ path }) => path)]) {
   await access(new URL(`../${path}`, import.meta.url));
 }
+const lightSources = manifest.relationships.requires.find(({ id }) => id === "light-sources");
+if (lightSources?.compatibility?.minimum !== "0.0.9") {
+  throw new Error("Light Sources 0.0.9 deve ser uma dependência obrigatória");
+}
 console.log(`Manifesto ${manifest.id} v${manifest.version} válido.`);

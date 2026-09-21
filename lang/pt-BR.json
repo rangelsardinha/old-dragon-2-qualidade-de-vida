@@ -101,5 +101,167 @@
   "OD2CA.Dialog.xpDistribution.remaining": "Diferenca",
   "OD2CA.Dialog.xpDistribution.confirm": "Distribuir XP",
   "OD2CA.Notifications.noXpRecipients": "Nenhum personagem participante foi encontrado para receber XP.",
-  "OD2CA.Notifications.xpAlreadyDistributed": "O XP deste combate ja foi distribuido."
+  "OD2CA.Notifications.xpAlreadyDistributed": "O XP deste combate ja foi distribuido.",
+  "LIGHTSOURCES": {
+    "Settings": {
+      "Menu": {
+        "Name": "Fontes de Luz",
+        "Label": "Configurar Fontes de Luz",
+        "Hint": "Cadastre itens como fontes de luz e configure seu padrão de iluminação, consumo e duração. Somente para o Mestre."
+      },
+      "Compat": {
+        "Name": "Compatibilidade com o Sistema",
+        "Label": "Configurar Compatibilidade com o Sistema",
+        "Hint": "Escolha os tipos de itens e atores do sistema que este módulo utiliza e onde a quantidade de um item é armazenada. Somente para o Mestre."
+      },
+      "AllowFreeForAllDrop": {
+        "Name": "Permitir Largar Luzes Livres",
+        "Hint": "Permite largar no chão uma luz acesa marcada como Livre para Todos. Como essas fontes não dependem de um item, isso não tem custo e pode ser repetido sem limite. Desative para manter luzes livres apenas nos tokens. Luzes provenientes de itens carregados sempre podem ser largadas."
+      },
+      "RestrictPlayerControl": {
+        "Name": "Restringir o Controle de Luz ao Mestre",
+        "Hint": "Somente o Mestre pode acender, apagar, largar ou recolher uma fonte de luz pelo HUD do Token. Os jogadores ainda veem a paleta e o estado aceso ou apagado, mas seus cliques nesses controles são recusados."
+      },
+      "AnnounceLit": {
+        "Name": "Anunciar Luzes no Chat",
+        "Hint": "Publica uma mensagem no chat sempre que uma fonte de luz é acesa. Os demais eventos de luz não são afetados."
+      }
+    },
+    "Config": {
+      "Title": "Fontes de Luz",
+      "DropHint": "Arraste para cá um item de um tipo habilitado para cadastrá-lo como fonte de luz.",
+      "AddByName": "Adicionar por Nome",
+      "AddByNameTitle": "Adicionar Fonte de Luz por Nome",
+      "NameLabel": "Nome",
+      "NamePlaceholder": "Nome da fonte de luz",
+      "Empty": "Nenhuma fonte de luz cadastrada.",
+      "OpenItem": "Abrir Item",
+      "SendToChat": "Enviar ao Chat",
+      "NoItemReference": "Nenhum item vinculado foi encontrado. Arraste novamente esta fonte de luz para habilitar esta ação.",
+      "Grant": "Livre para Todos (Item Desnecessário)",
+      "HudHidden": "Ocultar do HUD do Token — a fonte só é acesa pela API do módulo, por quem aplicar seu custo. Ela continua aparecendo enquanto estiver acesa, para que possa ser apagada.",
+      "Edit": "Editar Padrão de Luz",
+      "Restore": "Restaurar Padrão do Módulo",
+      "RestoreTooltip": "Descarta suas alterações e restaura os valores cadastrados pelo módulo desta fonte. Ela voltará a ser atualizada automaticamente.",
+      "RestoreDisabledTooltip": "Nada para restaurar — você não alterou esta fonte de luz desde que seu módulo a cadastrou.",
+      "RestoreTitle": "Restaurar Padrão do Módulo",
+      "RestoreContent": "Descartar suas alterações em <strong>{name}</strong> e restaurar os padrões de luz, consumo e duração cadastrados pelo módulo?",
+      "Delete": "Remover Fonte de Luz",
+      "DeleteTitle": "Remover Fonte de Luz",
+      "DeleteContent": "Remover <strong>{name}</strong> das fontes de luz cadastradas?",
+      "InvalidType": "O tipo deste item não está habilitado como fonte de luz. Habilite-o primeiro em Compatibilidade com o Sistema.",
+      "Duplicate": "{name} já está cadastrado como fonte de luz.",
+      "Unlimited": "Ilimitada",
+      "Minutes": "{minutes} min",
+      "Patterns": "{count} padrões",
+      "Consumed": "Consumido ao usar",
+      "FreeForAll": "Livre para todos",
+      "Coverable": "Pode ser coberta",
+      "ManagedByTooltip": "Cadastrada por um sistema ou módulo externo: {name}",
+      "NameOnlyBadge": "Sem Item",
+      "NameOnlyTooltip": "Cadastrada apenas pelo nome — sem item vinculado."
+    },
+    "Patterns": {
+      "Standard": "Padrão",
+      "New": "Novo Padrão",
+      "NamePlaceholder": "Nome do padrão",
+      "Add": "Adicionar Padrão",
+      "Remove": "Remover Padrão",
+      "Restore": "Restaurar este padrão para o valor definido pelo módulo"
+    },
+    "Compat": {
+      "Title": "Compatibilidade com o Sistema",
+      "SystemNote": "Sistema detectado: {system} ({id}). Habilite os tipos que o módulo deve tratar como fontes de luz e os atores que podem carregá-las.",
+      "Tabs": {
+        "items": "Tipos de Item",
+        "actors": "Tipos de Ator",
+        "quantity": "Quantidade"
+      },
+      "ItemsHint": "Habilite os tipos de item que podem ser cadastrados como fontes de luz.",
+      "ActorsHint": "Habilite os tipos de ator que podem usar fontes de luz Livres para Todos pelo HUD do Token. Atores carregando um item correspondente sempre podem usá-lo, independentemente desta lista.",
+      "NoItemTypes": "O sistema ativo não define tipos de item.",
+      "NoActorTypes": "O sistema ativo não define tipos de ator.",
+      "QuantityPath": "Caminho da Quantidade do Item",
+      "QuantityHint": "Caminho pontuado até a quantidade do item, partindo da raiz do item (por exemplo: system.quantity). Usado para verificar a disponibilidade e subtrair uma unidade quando a luz é consumida. Deixe vazio se os itens do sistema não tiverem quantidade — nesse caso, fontes consumíveis nunca reduzirão uma contagem.",
+      "Save": "Salvar"
+    },
+    "LightEditor": {
+      "Title": "Padrão de Luz: {name}",
+      "Tabs": {
+        "patterns": "Padrões",
+        "usage": "Consumo"
+      },
+      "Fields": {
+        "PatternsHint": "Cada padrão representa uma forma de usar esta luz — por exemplo, um feixe amplo de curto alcance ou um feixe estreito de longo alcance. O ator escolhe o padrão pelo HUD do Token. O consumo e a duração são compartilhados entre todos os padrões.",
+        "PreviewHint": "Selecione um token no mapa para visualizar estas configurações ao vivo enquanto edita. A luz original do token será restaurada automaticamente ao fechar esta janela.",
+        "Dim": "Raio de Luz Fraca",
+        "Bright": "Raio de Luz Intensa",
+        "Angle": "Ângulo de Emissão",
+        "Color": "Cor da Luz",
+        "Alpha": "Intensidade da Cor",
+        "Negative": "Fonte de Escuridão",
+        "NegativeHint": "Emite escuridão em vez de luz, escurecendo a área dentro dos raios em vez de revelá-la. A escuridão possui animações próprias, portanto ativar esta opção limpa o tipo de animação escolhido abaixo.",
+        "AnimationType": "Tipo de Animação",
+        "AnimationNone": "Nenhuma",
+        "Speed": "Velocidade da Animação",
+        "Intensity": "Intensidade da Animação",
+        "Reverse": "Inverter Direção",
+        "Consume": "Consumir ao Usar",
+        "ConsumeHint": "Quando habilitado, acender esta luz reduz a quantidade do item em 1. O item permanece no inventário mesmo ao chegar a zero, mas deixa de estar disponível para acender. A luz nunca volta a consumir o item automaticamente.",
+        "Coverable": "Pode ser Coberta",
+        "CoverableHint": "Adiciona o controle Guardar ao lado de Largar no HUD do Token, cobrindo a luz sem encerrá-la: ela deixa de iluminar, mas continua consumindo sua duração e pode ser descoberta depois com o tempo restante. Destina-se a uma magia de luz aplicada em um objeto, não a uma chama. Deixe desmarcado para tochas e lanternas.",
+        "Duration": "Duração (minutos)",
+        "DurationHint": "Minutos até a luz se apagar automaticamente, contados no modo escolhido abaixo. Use 0 para uma luz ilimitada que só se apaga manualmente.",
+        "DurationPreset": "Duração Predefinida",
+        "DurationMode": "Contagem da Duração",
+        "DurationModeWorld": "Tempo de jogo (relógio do mundo)",
+        "DurationModeReal": "Tempo real (relógio real)",
+        "DurationModeHint": "Tempo de jogo: a luz se consome quando o Mestre avança o relógio do mundo e permanece acesa enquanto ele estiver parado. Tempo real: a duração passa em minutos reais, mesmo com o jogo pausado ou o jogador desconectado.",
+        "RangePreset": "Alcance Predefinido",
+        "RangeCustom": "Personalizado"
+      },
+      "Save": "Salvar"
+    },
+    "Hud": {
+      "Tooltip": "Fontes de Luz",
+      "TooltipLit": "{item} — acesa",
+      "TooltipRemaining": "{item} — restam {minutes} min",
+      "TooltipStowed": "{item} — guardada",
+      "TooltipStowedRemaining": "{item} — guardada, restam {minutes} min",
+      "Extinguish": "Apagar Luz",
+      "Drop": "Largar",
+      "DropTooltip": "Largar esta luz no chão como uma Luz Ambiente",
+      "Stow": "Guardar",
+      "StowTooltip": "Cobrir esta luz sem encerrá-la — ela continua consumindo sua duração fora de vista",
+      "Uncover": "Descobrir",
+      "UncoverTooltip": "Descobrir esta luz para que volte a iluminar",
+      "Pickup": "Recolher Luz",
+      "PickupTooltip": "Retirar esta luz do chão e voltar a carregá-la",
+      "PickupSourceGone": "{item} foi recolhido, mas sua fonte de luz não está mais configurada e não pôde ser acesa novamente.",
+      "PickupBurnedOut": "{item} já havia se apagado antes de ser recolhido.",
+      "NoGm": "Nenhum Mestre está conectado para posicionar a luz. Peça a um Mestre que entre e tente novamente.",
+      "NoItem": "{name} não carrega mais {item}.",
+      "GmOnly": "Somente o Mestre pode controlar fontes de luz."
+    },
+    "Interactive": {
+      "Legend": "Fontes de Luz",
+      "Label": "Jogadores Podem Alternar",
+      "Hint": "Exibe um controle no mapa que permite aos jogadores acender e apagar esta luz. Eles precisam mover um token até a luz ou para um quadrado adjacente para alcançá-la.",
+      "OutOfReach": "Você precisa se aproximar para alcançar essa luz."
+    },
+    "Chat": {
+      "ExpiredTitle": "A Luz se Apaga",
+      "Expired": "{item}, carregada por {actor}, se apaga.",
+      "LitTitle": "Luz Acesa",
+      "Lit": "{actor} acende {item}.",
+      "LitPattern": "{actor} acende {item} ({pattern}).",
+      "DroppedTitle": "Luz Largada",
+      "Dropped": "{actor} larga {item} no chão.",
+      "PickedUpTitle": "Luz Recolhida",
+      "PickedUp": "{actor} recolhe {item} do chão.",
+      "GroundExpiredTitle": "A Luz se Apaga",
+      "GroundExpired": "{item}, deixada no chão, se apaga.",
+      "DragHint": "Arraste para a ficha de um Ator para adicionar ao inventário."
+    }
+  }
 }
