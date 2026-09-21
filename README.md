@@ -31,6 +31,7 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - Intercepta ataques das fichas de personagens e monstros.
 - Compara o ataque com a CA do alvo e registra acerto ou erro no chat.
 - Rola e aplica dano, com ajustes de fraqueza e resistência.
+- Os cartões de combate respeitam a cor automática do tema, incluindo temas escuros.
 - Trata acertos e erros críticos pelas opções do LB1/LB2.
 - Automatiza **Aparar** do Bárbaro, Guerreiro e Paladino: Mestre e jogador recebem a decisão antes da divulgação do ataque e do dano; aceitar interrompe o golpe.
 - Ao chegar a 0 PV, personagens recebem o status **Inconsciente** e ficam impedidos de atacar ou mover o token.
