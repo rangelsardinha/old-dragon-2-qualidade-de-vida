@@ -166,7 +166,9 @@ async function consumeRations(actor, requested) {
     const quantity = itemQuantity(item);
     const amount = Math.min(quantity, remaining);
     if (!amount) continue;
-    await item.update({ "system.quantity": Math.max(0, quantity - amount) });
+    const nextQuantity = Math.max(0, quantity - amount);
+    if (nextQuantity === 0) await actor.deleteEmbeddedDocuments("Item", [item.id]);
+    else await item.update({ "system.quantity": nextQuantity });
     consumed += amount;
     remaining -= amount;
   }
