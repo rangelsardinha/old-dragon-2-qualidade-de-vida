@@ -11,6 +11,7 @@ const handledProfanadorSpellMessages = new Set();
 const handledLayOnHandsMessages = new Set();
 const previousCombatants = new WeakMap();
 const cleanedImprovisedCombats = new Set();
+const ARMOR_OPTIMIZATION_NOTE = "Armadura otimizada: recebe +2 no bônus de CA. Quebra se o Gladiador for alvo de um ataque com 20 natural.";
 
 function enabled() { return game.settings.get(MODULE_ID, "enableClassAbilities"); }
 function isPrimaryActiveGM() {
@@ -522,14 +523,27 @@ async function optimizeArmor(actor) {
   if (armor.getFlag?.(MODULE_ID, "armorOptimized")) return ui.notifications.warn("Essa armadura já foi otimizada.");
   const currentBonus = Number(armor.system?.bonus_ca) || 0;
   const currentDescription = String(armor.system?.description ?? "");
-  const optimizationNote = '<p><strong>Armadura otimizada:</strong> recebe +2 no bônus de CA. Quebra se o Gladiador for alvo de um ataque com 20 natural.</p>';
   await armor.update({
     "system.bonus_ca": currentBonus + 2,
-    "system.description": `${currentDescription}${currentDescription ? "\n" : ""}${optimizationNote}`,
+    "system.description": `${currentDescription}${currentDescription ? "\n" : ""}${ARMOR_OPTIMIZATION_NOTE}`,
     [`flags.${MODULE_ID}.armorOptimized`]: true
   });
   await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<strong>Otimização de Armadura</strong><p>${escapeHtml(armor.name)} foi otimizada e recebeu <strong>+2 no bônus de CA</strong>.</p>` });
   actor.sheet?.render?.(false);
+}
+
+async function migrateOptimizedArmorDescriptions() {
+  if (!isPrimaryActiveGM()) return;
+  const actors = new Map();
+  for (const actor of game.actors ?? []) actors.set(actor.uuid ?? actor.id, actor);
+  for (const token of canvas?.tokens?.placeables ?? []) if (token.actor) actors.set(token.actor.uuid ?? token.actor.id, token.actor);
+  const legacyNote = /<p><strong>Armadura otimizada:<\/strong>\s*recebe \+2 no bônus de CA\. Quebra se o Gladiador for alvo de um ataque com 20 natural\.<\/p>/gi;
+  for (const actor of actors.values()) for (const armor of actor.items ?? []) {
+    if (armor.type !== "armor" || !armor.getFlag?.(MODULE_ID, "armorOptimized")) continue;
+    const description = String(armor.system?.description ?? "");
+    const migrated = description.replace(legacyNote, ARMOR_OPTIMIZATION_NOTE);
+    if (migrated !== description) await armor.update({ "system.description": migrated });
+  }
 }
 
 async function breakOptimizedArmor(actor) {
@@ -1382,7 +1396,10 @@ Hooks.on("updateCombat", async (combat, changed) => {
 Hooks.on("deleteCombat", (combat) => breakImprovisedWeapons(combat));
 Hooks.on("combatEnd", (combat) => breakImprovisedWeapons(combat));
 Hooks.on("renderCombatTracker", () => breakImprovisedWeapons());
-Hooks.on("canvasReady", () => breakImprovisedWeapons());
+Hooks.on("canvasReady", () => {
+  breakImprovisedWeapons();
+  migrateOptimizedArmorDescriptions();
+});
 Hooks.on(`${MODULE_ID}.targetNatural20`, (actor) => breakOptimizedArmor(actor));
 // O sistema registra o uso da habilidade atualizando o Item (sem depender de combate
 // ou de um botão customizado). Esse caminho também cobre mensagens sem speaker.actor.
@@ -1410,6 +1427,7 @@ Hooks.once("ready", () => {
   console.log(`${MODULE_ID} | Automações de habilidades de classe e raça ativas`);
   for (const combat of game.combats ?? []) previousCombatants.set(combat, combat.combatant?.actor?.id ?? null);
   breakImprovisedWeapons();
+  migrateOptimizedArmorDescriptions();
   game.socket.on(SOCKET, async (payload) => {
     if (payload?.type === "optimizedArmorNatural20" && game.user.isGM && isPrimaryActiveGM()) {
       const targetDoc = payload.targetTokenUuid ? await fromUuid(payload.targetTokenUuid) : null;
