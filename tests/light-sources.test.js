@@ -67,12 +67,16 @@ test("migra apenas o padrão antigo de tipos de item", () => {
 test("identifica os recursos consumidos pelas fontes físicas", () => {
   assert.equal(lightResourceKind("Tocha"), "torch");
   assert.equal(lightResourceKind("Vela"), "candle");
+  assert.equal(lightResourceKind("Vela (12 unidades)"), "candle");
+  assert.equal(lightResourceKind("Vela acesa"), "candle");
   assert.equal(lightResourceKind("Lamparina"), "oil");
   assert.equal(lightResourceKind("Lanterna furta-fogo"), "oil");
   assert.equal(lightResourceKind("Luz Contínua"), null);
   assert.equal(inventoryResourceKind({ name: "Óleo", system: { odo_id: "oleo" } }), "oil");
   assert.equal(inventoryResourceKind({ name: "Tocha", system: { odo_id: "tocha" } }), "torch");
   assert.equal(inventoryResourceKind({ name: "Vela", system: { odo_id: "vela" } }), "candle");
+  assert.equal(inventoryResourceKind({ name: "Vela (12)", system: { odo_id: "vela" } }), "candle");
+  assert.equal(inventoryResourceKind({ name: "Fonte de Vela", system: { odo_id: "fonte-vela" } }), "candle");
 });
 
 test("reduz pilhas e remove a última unidade do recurso", () => {
