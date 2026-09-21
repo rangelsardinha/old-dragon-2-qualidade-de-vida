@@ -124,6 +124,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - A opção **Contabilizar tochas e óleo** pede ao Mestre confirmação para consumir uma Tocha ao acendê-la ou um frasco de Óleo ao acender Lamparina e Lanterna furta-fogo; pilhas com uma única unidade são removidas.
 - Com essa opção ativa, os campos `T` da Carta de Controle apagam as tochas acesas, e o campo 6 da 4ª hora também apaga lamparinas e lanternas furta-fogo.
 - Ao largar uma Lamparina ou Lanterna furta-fogo, uma unidade sai do inventário e permanece vinculada à luz no chão; quando outro personagem a recolhe, o item é adicionado ao inventário dele.
+- Lamparinas e lanternas furta-fogo só podem ser acesas se o personagem possuir uma Pederneira disponível ou estiver no mesmo quadrado/adjacente a outra fonte de luz acesa.
 
 ### Habilidades de raça e classe automatizadas
 

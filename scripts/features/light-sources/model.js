@@ -123,3 +123,10 @@ export function isPortableLampItem(item, lightName) {
   const name = normalizedLightName(item?.name);
   return name === expected || id === expected.replaceAll(" ", "-");
 }
+
+export function isFlintItem(item) {
+  const id = normalizedLightName(item?.system?.odo_id);
+  const name = normalizedLightName(item?.name);
+  const quantity = item?.system?.quantity == null ? 1 : Math.max(0, Math.trunc(Number(item.system.quantity) || 0));
+  return quantity > 0 && (id === "pederneira" || name === "pederneira");
+}

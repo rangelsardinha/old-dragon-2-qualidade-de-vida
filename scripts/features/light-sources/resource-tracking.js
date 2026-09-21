@@ -1,5 +1,6 @@
 import {
   inventoryResourceKind,
+  isFlintItem,
   isPortableLampItem,
   lightResourceKind,
   portableLampName,
@@ -16,6 +17,8 @@ const PROMPT_DELAY_MS = 750;
 const pendingPrompts = new Map();
 let pendingTransfers = [];
 let pendingPickups = [];
+let blockedAnnouncements = [];
+const recentLitGroundPickups = new Map();
 
 function integrationEnabled() {
   try {
@@ -50,6 +53,91 @@ function resourceItem(actor, kind) {
 
 function lampItem(actor, lightName) {
   return [...(actor?.items ?? [])].find((item) => isPortableLampItem(item, lightName) && quantity(item) > 0) ?? null;
+}
+
+function hasFlint(actor) {
+  return [...(actor?.items ?? [])].some(isFlintItem);
+}
+
+function sameOrAdjacent(origin, destination) {
+  const grid = canvas?.grid;
+  if (!grid || !origin || !destination) return false;
+  if (grid.isGridless) return Math.hypot(destination.x - origin.x, destination.y - origin.y) <= grid.size;
+  const a = grid.getOffset(origin);
+  const b = grid.getOffset(destination);
+  return (a.i === b.i && a.j === b.j) || grid.testAdjacency(origin, destination);
+}
+
+function tokenEmitsLight(token) {
+  const light = token.document?.light ?? token.light;
+  const configured = !light?.negative && (Number(light?.bright) > 0 || Number(light?.dim) > 0);
+  const active = game.modules.get(LIGHT_SOURCES_MODULE_ID)?.api?.getActive?.(token.actor) ?? game.lightSources?.getActive?.(token.actor);
+  return configured || Boolean(active && !active.stowed);
+}
+
+function actorTokens(actor) {
+  return [...(canvas?.tokens?.placeables ?? [])].filter((token) => token.actor?.uuid === actor?.uuid || token.actor?.id === actor?.id);
+}
+
+function touchesLitSource(actor) {
+  const tokens = actorTokens(actor);
+  if (!tokens.length) return false;
+  for (const token of tokens) {
+    for (const light of canvas?.scene?.lights ?? []) {
+      const config = light.config ?? {};
+      if (light.hidden || config.negative || !(Number(config.bright) > 0 || Number(config.dim) > 0)) continue;
+      if (sameOrAdjacent(token.center, { x: light.x, y: light.y })) return true;
+    }
+    for (const other of canvas?.tokens?.placeables ?? []) {
+      if (other === token || !tokenEmitsLight(other)) continue;
+      if (sameOrAdjacent(token.center, other.center)) return true;
+    }
+  }
+  return false;
+}
+
+function recentlyPickedUpLitGroundSource(sourceId) {
+  const expiresAt = recentLitGroundPickups.get(sourceId) ?? 0;
+  if (expiresAt <= Date.now()) {
+    recentLitGroundPickups.delete(sourceId);
+    return false;
+  }
+  recentLitGroundPickups.delete(sourceId);
+  return true;
+}
+
+function requireIgnition(effect) {
+  if (!integrationEnabled()) return;
+  const light = effect.getFlag?.(LIGHT_SOURCES_MODULE_ID, LIGHT_FLAG);
+  if (!portableLampName(light?.itemName)) return;
+  const actor = effect.parent;
+  if (hasFlint(actor) || touchesLitSource(actor) || recentlyPickedUpLitGroundSource(light.sourceId)) return;
+  blockedAnnouncements.push({ actorId: actor?.id, itemName: light.itemName, createdAt: Date.now() });
+  ui.notifications.warn(`${light.itemName} só pode ser acesa com uma Pederneira ou ao lado de outra fonte de luz acesa.`);
+  return false;
+}
+
+function rememberLitGroundPickup(light) {
+  if (!integrationEnabled() || light.hidden) return;
+  const ground = light.getFlag?.(LIGHT_SOURCES_MODULE_ID, GROUND_LIGHT_FLAG);
+  if (portableLampName(ground?.itemName) && ground.sourceId) recentLitGroundPickups.set(ground.sourceId, Date.now() + 2000);
+}
+
+function suppressBlockedAnnouncement(message) {
+  if (!integrationEnabled()) return;
+  const litTitle = game.i18n.localize("LIGHTSOURCES.Chat.LitTitle");
+  const content = String(message.content ?? "");
+  if (!content.includes(litTitle)) return;
+  const cutoff = Date.now() - 3000;
+  blockedAnnouncements = blockedAnnouncements.filter((entry) => entry.createdAt >= cutoff);
+  const speakerActorId = actorFromSpeaker(message.speaker)?.id;
+  const index = blockedAnnouncements.findIndex((entry) =>
+    (entry.actorId === message.speaker?.actor || entry.actorId === speakerActorId)
+    && content.includes(entry.itemName)
+  );
+  if (index < 0) return;
+  blockedAnnouncements.splice(index, 1);
+  return false;
 }
 
 function itemDataForTransfer(item) {
@@ -252,6 +340,9 @@ export async function expireSessionLights(event) {
 }
 
 export function installLightResourceTracking() {
+  Hooks.on("preCreateActiveEffect", requireIgnition);
+  Hooks.on("preDeleteAmbientLight", rememberLitGroundPickup);
+  Hooks.on("preCreateChatMessage", suppressBlockedAnnouncement);
   Hooks.on("createActiveEffect", lightCreated);
   Hooks.on("createAmbientLight", (light) => groundLightCreated(light).catch((error) => console.error(`${MODULE_ID} | Falha ao registrar luz largada`, error)));
   Hooks.on("deleteAmbientLight", groundLightDeleted);

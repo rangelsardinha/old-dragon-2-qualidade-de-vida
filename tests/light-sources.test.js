@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   expiresWithSessionEvent,
   inventoryResourceKind,
+  isFlintItem,
   isPortableLampItem,
   lightResourceKind,
   OD2_LIGHT_SOURCE_COMPATIBILITY,
@@ -93,4 +94,10 @@ test("reconhece lamparinas e lanternas como itens transferíveis", () => {
   assert.equal(isPortableLampItem({ name: "Lamparina", system: { odo_id: "lamparina" } }, "Lamparina"), true);
   assert.equal(isPortableLampItem({ name: "Lanterna furta-fogo", system: { odo_id: "lanterna-furta-fogo" } }, "Lanterna furta-fogo"), true);
   assert.equal(isPortableLampItem({ name: "Óleo", system: { odo_id: "oleo" } }, "Lamparina"), false);
+});
+
+test("reconhece uma pederneira disponível no inventário", () => {
+  assert.equal(isFlintItem({ name: "Pederneira", system: { odo_id: "pederneira", quantity: 1 } }), true);
+  assert.equal(isFlintItem({ name: "Pederneira", system: { odo_id: "pederneira", quantity: 0 } }), false);
+  assert.equal(isFlintItem({ name: "Óleo", system: { odo_id: "oleo", quantity: 2 } }), false);
 });
