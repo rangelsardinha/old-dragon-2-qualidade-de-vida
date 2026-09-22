@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, emptyWaterskinStates, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
+import { actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, coinValue, descendantIds, emptyWaterskinStates, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
 import { curseForRoll, selectRandomSpells } from "../scripts/features/scroll-generator/model.js";
 
 const items = [
@@ -24,6 +24,11 @@ test("normaliza e movimenta moedas sem valores negativos", () => {
   assert.deepEqual(normalizeCoins({ gp: "5", sp: -2 }), { cp: 0, sp: 0, gp: 5 });
   assert.deepEqual(addCoins({ gp: 4 }, { gp: 3, cp: 2 }), { cp: 2, sp: 0, gp: 7 });
   assert.deepEqual(subtractCoins({ gp: 4 }, { gp: 9 }), { cp: 0, sp: 0, gp: 0 });
+});
+
+test("compara moedas por valor entre denominações", () => {
+  assert.equal(coinValue({ gp: 9 }), coinValue({ cp: 900 }));
+  assert.equal(coinValue({ gp: 9 }) >= coinValue({ sp: 90 }), true);
 });
 
 test("totaliza carga dos equipamentos, quantidades e moedas", () => {
