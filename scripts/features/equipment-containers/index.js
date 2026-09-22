@@ -503,6 +503,7 @@ async function saveCoins(container, panel) {
   const allocatedElsewhere = sumAllocatedCoins(others, containerCoins);
   const economy = actorCoins(actor);
   for (const key of COIN_KEYS) {
+    if (requested[key] <= 0) continue;
     if (requested[key] + allocatedElsewhere[key] > economy[key]) {
       ui.notifications.warn(`Não há moedas ${COIN_LABELS[key]} livres suficientes.`);
       return;
