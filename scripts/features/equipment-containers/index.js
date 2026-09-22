@@ -526,11 +526,7 @@ function enhanceItemSheet(app, html) {
   if (!root || root.querySelector(".od2qdv-container-sheet")) return;
   const form = root.matches?.("form") ? root : root.querySelector("form");
   if (!form) return;
-  // O formulário de itens do sistema usa camadas/abas posicionadas. Inserir o
-  // painel dentro dele faz o conteúdo flutuar sobre outras abas em janelas
-  // pequenas; manter o painel como irmão do formulário coloca-o no fluxo da ficha.
-  const panelHost = form.parentElement ?? form;
-  panelHost.insertAdjacentHTML("beforeend", itemSheetPanel(app.item));
+  form.insertAdjacentHTML("beforeend", itemSheetPanel(app.item));
   if (boundItemSheets.has(root)) return;
   boundItemSheets.add(root);
   root.addEventListener("drop", async (event) => {
