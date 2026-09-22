@@ -1,5 +1,5 @@
 import {
-  COIN_KEYS, actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, coinValue, containerContentsWeight, descendantIds, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
+  COIN_KEYS, actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, containerContentsWeight, descendantIds, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
 } from "./model.js";
 import { updateInventoryItem } from "../../utils/actor-inventory.js";
 
@@ -502,9 +502,11 @@ async function saveCoins(container, panel) {
   const others = actor.items.filter((item) => item.type === "container" && item.id !== container.id);
   const allocatedElsewhere = sumAllocatedCoins(others, containerCoins);
   const economy = actorCoins(actor);
-  if (coinValue(requested) + coinValue(allocatedElsewhere) > coinValue(economy)) {
-    ui.notifications.warn("Não há moedas livres suficientes para guardar esse valor no recipiente.");
-    return;
+  for (const key of COIN_KEYS) {
+    if (requested[key] + allocatedElsewhere[key] > economy[key]) {
+      ui.notifications.warn(`Não há moedas ${COIN_LABELS[key]} livres suficientes.`);
+      return;
+    }
   }
   if (isSackOfEstopa(container) && requested.cp + requested.sp + requested.gp > 600) {
     ui.notifications.warn("O Saco de estopa comporta no máximo 600 moedas.");

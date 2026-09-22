@@ -72,11 +72,6 @@ export function normalizeCoins(value = {}) {
   return Object.fromEntries(COIN_KEYS.map((key) => [key, Math.max(0, Math.trunc(Number(value[key]) || 0))]));
 }
 
-export function coinValue(coins = {}) {
-  const normalized = normalizeCoins(coins);
-  return normalized.gp * 100 + normalized.sp * 10 + normalized.cp;
-}
-
 export function carriedLoad(items = [], coins = {}) {
   const byId = new Map(items.map((item) => [item.id, item]));
   const itemLoad = items.reduce((total, item) => {
