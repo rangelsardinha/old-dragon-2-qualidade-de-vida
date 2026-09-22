@@ -64,6 +64,8 @@ test("reduz pela metade o peso de itens dentro do saco de estopa", () => {
     { id: "rope", type: "misc", name: "Corda", system: { weight_in_load: 10, quantity: 1 }, flags: { "old-dragon-2-qualidade-de-vida": { parentContainerId: "sack" } } }
   ];
   assert.equal(carriedLoad(items), 6);
+  items[1].flags["old-dragon-2-qualidade-de-vida"].parentContainerId = null;
+  assert.equal(carriedLoad(items), 11);
 });
 
 test("permite transferir recipientes para personagens e ajudantes", () => {
