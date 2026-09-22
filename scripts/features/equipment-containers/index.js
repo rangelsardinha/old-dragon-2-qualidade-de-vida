@@ -489,7 +489,7 @@ function itemSheetPanel(item) {
     <h2><i class="fas fa-box-open"></i> Conteúdo</h2>
     <p class="hint">Arraste equipamentos para esta área.${isSackOfEstopa(item) ? " Este saco comporta até 15 kg e não aceita recipientes." : " Recipientes podem ser aninhados."}</p>
     <label class="od2qdv-equipped-ammo-option"><input type="checkbox" data-equipped-ammo ${allowsEquippedAmmunition(item) ? "checked" : ""}> Permitir guardar munição equipada</label>
-    <div class="od2qdv-coins">${COIN_KEYS.map((key) => `<label>${COIN_LABELS[key]}<input type="number" min="0" step="1" data-coin="${key}" value="${coins[key]}"></label>`).join("")}<button type="button" data-od2qdv-action="save-coins"><i class="fas fa-coins"></i> Guardar moedas</button></div>
+    <div class="od2qdv-coins">${["gp", "sp", "cp"].map((key) => `<label>${COIN_LABELS[key]}<input type="number" min="0" step="1" data-coin="${key}" value="${coins[key]}"></label>`).join("")}<button type="button" data-od2qdv-action="save-coins"><i class="fas fa-coins"></i> Guardar moedas</button></div>
     ${renderTree(item.actor, item)}
     <button type="button" data-od2qdv-action="transfer"><i class="fas fa-people-arrows"></i> Transferir</button>
     <button type="button" data-od2qdv-action="empty"><i class="fas fa-box-open"></i> Esvaziar recipiente</button>
