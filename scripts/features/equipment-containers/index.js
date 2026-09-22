@@ -1,5 +1,5 @@
 import {
-  COIN_KEYS, actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, descendantIds, isAmmunition, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
+  COIN_KEYS, actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, containerContentsWeight, descendantIds, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
 } from "./model.js";
 import { updateInventoryItem } from "../../utils/actor-inventory.js";
 
@@ -33,10 +33,6 @@ function normalizedName(value) {
 
 function isWaterskin(item) {
   return /^odre(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
-}
-
-function canContainItems(item) {
-  return item?.type === "container" && !isWaterskin(item);
 }
 
 function itemSheetScroller(root) {
@@ -152,6 +148,24 @@ function containedWeight(item) {
   return load > 0 ? load * quantity : (grams * quantity) / 1000;
 }
 
+function containerContentsWeightFor(container) {
+  return containerContentsWeight([...container.actor.items], container.id);
+}
+
+function canAddToContainer(item, container) {
+  if (!isSackOfEstopa(container)) return true;
+  if (item?.type === "container") {
+    ui.notifications.warn("Sacos de estopa não podem armazenar outros recipientes.");
+    return false;
+  }
+  const nextWeight = containerContentsWeightFor(container) + containedWeight(item);
+  if (nextWeight > 15) {
+    ui.notifications.warn("O Saco de estopa comporta no máximo 15 kg.");
+    return false;
+  }
+  return true;
+}
+
 function containedValue(item) {
   const quantity = containedQuantity(item);
   const raw = item?.system?.cost ?? item?.system?.value ?? item?.system?.price ?? 0;
@@ -187,7 +201,7 @@ async function setParent(item, newParentId) {
 
 async function nestExistingItem(item, container) {
   if (!canContainItems(container)) {
-    ui.notifications.warn("Odres não podem armazenar itens.");
+    ui.notifications.warn(isSackOfEstopa(container) ? "Sacos de estopa não podem armazenar outros recipientes." : "Odres não podem armazenar itens.");
     return true;
   }
   const actor = container.actor;
@@ -200,6 +214,7 @@ async function nestExistingItem(item, container) {
     ui.notifications.warn("Um recipiente não pode ser colocado dentro de si mesmo ou de seus descendentes.");
     return true;
   }
+  if (!canAddToContainer(item, container)) return true;
   await setParent(item, container.id);
   return true;
 }
@@ -227,9 +242,10 @@ export async function transferEmbeddedTree(rootItem, targetActor, targetParentId
   }
 
   if (targetParentId && !canContainItems(targetActor.items.get(targetParentId))) {
-    ui.notifications.warn("Odres não podem armazenar itens.");
+    ui.notifications.warn("Este recipiente não pode armazenar itens.");
     return;
   }
+  if (targetParentId && !canAddToContainer(rootItem, targetActor.items.get(targetParentId))) return;
 
   const sourceItems = subtree(sourceActor, rootItem.id);
   const idMap = new Map();
@@ -258,13 +274,14 @@ export async function transferEmbeddedTree(rootItem, targetActor, targetParentId
 
 async function createInsideContainer(sourceItem, container) {
   if (!canContainItems(container)) {
-    ui.notifications.warn("Odres não podem armazenar itens.");
+    ui.notifications.warn(isSackOfEstopa(container) ? "Sacos de estopa não podem armazenar outros recipientes." : "Odres não podem armazenar itens.");
     return;
   }
   if (!INVENTORY_TYPES.has(sourceItem.type)) {
     ui.notifications.warn("Somente equipamentos podem ser colocados em recipientes.");
     return;
   }
+  if (!canAddToContainer(sourceItem, container)) return;
   const [created] = await container.actor.createEmbeddedDocuments("Item", [cloneSource(sourceItem, container.id)]);
   return created;
 }
@@ -282,13 +299,14 @@ async function handleDrop(event, targetActor, targetContainer = null) {
 
   if (targetContainer) {
     if (!canContainItems(targetContainer)) {
-      ui.notifications.warn("Odres não podem armazenar itens.");
+      ui.notifications.warn(isSackOfEstopa(targetContainer) ? "Sacos de estopa não podem armazenar outros recipientes." : "Odres não podem armazenar itens.");
       return true;
     }
     if (!canStoreItem(sourceItem, allowsEquippedAmmunition(targetContainer))) {
       ui.notifications.warn(`${sourceItem.name} está equipado. Apenas munições podem ser guardadas equipadas em recipientes configurados para isso.`);
       return true;
     }
+    if (!canAddToContainer(sourceItem, targetContainer)) return true;
     if (sourceItem.actor?.id === targetActor.id) await nestExistingItem(sourceItem, targetContainer);
     else if (sourceItem.actor) await transferEmbeddedTree(sourceItem, targetActor, targetContainer.id);
     else await createInsideContainer(sourceItem, targetContainer);
@@ -469,7 +487,7 @@ function itemSheetPanel(item) {
   const coins = containerCoins(item);
   return `<section class="od2qdv-container-sheet" data-container-id="${item.id}">
     <h2><i class="fas fa-box-open"></i> Conteúdo</h2>
-    <p class="hint">Arraste equipamentos para esta área. Recipientes podem ser aninhados.</p>
+    <p class="hint">Arraste equipamentos para esta área.${isSackOfEstopa(item) ? " Este saco comporta até 15 kg e não aceita recipientes." : " Recipientes podem ser aninhados."}</p>
     <label class="od2qdv-equipped-ammo-option"><input type="checkbox" data-equipped-ammo ${allowsEquippedAmmunition(item) ? "checked" : ""}> Permitir guardar munição equipada</label>
     <div class="od2qdv-coins">${COIN_KEYS.map((key) => `<label>${COIN_LABELS[key]}<input type="number" min="0" step="1" data-coin="${key}" value="${coins[key]}"></label>`).join("")}<button type="button" data-od2qdv-action="save-coins"><i class="fas fa-coins"></i> Guardar moedas</button></div>
     ${renderTree(item.actor, item)}
@@ -489,6 +507,10 @@ async function saveCoins(container, panel) {
       ui.notifications.warn(`Não há moedas ${COIN_LABELS[key]} livres suficientes.`);
       return;
     }
+  }
+  if (isSackOfEstopa(container) && requested.cp + requested.sp + requested.gp > 600) {
+    ui.notifications.warn("O Saco de estopa comporta no máximo 600 moedas.");
+    return;
   }
   await container.setFlag(MODULE_ID, COINS_FLAG, requested);
   ui.notifications.info(`Moedas guardadas em ${container.name}.`);

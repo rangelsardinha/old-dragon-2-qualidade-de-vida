@@ -1,4 +1,32 @@
 export const COIN_KEYS = ["cp", "sp", "gp"];
+const MODULE_ID = "old-dragon-2-qualidade-de-vida";
+
+function normalizedName(value) {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
+}
+
+export function isSackOfEstopa(item) {
+  return /^saco de estopa(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
+}
+
+export function canContainItems(item) {
+  return item?.type === "container" && !/^odre(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
+}
+
+export function itemWeight(item) {
+  const calculated = Number(item?.system?.total_weight);
+  if (Number.isFinite(calculated)) return Math.max(0, calculated);
+  const quantity = Math.max(0, Number(item?.system?.quantity) || 0);
+  const load = Math.max(0, Number(item?.system?.weight_in_load) || 0);
+  const grams = Math.max(0, Number(item?.system?.weight_in_grams) || 0);
+  return load > 0 ? load * quantity : (grams * quantity) / 1000;
+}
+
+export function containerContentsWeight(items = [], containerId) {
+  return items
+    .filter((item) => item?.flags?.[MODULE_ID]?.parentContainerId === containerId)
+    .reduce((total, item) => total + itemWeight(item), 0);
+}
 
 export function isAmmunition(item) {
   return item?.type === "weapon" && item?.system?.type === "ammunition";
@@ -45,13 +73,19 @@ export function normalizeCoins(value = {}) {
 }
 
 export function carriedLoad(items = [], coins = {}) {
+  const byId = new Map(items.map((item) => [item.id, item]));
   const itemLoad = items.reduce((total, item) => {
-    const calculated = Number(item?.system?.total_weight);
-    if (Number.isFinite(calculated)) return total + Math.max(0, calculated);
-    const quantity = Math.max(0, Number(item?.system?.quantity) || 0);
-    const load = Math.max(0, Number(item?.system?.weight_in_load) || 0);
-    const grams = Math.max(0, Number(item?.system?.weight_in_grams) || 0);
-    return total + (load > 0 ? load * quantity : (grams * quantity) / 1000);
+    let factor = 1;
+    let parentId = item?.flags?.[MODULE_ID]?.parentContainerId;
+    const seen = new Set();
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId);
+      const parent = byId.get(parentId);
+      if (!parent) break;
+      if (isSackOfEstopa(parent)) factor *= 0.5;
+      parentId = parent.flags?.[MODULE_ID]?.parentContainerId;
+    }
+    return total + itemWeight(item) * factor;
   }, 0);
   const money = normalizeCoins(coins);
   const coinLoad = COIN_KEYS.reduce((total, key) => total + money[key], 0) / 100;

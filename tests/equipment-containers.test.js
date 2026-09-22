@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actorOwnerNames, addCoins, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, emptyWaterskinStates, isAmmunition, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
+import { actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, emptyWaterskinStates, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
 import { curseForRoll, selectRandomSpells } from "../scripts/features/scroll-generator/model.js";
 
 const items = [
@@ -48,6 +48,22 @@ test("permite munição equipada somente em recipiente autorizado", () => {
   assert.equal(canStoreItem(ammunition, false), false);
   assert.equal(canStoreItem(ammunition, true), true);
   assert.equal(canStoreItem(sword, true), false);
+});
+
+test("saco de estopa aceita itens, mas não pode conter recipientes", () => {
+  const sack = { id: "sack", type: "container", name: "Saco de Estopa" };
+  const backpack = { id: "backpack", type: "container", name: "Mochila" };
+  assert.equal(isSackOfEstopa(sack), true);
+  assert.equal(canContainItems(sack), true);
+  assert.equal(canContainItems(backpack), true);
+});
+
+test("reduz pela metade o peso de itens dentro do saco de estopa", () => {
+  const items = [
+    { id: "sack", type: "container", name: "Saco de Estopa", system: { weight_in_load: 1, quantity: 1 }, flags: {} },
+    { id: "rope", type: "misc", name: "Corda", system: { weight_in_load: 10, quantity: 1 }, flags: { "old-dragon-2-qualidade-de-vida": { parentContainerId: "sack" } } }
+  ];
+  assert.equal(carriedLoad(items), 6);
 });
 
 test("permite transferir recipientes para personagens e ajudantes", () => {

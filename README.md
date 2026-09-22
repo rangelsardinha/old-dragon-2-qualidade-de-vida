@@ -45,6 +45,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 ### Equipamentos em recipientes
 
 - Arraste equipamentos sobre Barris, Mochilas e outros itens do tipo `container` para guardá-los.
+- O **Saco de estopa** comporta até 15 kg, reduz pela metade o peso dos itens guardados, aceita até 600 moedas e não permite outros recipientes em seu interior.
 - Recipientes podem ser aninhados, com proteção contra ciclos.
 - A ficha do recipiente permite reservar moedas, que continuam compondo o saldo disponível do personagem.
 - Ao transferir um recipiente para outro personagem ou ajudante, toda a árvore de itens e as moedas guardadas são movidas em conjunto.
