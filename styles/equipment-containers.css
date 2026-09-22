@@ -9,8 +9,9 @@
 .od2qdv-contained-controls { display: flex; }
 .od2qdv-contained-item > .od2qdv-container-contents { grid-column: 2 / -1; width: calc(100% - .5rem); }
 .od2qdv-container-empty { flex: 0 0 100%; padding: .3rem 1rem; opacity: .7; font-style: italic; }
-.od2qdv-container-sheet { margin: .75rem; padding: .65rem; border: 1px solid var(--color-border-light-primary, #777); border-radius: 4px; }
-.olddragon2e.sheet.item:has(.od2qdv-container-sheet) form { overflow-y: auto; }
+.od2qdv-container-sheet { display: block; position: static; float: none; clear: both; flex: 0 0 auto; width: calc(100% - 1.5rem); box-sizing: border-box; margin: .75rem; padding: .65rem; border: 1px solid var(--color-border-light-primary, #777); border-radius: 4px; }
+.olddragon2e.sheet.item:has(.od2qdv-container-sheet) .window-content { overflow-y: auto; overflow-x: hidden; }
+.olddragon2e.sheet.item:has(.od2qdv-container-sheet) form { position: static; min-height: 0; height: auto; }
 .od2qdv-container-sheet h2 { margin-top: 0; }
 .od2qdv-container-sheet .hint { opacity: .75; }
 .od2qdv-coins { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: .5rem; margin: .5rem 0; align-items: center; }
