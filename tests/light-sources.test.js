@@ -73,6 +73,7 @@ test("identifica os recursos consumidos pelas fontes físicas", () => {
   assert.equal(lightResourceKind("Lanterna furta-fogo"), "oil");
   assert.equal(lightResourceKind("Luz Contínua"), null);
   assert.equal(inventoryResourceKind({ name: "Óleo", system: { odo_id: "oleo" } }), "oil");
+  assert.equal(inventoryResourceKind({ name: "Frasco de Óleo", system: { odo_id: "frasco-de-oleo" } }), "oil");
   assert.equal(inventoryResourceKind({ name: "Tocha", system: { odo_id: "tocha" } }), "torch");
   assert.equal(inventoryResourceKind({ name: "Vela", system: { odo_id: "vela" } }), "candle");
   assert.equal(inventoryResourceKind({ name: "Vela (12)", system: { odo_id: "vela" } }), "candle");

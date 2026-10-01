@@ -97,7 +97,8 @@ export function inventoryResourceKind(item) {
   const name = normalizedLightName(item?.name);
   if (/^tochas?(?:$|[\s(])/.test(id) || /^tochas?(?:$|[\s(])/.test(name)) return "torch";
   if (id.includes("vela") || name.includes("vela")) return "candle";
-  if (/^oleos?(?:$|[\s(])/.test(id) || /^oleos?(?:$|[\s(])/.test(name)) return "oil";
+  if (/^(?:frascos?[\s-]+de[\s-]+)?oleos?(?:$|[\s(])/.test(id)
+    || /^(?:frascos?[\s-]+de[\s-]+)?oleos?(?:$|[\s(])/.test(name)) return "oil";
   return null;
 }
 
