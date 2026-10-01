@@ -24,7 +24,7 @@ Hooks.on("renderJournalDirectory", (_app, html) => {
   if (!target) return;
   const button = document.createElement("button");
   button.type = "button"; button.className = "od2sc-create-journal";
-  button.innerHTML = '<i class="fas fa-clock"></i> Nova Carta de Controle';
+  button.innerHTML = '<i class="fas fa-clock"></i> Novo Cartão de Controle de Sessão';
   button.addEventListener("click", createJournal);
   target.append(button);
 });
@@ -81,6 +81,13 @@ function cardHtml(entry) {
 }
 
 function bindCard(card, entry) {
+  card.querySelectorAll("[data-od2sc-turn]").forEach(select => select.addEventListener("pointerdown", event => {
+    if (!game.user.isGM) return;
+    event.preventDefault();
+    event.stopPropagation();
+    select.value = select.value === "passed" ? "" : "passed";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }));
   card.addEventListener("change", async event => {
     const select = event.target.closest("[data-od2sc-turn]"); if (!select || !game.user.isGM) return;
     const key = select.dataset.od2scTurn;

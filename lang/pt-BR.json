@@ -21,6 +21,8 @@
   "OD2QDV.Settings.enableAutomatedLighting.hint": "Adiciona ao diretório de Atores uma ferramenta para configurar infravisão nos protótipos de token.",
   "OD2QDV.Settings.enableLightResourceConsumption.name": "Contabilizar tochas e óleo",
   "OD2QDV.Settings.enableLightResourceConsumption.hint": "Pergunta ao Mestre se deve consumir tochas ou frascos de óleo ao acender fontes de luz e integra sua duração à Carta de Controle de Sessão.",
+  "OD2QDV.Settings.requireLightIgnition.name": "Exigir pederneira ou fonte de luz",
+  "OD2QDV.Settings.requireLightIgnition.hint": "Exige uma Pederneira ou proximidade de outra fonte de luz para acender tochas, velas, lamparinas e lanternas furta-fogo.",
   "OD2CA.Settings.combatAutoDamage.name": "Aplicar dano automatico",
   "OD2CA.Settings.combatAutoDamage.hint": "Quando um ataque acertar, rola o dano da arma e desconta automaticamente do alvo.",
   "OD2CA.Settings.combatRequireOneTarget.name": "Exigir exatamente um alvo",

@@ -540,7 +540,7 @@
       : `Tesouro Individual/Carregado — Tipo ${resultado.tipo}`;
     const rapidoObj = resultado.covil ? COVIL[resultado.tipo] : INDIVIDUAL[resultado.tipo];
 
-    const content = `
+    const publicContent = `
       <div class="od2-tesouro" style="border:1px solid #782e22; border-radius:6px; padding:8px;">
         <h2 style="margin:0 0 4px 0; border-bottom:2px solid #782e22;">🎲 ${titulo}</h2>
         <p style="margin:0 0 8px 0; font-size:11px; color:#666;"><i>Tesouro Rápido de referência: ${rapidoObj.rapido}</i></p>
@@ -549,9 +549,50 @@
         </div>
       </div>`;
 
+    return { publicContent, speaker: ChatMessage.getSpeaker(actor ? { actor } : {}) };
+  }
+
+  async function publicarResultado(resultado, actor = null, visibility = "public") {
+    const message = await postarResultado(resultado, actor);
+    const privateMessage = visibility === "private";
+    const content = privateMessage
+      ? `${message.publicContent}<div style="margin-top:8px;"><button type="button" data-od2qdv-show-treasure="true"><i class="fas fa-eye"></i> Mostrar aos jogadores</button></div>`
+      : message.publicContent;
     await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker(actor ? { actor } : {}),
+      speaker: message.speaker,
       content,
+      ...(privateMessage ? {
+        whisper: ChatMessage.getWhisperRecipients("GM").map(user => user.id),
+        flags: { [MODULE_ID]: { treasurePublicContent: message.publicContent } }
+      } : {})
+    });
+  }
+
+  async function promptTreasureVisibility() {
+    const content = `<div class="od2qdv-treasure-visibility-form">
+      <p>Como deseja enviar o resultado do tesouro?</p>
+      <div class="form-group">
+        <label><strong>Visibilidade</strong></label>
+        <select name="visibility">
+          <option value="public">Mensagem pública</option>
+          <option value="private">Privada para o Mestre</option>
+        </select>
+      </div>
+    </div>`;
+    const DialogV2 = Number(game.release?.generation ?? 13) >= 14 ? foundry.applications?.api?.DialogV2 : null;
+    if (DialogV2) {
+      return DialogV2.prompt({
+        window: { title: "Visibilidade do tesouro" },
+        content,
+        ok: { label: "Continuar", callback: (_event, button) => button.form.elements.visibility.value }
+      });
+    }
+    return Dialog.prompt({
+      title: "Visibilidade do tesouro",
+      content: `<form>${content}</form>`,
+      label: "Continuar",
+      callback: (html) => html.find('[name="visibility"]').val(),
+      rejectClose: false
     });
   }
 
@@ -573,7 +614,9 @@
       const suffix = label ? ` de ${label}` : "";
       return ui.notifications.warn(`O campo de tesouro${suffix} não possui um tipo válido entre A e V.`);
     }
-    for (const type of types) await postarResultado(await gerarTesouro(type), actor);
+    const visibility = await promptTreasureVisibility();
+    if (!visibility) return;
+    for (const type of types) await publicarResultado(await gerarTesouro(type), actor, visibility);
   }
 
   // ============================================================
@@ -608,7 +651,10 @@
           callback: (_event, button) => button.form.elements.treasureType.value
         }
       });
-      if (tipo) await postarResultado(await gerarTesouro(tipo));
+      if (tipo) {
+        const visibility = await promptTreasureVisibility();
+        if (visibility) await publicarResultado(await gerarTesouro(tipo), null, visibility);
+      }
       return;
     }
 
@@ -622,7 +668,8 @@
           label: "Gerar Tesouro",
           callback: async (html) => {
             const tipo = html.find('[name="treasureType"]').val();
-            await postarResultado(await gerarTesouro(tipo));
+            const visibility = await promptTreasureVisibility();
+            if (visibility) await publicarResultado(await gerarTesouro(tipo), null, visibility);
           }
         },
         cancelar: { icon: '<i class="fas fa-times"></i>', label: "Cancelar" }
@@ -682,6 +729,20 @@
       else container.appendChild(action);
     }
   }
+
+  const chatRenderHook = Number(game.release?.generation ?? 13) >= 14 ? "renderChatMessageHTML" : "renderChatMessage";
+  Hooks.on(chatRenderHook, (message, html) => {
+    const root = rootElement(html);
+    const button = root?.querySelector("[data-od2qdv-show-treasure]");
+    if (!button || !game.user.isGM) return;
+    button.addEventListener("click", async () => {
+      const content = message.getFlag(MODULE_ID, "treasurePublicContent");
+      if (!content) return ui.notifications.warn("O resultado público deste tesouro não está disponível.");
+      button.disabled = true;
+      await ChatMessage.create({ speaker: message.speaker, content });
+      button.replaceWith(document.createTextNode("Resultado mostrado aos jogadores."));
+    });
+  });
 
   Hooks.on("renderItemDirectory", addDirectoryButton);
   Hooks.on("renderActorSheet", addMonsterTreasureButtons);

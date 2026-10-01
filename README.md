@@ -32,7 +32,7 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - Compara o ataque com a CA do alvo e registra acerto ou erro no chat.
 - Rola e aplica dano, com ajustes de fraqueza e resistência.
 - Os cartões de combate respeitam a cor automática do tema, incluindo temas escuros.
-- Trata acertos e erros críticos pelas opções do LB1/LB2.
+- Trata acertos e erros críticos pela opção **Rolagens Críticas**, que permite usar as regras do LB1, as regras do LB2 ou perguntar a cada rolagem.
 - Automatiza **Aparar** do Bárbaro, Guerreiro e Paladino: Mestre e jogador recebem a decisão antes da divulgação do ataque e do dano; aceitar interrompe o golpe.
 - Ao chegar a 0 PV, personagens recebem o status **Inconsciente** e ficam impedidos de atacar ou mover o token.
 - No início das rodadas seguintes, solicita pelo chat uma jogada de agonização usando o maior total entre JPC e JPS.
@@ -101,11 +101,12 @@ O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Mora
 - Permite ao Mestre escolher tesouros de covil dos tipos A–O ou tesouros individuais/carregados dos tipos P–V.
 - Rola moedas, gemas, objetos de valor, equipamentos e itens mágicos conforme as tabelas do Old Dragon 2.
 - Publica no chat o resultado completo e o valor de Tesouro Rápido correspondente ao tipo escolhido.
+- Pergunta se o resultado deve ser público ou privado para o Mestre; resultados privados incluem o botão **Mostrar aos jogadores** para republicá-los no chat.
 - Pode ser ativado ou desativado independentemente nas configurações do módulo.
 
 ### Carta de Controle de Sessão
 
-- Adiciona **Nova Carta de Controle** ao diretório de Diários para o Mestre.
+- Adiciona **Novo Cartão de Controle de Sessão** ao diretório de Diários para o Mestre.
 - Organiza quatro horas de exploração em turnos de 10 minutos.
 - Ao marcar um turno, avança 10 minutos no relógio do mundo e atualiza automaticamente a duração dos efeitos temporários.
 - Automatiza rolagens secretas de encontro e avisos de descanso, tochas e lanternas.
@@ -132,11 +133,11 @@ O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Mora
 - Lê a infravisão do item de raça de personagens e ajudantes e também das descrições de monstros e mercenários.
 - Habilita a visão dos protótipos e dos tokens presentes no mapa atual, seleciona **Visão no Escuro** e configura seu alcance calculado.
 - Requer o módulo **Light Sources 0.0.9 ou superior**, traduz sua interface para português e registra as configurações de Lamparina, Lanterna furta-fogo, Vela, Tocha e das magias Luz e Luz Contínua preparadas no mundo de teste.
-- A opção **Contabilizar tochas, velas e óleo** pede ao Mestre confirmação para consumir uma Tocha ou Vela ao acendê-la, ou um frasco de Óleo ao acender Lamparina e Lanterna furta-fogo; pilhas com uma única unidade são removidas.
+- A opção **Contabilizar tochas e óleo** pede ao Mestre confirmação para consumir uma Tocha ou Vela ao acendê-la, ou um frasco de Óleo ao acender Lamparina e Lanterna furta-fogo; pilhas com uma única unidade são removidas.
+- A opção **Exigir pederneira ou fonte de luz** exige uma Pederneira ou proximidade de outra fonte para acender tochas, velas, lamparinas e lanternas furta-fogo; quando desligada, essa exigência é removida.
 - Com essa opção ativa, Lamparina e Lanterna furta-fogo não acendem quando o personagem não possui frasco de Óleo disponível; recolher uma fonte já acesa continua permitido.
 - Com essa opção ativa, os campos `T` da Carta de Controle apagam tochas; velas, que duram 2 horas, são apagadas apenas nos eventos `T` da 2ª e da 4ª hora. O campo 6 da 4ª hora também apaga lamparinas e lanternas furta-fogo.
 - Ao largar uma Lamparina ou Lanterna furta-fogo, uma unidade sai do inventário e permanece vinculada à luz no chão; quando outro personagem a recolhe, o item é adicionado ao inventário dele.
-- Lamparinas e lanternas furta-fogo só podem ser acesas se o personagem possuir uma Pederneira disponível ou estiver no mesmo quadrado/adjacente a outra fonte de luz acesa.
 
 ### Habilidades de raça e classe automatizadas
 

@@ -80,6 +80,13 @@ function actorTokens(actor) {
   return [...(canvas?.tokens?.placeables ?? [])].filter((token) => token.actor?.uuid === actor?.uuid || token.actor?.id === actor?.id);
 }
 
+function activeLight(api, actor) {
+  const active = api.getActive(actor);
+  if (active?.itemName) return active;
+  const effect = actor.effects?.find((candidate) => candidate.getFlag?.(LIGHT_SOURCES_MODULE_ID, LIGHT_FLAG));
+  return effect?.getFlag?.(LIGHT_SOURCES_MODULE_ID, LIGHT_FLAG) ?? active ?? null;
+}
+
 function touchesLitSource(actor) {
   const tokens = actorTokens(actor);
   if (!tokens.length) return false;
@@ -118,6 +125,7 @@ function requireIgnition(effect) {
     ui.notifications.warn(`${light.itemName} não pode ser acesa: ${actor?.name ?? "o personagem"} não possui frasco de óleo disponível.`);
     return false;
   }
+  if (!game.settings.get(MODULE_ID, "requireLightIgnition")) return;
   if (hasFlint(actor) || touchesLitSource(actor)) return;
   blockedAnnouncements.push({ actorId: actor?.id, itemName: light.itemName, createdAt: Date.now() });
   ui.notifications.warn(`${light.itemName} só pode ser acesa com uma Pederneira ou ao lado de outra fonte de luz acesa.`);
@@ -331,7 +339,7 @@ export async function expireSessionLights(event, hour) {
   if (!api?.getActive || !api?.deactivate) return 0;
   let count = 0;
   for (const actor of actorsWithTokens()) {
-    const active = api.getActive(actor);
+    const active = activeLight(api, actor);
     if (!expiresWithSessionEvent(active?.itemName, event, hour)) continue;
     await api.deactivate(actor);
     count += 1;

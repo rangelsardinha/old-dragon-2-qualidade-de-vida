@@ -53,6 +53,10 @@ Hooks.once("init", () => {
     enableLightResourceConsumption: {
       name: "Contabilizar tochas e óleo",
       hint: "Pergunta ao Mestre se deve consumir tochas ou frascos de óleo ao acender fontes de luz e integra sua duração à Carta de Controle de Sessão."
+    },
+    requireLightIgnition: {
+      name: "Exigir pederneira ou fonte de luz",
+      hint: "Exige uma Pederneira ou proximidade de outra fonte de luz para acender tochas, velas, lamparinas e lanternas furta-fogo."
     }
   };
   const localized = (key, fallback) => {
@@ -82,6 +86,7 @@ Hooks.once("init", () => {
   worldToggle("enableAlignmentAxis");
   worldToggle("enableAutomatedLighting");
   worldToggle("enableLightResourceConsumption", false);
+  worldToggle("requireLightIgnition");
 
   game.settings.register(MODULE_ID, "sessionEncounterDie", {
     name: "Dado de encontros aleatórios",
