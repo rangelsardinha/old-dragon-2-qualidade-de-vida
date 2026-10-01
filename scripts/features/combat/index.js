@@ -18,6 +18,11 @@ const FALLBACK_I18N = {
   'OD2CA.Settings.combatRequireOneTarget.hint': 'O ataque automatizado so continua quando exatamente um token estiver marcado como alvo.',
   'OD2CA.Settings.combatAllowPlayersApplyDamage.name': 'Jogadores podem aplicar dano',
   'OD2CA.Settings.combatAllowPlayersApplyDamage.hint': 'Permite que jogadores atualizem PV de alvos que conseguem editar. Sem permissao sobre o alvo, o mestre ainda precisara aplicar.',
+  'OD2CA.Settings.combatCriticalRolls.name': 'Rolagens Criticas',
+  'OD2CA.Settings.combatCriticalRolls.hint': 'Escolha quais regras usar automaticamente em 20 natural e 1 natural, ou mantenha a pergunta a cada rolagem.',
+  'OD2CA.Settings.combatCriticalRolls.choices.lb1': 'Regras do LB1',
+  'OD2CA.Settings.combatCriticalRolls.choices.lb2': 'Regras do LB2',
+  'OD2CA.Settings.combatCriticalRolls.choices.ask': 'Perguntar sempre',
   'OD2CA.Notifications.selectTarget': 'Selecione exatamente um alvo antes de atacar.',
   'OD2CA.Notifications.noTargetAc': 'Nao consegui encontrar a CA do alvo.',
   'OD2CA.Notifications.noTargetHp': 'Nao consegui encontrar os PV do alvo.',
@@ -1073,6 +1078,10 @@ function getNaturalD20(roll) {
 }
 
 async function requestCriticalRule() {
+  const configuredRule = game.settings.get(MODULE_ID, 'combatCriticalRolls');
+  if (configuredRule === 'lb1') return classicCriticalResult();
+  if (configuredRule === 'lb2') return rollCriticalResult();
+
   const DialogV2 = dialogV2();
   if (DialogV2) {
     return DialogV2.wait({
@@ -1128,6 +1137,10 @@ function classicCriticalResult() {
 }
 
 async function requestFumbleRule() {
+  const configuredRule = game.settings.get(MODULE_ID, 'combatCriticalRolls');
+  if (configuredRule === 'lb1') return classicFumbleResult();
+  if (configuredRule === 'lb2') return rollFumbleResult();
+
   const DialogV2 = dialogV2();
   if (DialogV2) {
     return DialogV2.wait({

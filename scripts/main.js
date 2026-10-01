@@ -113,6 +113,19 @@ Hooks.once("init", () => {
     type: Boolean,
     default: false
   });
+  game.settings.register(MODULE_ID, "combatCriticalRolls", {
+    name: "OD2CA.Settings.combatCriticalRolls.name",
+    hint: "OD2CA.Settings.combatCriticalRolls.hint",
+    scope: "world",
+    config: true,
+    type: String,
+    choices: {
+      lb1: "OD2CA.Settings.combatCriticalRolls.choices.lb1",
+      lb2: "OD2CA.Settings.combatCriticalRolls.choices.lb2",
+      ask: "OD2CA.Settings.combatCriticalRolls.choices.ask"
+    },
+    default: "ask"
+  });
 });
 
 Hooks.once("ready", () => {
