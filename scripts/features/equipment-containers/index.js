@@ -1,5 +1,5 @@
 import {
-  COIN_KEYS, SACK_WEIGHT_FLAG, actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, containerCoinCapacity, containerContentsWeight, containerLoadRule, descendantIds, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
+  COIN_KEYS, SACK_WEIGHT_FLAG, actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, containerCoinCapacity, containerContentsWeight, containerLoadRule, descendantIds, isAmmunition, isSackOfEstopa, isSaddlebag, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
 } from "./model.js";
 import { updateInventoryItem } from "../../utils/actor-inventory.js";
 
@@ -40,18 +40,19 @@ export function countCoinsInLoad() {
 function containerRuleChanges(item) {
   const rule = containerLoadRule(item);
   if (!rule) return null;
-  return {
+  const changes = {
     "system.description": rule.description,
-    "system.cost": rule.cost,
-    "system.weight_in_load": rule.weight_in_load,
-    "system.weight_in_grams": rule.weight_in_grams,
-    "system.increases_load_by": rule.increases_load_by ?? 0,
     [`flags.${MODULE_ID}.${CONTAINER_RULE_FLAG}`]: CONTAINER_RULE_VERSION
   };
+  if (rule.cost !== undefined) changes["system.cost"] = rule.cost;
+  if (rule.weight_in_load !== undefined) changes["system.weight_in_load"] = rule.weight_in_load;
+  if (rule.weight_in_grams !== undefined) changes["system.weight_in_grams"] = rule.weight_in_grams;
+  if (rule.increases_load_by !== undefined) changes["system.increases_load_by"] = rule.increases_load_by;
+  return changes;
 }
 
 async function applyContainerRule(item) {
-  if (!loadRulesEnabled() || item?.type !== "container" || !containerLoadRule(item)) return false;
+  if (!loadRulesEnabled() || !canContainItems(item) || !containerLoadRule(item)) return false;
   const changes = containerRuleChanges(item);
   if (!changes) return false;
   const currentRuleVersion = item.getFlag?.(MODULE_ID, CONTAINER_RULE_FLAG) ?? item.flags?.[MODULE_ID]?.[CONTAINER_RULE_FLAG];
@@ -117,7 +118,7 @@ function correctedLoad(system, nativeGet) {
   const nativeLoad = nativeGet.call(system);
   const actor = system.parent;
   if (!loadRulesEnabled() || !actor || (actor.type !== "character" && actor.type !== "retainer")) return nativeLoad;
-  return carriedLoad([...actor.items].filter((item) => LOAD_TYPES.has(item.type)), actorCoins(actor), { includeCoins: countCoinsInLoad() });
+  return carriedLoad([...actor.items].filter((item) => LOAD_TYPES.has(item.type) || isSaddlebag(item)), actorCoins(actor), { includeCoins: countCoinsInLoad() });
 }
 
 function patchLoadInstance(system) {
@@ -253,7 +254,7 @@ function subtree(actor, containerId) {
 }
 
 function subtreeCoins(actor, containerId) {
-  return sumAllocatedCoins(subtree(actor, containerId).filter((item) => item.type === "container"), containerCoins);
+  return sumAllocatedCoins(subtree(actor, containerId).filter(canContainItems), containerCoins);
 }
 
 function coinLabel(coins) {
@@ -279,7 +280,7 @@ function containerContentsWeightFor(container) {
 function canAddToContainer(item, container) {
   if (!canApplyContainerLoadRule(item, container)) return false;
   if (!isSackOfEstopa(container)) return true;
-  if (item?.type === "container") {
+  if (canContainItems(item)) {
     ui.notifications.warn("Sacos de estopa não podem armazenar outros recipientes.");
     return false;
   }
@@ -537,7 +538,7 @@ async function handleDrop(event, targetActor, targetContainer = null) {
     else await createInsideContainer(sourceItem, targetContainer);
     return true;
   }
-  if (sourceItem.type === "container" && sourceItem.actor && sourceItem.actor.id !== targetActor.id) {
+  if (canContainItems(sourceItem) && sourceItem.actor && sourceItem.actor.id !== targetActor.id) {
     await transferEmbeddedTree(sourceItem, targetActor);
     return true;
   }
@@ -591,7 +592,7 @@ async function chooseTransferTarget(container) {
       const kind = actor.type === "monster" ? " [Monstro]" : actor.type === "retainer" ? " [Ajudante]" : "";
       return `<option value="${actor.id}">${escapeHtml(actor.name)}${kind} (${escapeHtml(ownerLabel)})</option>`;
     }).join("")}</select></div>`;
-  const label = container.type === "container" ? "Transferir com todo o conteúdo" : "Transferir item";
+  const label = canContainItems(container) ? "Transferir com todo o conteúdo" : "Transferir item";
   const DialogV2 = Number(game.release?.generation ?? 13) >= 14 ? foundry.applications?.api?.DialogV2 : null;
   const targetId = DialogV2
     ? await DialogV2.prompt({
@@ -670,10 +671,10 @@ export function enhanceActorSheet(app, html) {
     let dropData;
     try { dropData = JSON.parse(event.dataTransfer?.getData("text/plain")); } catch { return; }
     if (dropData?.type !== "Item") return;
-    const isRejectedWaterskinTarget = target?.type === "container" && isWaterskin(target);
+    const isRejectedWaterskinTarget = canContainItems(target) && isWaterskin(target);
     const isContainerTarget = canContainItems(target);
     const dragged = globalThis.fromUuidSync?.(dropData.uuid);
-    const isExternalContainer = dragged?.type === "container" && Boolean(dragged.actor) && dragged.actor.id !== actor.id;
+    const isExternalContainer = canContainItems(dragged) && Boolean(dragged.actor) && dragged.actor.id !== actor.id;
     if (!isContainerTarget && !isExternalContainer && !isRejectedWaterskinTarget) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (isRejectedWaterskinTarget) {
@@ -695,15 +696,15 @@ export function enhanceActorSheet(app, html) {
     const deleteButton = event.target.closest(".item-delete");
     const row = event.target.closest(".item[data-item-id]");
     const item = row ? actor.items.get(row.dataset.itemId) : null;
-    if (deleteButton && item?.type === "container") {
+    if (deleteButton && canContainItems(item)) {
       event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
       await deleteContainer(item); app.render(false); return;
     }
     if (!action) return;
     event.preventDefault(); event.stopPropagation();
     const actionItem = actor.items.get(action.dataset.itemId);
-    if (action.dataset.od2qdvAction === "empty" && item?.type === "container") await emptyContainer(item);
-    if (action.dataset.od2qdvAction === "transfer" && item?.type === "container") await chooseTransferTarget(item);
+    if (action.dataset.od2qdvAction === "empty" && canContainItems(item)) await emptyContainer(item);
+    if (action.dataset.od2qdvAction === "transfer" && canContainItems(item)) await chooseTransferTarget(item);
     if (action.dataset.od2qdvAction === "transfer-item" && item) {
       if (!canStoreItem(item)) ui.notifications.warn(`${item.name} está equipado. Desequipe o item antes de transferi-lo.`);
       else await chooseTransferTarget(item);
@@ -714,7 +715,7 @@ export function enhanceActorSheet(app, html) {
       if (containing && allowsEquippedAmmunition(containing)) await actionItem.update({ "system.is_equipped": !Boolean(actionItem.system?.is_equipped) });
     }
     if (action.dataset.od2qdvAction === "remove-item" && actionItem) await setParent(actionItem, null);
-    if (action.dataset.od2qdvAction === "delete-item" && actionItem?.type === "container") await deleteContainer(actionItem);
+    if (action.dataset.od2qdvAction === "delete-item" && canContainItems(actionItem)) await deleteContainer(actionItem);
     else if (action.dataset.od2qdvAction === "delete-item" && actionItem) await actor.deleteEmbeddedDocuments("Item", [actionItem.id]);
     app.render(false);
   }, true);
@@ -740,7 +741,7 @@ function itemSheetPanel(item) {
 async function saveCoins(container, panel) {
   const actor = container.actor;
   const requested = normalizeCoins(Object.fromEntries(COIN_KEYS.map((key) => [key, panel.querySelector(`[data-coin="${key}"]`)?.value])));
-  const others = actor.items.filter((item) => item.type === "container" && item.id !== container.id);
+  const others = actor.items.filter((item) => canContainItems(item) && item.id !== container.id);
   const allocatedElsewhere = sumAllocatedCoins(others, containerCoins);
   const economy = actorCoins(actor);
   for (const key of COIN_KEYS) {
@@ -790,7 +791,7 @@ function enhanceItemSheet(app, html) {
     if (button.dataset.od2qdvAction === "open-item") selected?.sheet.render(true);
     if (button.dataset.od2qdvAction === "toggle-ammunition" && selected && isAmmunition(selected) && allowsEquippedAmmunition(app.item)) await selected.update({ "system.is_equipped": !Boolean(selected.system?.is_equipped) });
     if (button.dataset.od2qdvAction === "remove-item" && selected) await setParent(selected, null);
-    if (button.dataset.od2qdvAction === "delete-item" && selected?.type === "container") await deleteContainer(selected);
+    if (button.dataset.od2qdvAction === "delete-item" && canContainItems(selected)) await deleteContainer(selected);
     else if (button.dataset.od2qdvAction === "delete-item" && selected) await actor.deleteEmbeddedDocuments("Item", [selected.id]);
     app.render(false);
   }, true);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, containerCoinCapacity, containerLoadRule, descendantIds, emptyWaterskinStates, hasSackAdjustedWeight, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
+import { actorOwnerNames, addCoins, animalLoadMax, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, containerCoinCapacity, containerLoadRule, descendantIds, emptyWaterskinStates, hasSackAdjustedWeight, isAmmunition, isSackOfEstopa, isSaddlebag, mountArmorBonus, mountArmorRule, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
 import { curseForRoll, selectRandomSpells } from "../scripts/features/scroll-generator/model.js";
 
 const items = [
@@ -108,6 +108,26 @@ test("mapeia as regras de carga dos recipientes", () => {
   assert.equal(containerLoadRule({ name: "Porta Mapas" }).sheetCapacity, 20);
   assert.equal(containerCoinCapacity({ name: "Saco de Estopa" }), 600);
   assert.equal(containerCoinCapacity({ name: "Odre" }), 0);
+  assert.equal(containerCoinCapacity({ name: "Alforje", type: "vehicle" }), 600);
+  assert.equal(isSaddlebag({ name: "Alforje", type: "vehicle" }), true);
+  assert.equal(canContainItems({ name: "Alforje", type: "vehicle" }), true);
+});
+
+test("converte a capacidade dos animais em unidades de carga", () => {
+  assert.equal(animalLoadMax({ name: "Cavalo de Guerra" }), 40);
+  assert.equal(animalLoadMax({ name: "Cavalo de Montaria" }), 30);
+  assert.equal(animalLoadMax({ name: "Cavalo de Tração" }), 45);
+  assert.equal(animalLoadMax({ name: "Jumento ou Mula" }), 20);
+  assert.equal(animalLoadMax({ name: "Pônei" }), 15);
+  assert.equal(animalLoadMax({ name: "Pônei de Guerra" }), 15);
+  assert.equal(animalLoadMax({ name: "Lobo" }), null);
+});
+
+test("mapeia armaduras de montaria e seus bônus de CA", () => {
+  assert.equal(mountArmorRule({ name: "Armadura Leve" }).cost, "150 PO");
+  assert.equal(mountArmorBonus({ name: "Armadura Leve" }), 2);
+  assert.equal(mountArmorBonus({ name: "Armadura Pesada" }), 4);
+  assert.equal(mountArmorBonus({ name: "Armadura de Couro" }), 0);
 });
 
 test("lista os usuários proprietários do ator sem incluir Mestres", () => {

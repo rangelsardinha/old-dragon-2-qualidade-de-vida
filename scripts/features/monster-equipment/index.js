@@ -1,9 +1,10 @@
-import { actorOwnerNames, canReceiveContainer, carriedLoad, normalizeCoins } from "../equipment-containers/model.js";
+import { actorOwnerNames, animalLoadMax, canReceiveContainer, carriedLoad, isSaddlebag, mountArmorBonus, mountArmorRule, normalizeCoins } from "../equipment-containers/model.js";
 import {
   actorCoins, countCoinsInLoad, deleteContainer, enhanceActorSheet, transferEmbeddedTree, updateActorCoins
 } from "../equipment-containers/index.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
+const MOUNT_BASE_AC_FLAG = "mountBaseAc";
 const INVENTORY_TYPES = new Set(["weapon", "armor", "shield", "misc", "container", "vehicle"]);
 const TYPE_LABELS = {
   weapon: "Arma", armor: "Armadura", shield: "Escudo", misc: "Item geral", container: "Recipiente", vehicle: "Montaria/Transporte"
@@ -17,6 +18,7 @@ const EQUIPMENT_GROUPS = [
   ["vehicle", "Montarias & Transportes"]
 ];
 const boundSheets = new WeakSet();
+const patchedMonsterAcPrototypes = new WeakSet();
 
 function enabled() {
   return game.system.id === "olddragon2e" && game.settings.get(MODULE_ID, "enableMonsterEquipment");
@@ -70,6 +72,10 @@ function itemValue(item) {
 
 function itemRow(item) {
   const description = itemDescription(item);
+  const mountArmor = mountArmorRule(item);
+  const equipAction = mountArmor
+    ? `<a data-monster-equipment-action="toggle-equip" title="${item.system?.is_equipped ? "Desequipar" : "Equipar"}" aria-label="${item.system?.is_equipped ? "Desequipar" : "Equipar"}"><i class="fas ${item.system?.is_equipped ? "fa-shield-halved" : "fa-shield"}"></i></a>`
+    : "";
   return `<li class="item od2qdv-monster-item" data-item-id="${item.id}" draggable="true">
     <img src="${escapeHtml(item.img)}" alt="" width="32" height="32">
     <button type="button" data-monster-equipment-action="edit" title="Abrir item">${escapeHtml(item.name)}</button>
@@ -78,10 +84,76 @@ function itemRow(item) {
     <span class="value">${escapeHtml(itemValue(item))}</span>
     <span class="description" title="${escapeHtml(description)}">${escapeHtml(description)}</span>
     <span class="item-controls od2qdv-monster-item-controls">
+      ${equipAction}
       <a data-monster-equipment-action="transfer" title="Transferir" aria-label="Transferir"><i class="fas fa-people-arrows"></i></a>
       <a data-monster-equipment-action="delete" title="Excluir" aria-label="Excluir"><i class="fas fa-trash"></i></a>
     </span>
   </li>`;
+}
+
+function descriptorInPrototypeChain(prototype, key) {
+  for (let current = prototype; current; current = Object.getPrototypeOf(current)) {
+    const descriptor = Object.getOwnPropertyDescriptor(current, key);
+    if (descriptor) return descriptor;
+  }
+  return null;
+}
+
+function installMountArmorCalculation() {
+  const prototypes = new Set([
+    ...[...(game.actors ?? [])].filter((actor) => actor.type === "monster").map((actor) => Object.getPrototypeOf(actor.system)),
+    globalThis.CONFIG?.Actor?.dataModels?.monster?.prototype
+  ].filter(Boolean));
+  for (const prototype of prototypes) {
+    if (patchedMonsterAcPrototypes.has(prototype)) continue;
+    const descriptor = descriptorInPrototypeChain(prototype, "ac_total");
+    if (typeof descriptor?.get !== "function") continue;
+    const nativeGet = descriptor.get;
+    Object.defineProperty(prototype, "ac_total", {
+      configurable: true,
+      enumerable: descriptor.enumerable ?? true,
+      get() {
+        const actor = this.parent;
+        const equipped = [...(actor?.items ?? [])].filter((item) => item.system?.is_equipped);
+        const bonus = Math.max(0, ...equipped.map((item) => mountArmorBonus(item)));
+        return nativeGet.call(this) + bonus;
+      }
+    });
+    patchedMonsterAcPrototypes.add(prototype);
+  }
+}
+
+function mountArmorBaseAc(actor) {
+  const stored = Number(actor.getFlag?.(MODULE_ID, MOUNT_BASE_AC_FLAG));
+  if (Number.isFinite(stored)) return stored;
+  const current = Number(actor.system?.ca);
+  return Number.isFinite(current) ? current : 10;
+}
+
+async function syncMountArmorAc(actor) {
+  if (actor?.type !== "monster") return;
+  const equipped = [...(actor.items ?? [])].filter((item) => item.system?.is_equipped && mountArmorRule(item));
+  if (!equipped.length) {
+    const stored = Number(actor.getFlag?.(MODULE_ID, MOUNT_BASE_AC_FLAG));
+    if (Number.isFinite(stored)) {
+      await actor.update({ "system.ca": String(stored) });
+      await actor.unsetFlag(MODULE_ID, MOUNT_BASE_AC_FLAG);
+    }
+    return;
+  }
+  const base = mountArmorBaseAc(actor);
+  const bonus = Math.max(0, ...equipped.map((item) => mountArmorBonus(item)));
+  const desired = String(base + bonus);
+  const update = actor.system?.ca === desired ? {} : { "system.ca": desired };
+  if (!Number.isFinite(Number(actor.getFlag?.(MODULE_ID, MOUNT_BASE_AC_FLAG)))) {
+    await actor.setFlag(MODULE_ID, MOUNT_BASE_AC_FLAG, base);
+  }
+  if (Object.keys(update).length) await actor.update(update);
+}
+
+function renderMonsterEquipment(app) {
+  app._od2qdvMonsterActiveTab = "od2qdv-monster-equipment";
+  return app.render(false);
 }
 
 function equipmentGroup(actor, type, label) {
@@ -102,8 +174,8 @@ function equipmentGroup(actor, type, label) {
 
 function equipmentTab(actor) {
   const coins = actorCoins(actor);
-  const load = carriedLoad(actor.items.filter((item) => INVENTORY_TYPES.has(item.type) && item.type !== "vehicle"), coins, { includeCoins: countCoinsInLoad() });
-  const maxLoad = Number(actor.system?.load_max) || 0;
+  const load = carriedLoad(actor.items.filter((item) => INVENTORY_TYPES.has(item.type) && (item.type !== "vehicle" || isSaddlebag(item))), coins, { includeCoins: countCoinsInLoad() });
+  const maxLoad = animalLoadMax(actor) ?? (Number(actor.system?.load_max) || 0);
   const wallet = `<div class="od2qdv-monster-wallet">
     <strong>Moedas</strong>
     <label>PO <input type="number" min="0" data-monster-coin="gp" value="${coins.gp}"></label>
@@ -272,10 +344,19 @@ async function enhanceMonsterSheet(app, html) {
     const action = button.dataset.monsterEquipmentAction;
     if (action === "create") await actor.createEmbeddedDocuments("Item", [{ name: "Novo item", type: button.dataset.monsterEquipmentType ?? "misc" }]);
     if (action === "edit") item?.sheet.render(true);
+    if (action === "toggle-equip" && item && mountArmorRule(item)) {
+      const equipped = Boolean(item.system?.is_equipped);
+      if (!equipped) {
+        const others = [...actor.items].filter((entry) => entry.id !== item.id && mountArmorRule(entry) && entry.system?.is_equipped);
+        if (others.length) await Promise.all(others.map((entry) => entry.update({ "system.is_equipped": false })));
+      }
+      await item.update({ "system.is_equipped": !equipped });
+      await syncMountArmorAc(actor);
+    }
     if (action === "transfer" && item) await chooseTarget(item);
     if (action === "delete" && item?.type === "container" && containersEnabled()) await deleteContainer(item);
     else if (action === "delete" && item) await actor.deleteEmbeddedDocuments("Item", [item.id]);
-    app.render(false);
+    renderMonsterEquipment(app);
   }, true);
   root.addEventListener("dragstart", (event) => {
     const item = actor.items.get(event.target.closest(".item[data-item-id]")?.dataset.itemId);
@@ -288,7 +369,7 @@ async function enhanceMonsterSheet(app, html) {
     if (!magicArea && !equipmentArea) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (magicArea) await handleSpellDrop(event, actor); else await handleDrop(event, actor);
-    app.render(false);
+    if (equipmentArea) renderMonsterEquipment(app); else app.render(false);
   }, true);
   root.addEventListener("change", async (event) => {
     if (event.target.matches(".od2qdv-monster-magic .memorized-toggle")) {
@@ -323,3 +404,7 @@ async function enhanceMonsterSheet(app, html) {
 
 Hooks.on("renderActorSheet", enhanceMonsterSheet);
 Hooks.on("renderOD2MonsterSheet", enhanceMonsterSheet);
+  Hooks.once("ready", async () => {
+    installMountArmorCalculation();
+    for (const actor of game.actors ?? []) if (actor.type === "monster") await syncMountArmorAc(actor);
+  });

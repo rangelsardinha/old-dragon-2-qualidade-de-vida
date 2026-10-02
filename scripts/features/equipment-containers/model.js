@@ -2,7 +2,23 @@ export const COIN_KEYS = ["cp", "sp", "gp"];
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 export const SACK_WEIGHT_FLAG = "sackOriginalWeight";
 
+// A unidade de carga do Old Dragon 2 corresponde a 100 moedas.
+export const ANIMAL_LOAD_RULES = Object.freeze([
+  { match: /^cavalo de guerra(?:\b|\s|[-–—:])/, maxCoins: 4000 },
+  { match: /^cavalo de montaria(?:\b|\s|[-–—:])/, maxCoins: 3000 },
+  { match: /^cavalo de tracao(?:\b|\s|[-–—:])/, maxCoins: 4500 },
+  { match: /^(?:jumento|mula)(?:\b|\s|[-–—:])/, maxCoins: 2000 },
+  { match: /^ponei de guerra(?:\b|\s|[-–—:])/, maxCoins: 1500 },
+  { match: /^ponei(?:\b|\s|[-–—:])/, maxCoins: 1500 }
+]);
+
+export const MOUNT_ARMOR_RULES = Object.freeze([
+  { match: /^armadura leve(?:\b|\s|[-–—:])/, acBonus: 2, cost: "150 PO", description: "Proteção de couro para cavalos de guerra. Melhora a CA em 2." },
+  { match: /^armadura pesada(?:\b|\s|[-–—:])/, acBonus: 4, description: "Proteção de metal para cavalos de guerra. Melhora a CA em 4." }
+]);
+
 export const CONTAINER_RULES = Object.freeze([
+  { key: "saddlebag", match: /^alforje(?:\b|\s|[-–—:])/, names: ["Alforje"], description: "Bolsa de carga presa à sela e acomodada sobre as ancas do cavalo. Comporta até 600 moedas.", coinCapacity: 600 },
   { key: "algibeira", match: /^algibeira(?:\b|\s|[-–—:])/, names: ["Algibeira"], description: "Pequeno saco de couro usado preso ao cinto da roupa. Comporta até 50 moedas.", weight_in_load: 0, weight_in_grams: 0, cost: "1 PC", coinCapacity: 50 },
   { key: "aljava", match: /^aljava(?:\b|\s|[-–—:])/, names: ["Aljava"], description: "De couro, rígida para até 40 flechas ou 80 virotes. Comporta até 150 moedas.", weight_in_load: 0, weight_in_grams: 500, cost: "1 PO", coinCapacity: 150, ammunitionCapacity: { arrow: 40, bolt: 80 } },
   { key: "small-barrel-box", match: /^(?:barril|caixa)(?:\/|\s+)(?:caixa\s+|barril\s+)?pequena(?:\b|\s|[-–—:])/, names: ["Barril/Caixa Pequena"], description: "De madeira, reforçado para transporte. Capacidade de 20 litros. Comporta até 200 moedas.", weight_in_load: 5, weight_in_grams: 0, cost: "2 PO", coinCapacity: 200, capacityLiters: 20 },
@@ -17,6 +33,21 @@ function normalizedName(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
 }
 
+export function animalLoadMax(actorOrName) {
+  const name = normalizedName(typeof actorOrName === "string" ? actorOrName : actorOrName?.name);
+  const rule = ANIMAL_LOAD_RULES.find((entry) => entry.match.test(name));
+  return rule ? rule.maxCoins / 100 : null;
+}
+
+export function mountArmorRule(itemOrName) {
+  const name = normalizedName(typeof itemOrName === "string" ? itemOrName : itemOrName?.name);
+  return MOUNT_ARMOR_RULES.find((rule) => rule.match.test(name)) ?? null;
+}
+
+export function mountArmorBonus(itemOrName) {
+  return mountArmorRule(itemOrName)?.acBonus ?? 0;
+}
+
 export function containerRule(itemOrName) {
   const name = normalizedName(typeof itemOrName === "string" ? itemOrName : itemOrName?.name);
   return CONTAINER_RULES.find((rule) => rule.match.test(name)) ?? null;
@@ -26,8 +57,12 @@ export function isSackOfEstopa(item) {
   return /^saco de estopa(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
 }
 
+export function isSaddlebag(item) {
+  return /^alforje(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
+}
+
 export function canContainItems(item) {
-  return item?.type === "container" && !/^odre(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
+  return (item?.type === "container" || isSaddlebag(item)) && !/^odre(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
 }
 
 export function containerCoinCapacity(item) {

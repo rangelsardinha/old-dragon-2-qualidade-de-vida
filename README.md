@@ -48,6 +48,7 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - A opção **Habilitar regras de carga dos recipientes** atualiza automaticamente os itens de recipientes com as descrições, pesos, custos e capacidades da tabela de Recipientes & Vasilhames.
 - A opção **Contabilizar moedas na carga** inclui ou remove PO, PP e PC do cálculo de peso; ambas as opções vêm habilitadas por padrão.
 - A mochila adiciona 5 à carga máxima quando equipada; aljavas controlam flechas e virotes; e recipientes controlam seus limites de moedas.
+- O **Alforje**, mesmo quando cadastrado na categoria de montarias e transportes, funciona como recipiente e comporta até 600 moedas.
 - O **Saco de estopa** comporta até 15 kg, reduz pela metade o peso dos itens guardados, aceita até 600 moedas e não permite outros recipientes em seu interior.
 - Ao colocar um item no Saco de Estopa, seu peso local é reduzido pela metade e o peso original é restaurado ao retirá-lo ou movê-lo para outro recipiente.
 - Recipientes podem ser aninhados, com proteção contra ciclos.
@@ -63,6 +64,8 @@ As opções de dano automático, alvo único e permissão para jogadores permane
 - Adiciona a aba **Equipamentos** às fichas de monstros.
 - Reproduz o padrão visual da ficha de personagem, com categorias de armas, armaduras, escudos, itens gerais, recipientes e montarias, além das colunas de quantidade, peso, valor e descrição.
 - Exibe a carga atual e a carga máxima do monstro no mesmo padrão da ficha de personagem, respeitando as regras de recipientes e a opção de contabilizar moedas.
+- Reconhece Cavalo de Guerra, Cavalo de Montaria, Cavalo de Tração, Jumento ou Mula, Pônei e Pônei de Guerra e converte suas capacidades de 1 carga por 100 moedas: 40, 30, 45, 20, 15 e 15, respectivamente.
+- Reconhece **Armadura Leve** e **Armadura Pesada** como equipamentos de montaria, permite equipar apenas uma delas por vez e aplica +2 ou +4 à CA da montaria, respectivamente; a Armadura Leve custa 150 PO.
 - Permite arrastar equipamentos dos compêndios ou de outras fichas para o inventário do monstro.
 - O Mestre pode transferir itens entre monstros, personagens e ajudantes.
 - Itens podem ser equipados, abertos e excluídos diretamente pela aba.

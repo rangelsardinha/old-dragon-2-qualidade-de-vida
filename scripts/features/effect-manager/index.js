@@ -4,7 +4,7 @@ import {
   conditionalEffectApplies, conditionalMatches, conditionalValueType, effectAssociatedWithItem, effectForCategory, normalizeEffect, OD2_TIME
 } from "./model.js";
 import { actorCoins } from "../equipment-containers/index.js";
-import { carriedLoad } from "../equipment-containers/model.js";
+import { animalLoadMax, carriedLoad } from "../equipment-containers/model.js";
 import { inventoryActor, updateInventoryItem } from "../../utils/actor-inventory.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
@@ -425,7 +425,9 @@ function actorSnapshot(actor, context = {}) {
   const currentLoad = actor.type === "monster" || containerLoadRulesEnabled()
     ? carriedLoad(equipment.filter((item) => ["weapon", "armor", "shield", "misc", "container"].includes(item.type)), coins, { includeCoins: countCoinsInLoad() })
     : Number(system.load_current) || 0;
-  const maxLoad = Number(system.load_max) || 0;
+  const maxLoad = actor.type === "monster"
+    ? animalLoadMax(actor) ?? (Number(system.load_max) || 0)
+    : Number(system.load_max) || 0;
   const qdvEffects = effectsFor(actor);
   const movementNormal = Number(system.current_movement ?? system.mv) || 0;
   const combat = game.combat;

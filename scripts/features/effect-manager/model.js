@@ -75,7 +75,7 @@ export const CONDITIONAL_VALUE_DEFINITIONS = Object.freeze([
   ["movement.canSwim", "Pode nadar", "Movimento", "all"],
   ["coins.gp", "Peças de ouro", "Economia", "all"], ["coins.sp", "Peças de prata", "Economia", "all"],
   ["coins.cp", "Peças de cobre", "Economia", "all"], ["coins.total", "Total de moedas", "Economia", "all"],
-  ["load.current", "Carga atual", "Carga", "character,retainer,monster"], ["load.max", "Carga máxima", "Carga", "character,retainer"],
+  ["load.current", "Carga atual", "Carga", "character,retainer,monster"], ["load.max", "Carga máxima", "Carga", "character,retainer,monster"],
   ["load.available", "Carga disponível", "Carga", "character,retainer"], ["load.percent", "Percentual da carga utilizada", "Carga", "character,retainer"],
   ["load.over", "Está sobrecarregado", "Carga", "character,retainer"],
   ["item.named", "Possui item pelo nome", "Equipamentos", "all"], ["item.count", "Quantidade do item informado", "Equipamentos", "all"],
