@@ -33,6 +33,7 @@ test("totaliza carga dos equipamentos, quantidades e moedas", () => {
     { system: { quantity: 2, weight_in_load: 0, weight_in_grams: 250 } }
   ];
   assert.equal(carriedLoad(equipment, { gp: 50, sp: 25, cp: 25 }), 6);
+  assert.equal(carriedLoad(equipment, { gp: 50, sp: 25, cp: 25 }, { includeCoins: false }), 5);
 });
 
 test("não permite guardar equipamentos que estejam equipados", () => {

@@ -32,6 +32,11 @@ function loadRulesEnabled() {
   catch { return false; }
 }
 
+export function countCoinsInLoad() {
+  try { return game.settings.get(MODULE_ID, "countCoinsInLoad") !== false; }
+  catch { return true; }
+}
+
 function containerRuleChanges(item) {
   const rule = containerLoadRule(item);
   if (!rule) return null;
@@ -112,7 +117,7 @@ function correctedLoad(system, nativeGet) {
   const nativeLoad = nativeGet.call(system);
   const actor = system.parent;
   if (!loadRulesEnabled() || !actor || (actor.type !== "character" && actor.type !== "retainer")) return nativeLoad;
-  return carriedLoad([...actor.items].filter((item) => LOAD_TYPES.has(item.type)), actorCoins(actor));
+  return carriedLoad([...actor.items].filter((item) => LOAD_TYPES.has(item.type)), actorCoins(actor), { includeCoins: countCoinsInLoad() });
 }
 
 function patchLoadInstance(system) {

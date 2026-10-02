@@ -33,6 +33,11 @@ function containerLoadRulesEnabled() {
   catch { return false; }
 }
 
+function countCoinsInLoad() {
+  try { return game.settings.get(MODULE_ID, "countCoinsInLoad") !== false; }
+  catch { return true; }
+}
+
 function effectsFor(actor) {
   return (actor?.getFlag(MODULE_ID, FLAG) || []).map((effect) => normalizeEffect(effect, () => foundry.utils.randomID()));
 }
@@ -418,7 +423,7 @@ function actorSnapshot(actor, context = {}) {
   const equipment = items.filter((item) => ["weapon", "armor", "shield", "misc", "container", "vehicle"].includes(item.type));
   const coins = actorCoins(actor);
   const currentLoad = actor.type === "monster" || containerLoadRulesEnabled()
-    ? carriedLoad(equipment.filter((item) => ["weapon", "armor", "shield", "misc", "container"].includes(item.type)), coins)
+    ? carriedLoad(equipment.filter((item) => ["weapon", "armor", "shield", "misc", "container"].includes(item.type)), coins, { includeCoins: countCoinsInLoad() })
     : Number(system.load_current) || 0;
   const maxLoad = Number(system.load_max) || 0;
   const qdvEffects = effectsFor(actor);

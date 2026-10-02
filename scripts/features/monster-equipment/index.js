@@ -1,6 +1,6 @@
 import { actorOwnerNames, canReceiveContainer, carriedLoad, normalizeCoins } from "../equipment-containers/model.js";
 import {
-  actorCoins, deleteContainer, enhanceActorSheet, transferEmbeddedTree, updateActorCoins
+  actorCoins, countCoinsInLoad, deleteContainer, enhanceActorSheet, transferEmbeddedTree, updateActorCoins
 } from "../equipment-containers/index.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
@@ -8,6 +8,14 @@ const INVENTORY_TYPES = new Set(["weapon", "armor", "shield", "misc", "container
 const TYPE_LABELS = {
   weapon: "Arma", armor: "Armadura", shield: "Escudo", misc: "Item geral", container: "Recipiente", vehicle: "Montaria/Transporte"
 };
+const EQUIPMENT_GROUPS = [
+  ["weapon", "Armas"],
+  ["armor", "Armaduras"],
+  ["shield", "Escudos"],
+  ["misc", "Itens Gerais"],
+  ["container", "Recipientes & Vasilhames"],
+  ["vehicle", "Montarias & Transportes"]
+];
 const boundSheets = new WeakSet();
 
 function enabled() {
@@ -40,35 +48,81 @@ function inventoryItems(actor) {
     .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name));
 }
 
+function itemDescription(item) {
+  return String(item.system?.description ?? item.system?.desc ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function itemWeight(item) {
+  const value = Number(item.system?.total_weight);
+  if (Number.isFinite(value)) return value;
+  const quantity = Number(item.system?.quantity) || 0;
+  const load = Number(item.system?.weight_in_load) || 0;
+  const grams = Number(item.system?.weight_in_grams) || 0;
+  return load > 0 ? load * quantity : (grams * quantity) / 1000;
+}
+
+function itemValue(item) {
+  return item.system?.total_cost ?? item.system?.cost ?? item.system?.value ?? "";
+}
+
 function itemRow(item) {
+  const description = itemDescription(item);
   return `<li class="item od2qdv-monster-item" data-item-id="${item.id}" draggable="true">
     <img src="${escapeHtml(item.img)}" alt="" width="32" height="32">
     <button type="button" data-monster-equipment-action="edit" title="Abrir item">${escapeHtml(item.name)}</button>
-    <span>${TYPE_LABELS[item.type] ?? escapeHtml(item.type)}</span>
-    <span>${escapeHtml(item.system?.quantity ?? 1)}</span>
-    <span class="od2qdv-monster-item-controls">
+    <span class="quantity">${escapeHtml(item.system?.quantity ?? 1)}</span>
+    <span class="weight">${escapeHtml(itemWeight(item))}</span>
+    <span class="value">${escapeHtml(itemValue(item))}</span>
+    <span class="description" title="${escapeHtml(description)}">${escapeHtml(description)}</span>
+    <span class="item-controls od2qdv-monster-item-controls">
       <a data-monster-equipment-action="transfer" title="Transferir" aria-label="Transferir"><i class="fas fa-people-arrows"></i></a>
       <a data-monster-equipment-action="delete" title="Excluir" aria-label="Excluir"><i class="fas fa-trash"></i></a>
     </span>
   </li>`;
 }
 
+function equipmentGroup(actor, type, label) {
+  const items = inventoryItems(actor).filter((item) => item.type === type);
+  const rows = items.map(itemRow).join("");
+  return `<div class="od2qdv-monster-equipment-group ${type}">
+    <div class="list">
+      <div class="type">${label}</div>
+      <div class="quantity">Qtd</div>
+      <div class="weight">Peso T.</div>
+      <div class="value">Valor T.</div>
+      <div class="description">Descrição</div>
+      <div class="create"><button type="button" data-monster-equipment-action="create" data-monster-equipment-type="${type}" title="Criar ${label.toLocaleLowerCase()}"><i class="fas fa-plus"></i> Criar</button></div>
+    </div>
+    <ol class="item-list">${rows}</ol>
+  </div>`;
+}
+
 function equipmentTab(actor) {
   const coins = actorCoins(actor);
-  const load = carriedLoad(actor.items.filter((item) => INVENTORY_TYPES.has(item.type) && item.type !== "vehicle"), coins);
+  const load = carriedLoad(actor.items.filter((item) => INVENTORY_TYPES.has(item.type) && item.type !== "vehicle"), coins, { includeCoins: countCoinsInLoad() });
+  const maxLoad = Number(actor.system?.load_max) || 0;
   const wallet = `<div class="od2qdv-monster-wallet">
     <strong>Moedas</strong>
     <label>PO <input type="number" min="0" data-monster-coin="gp" value="${coins.gp}"></label>
     <label>PP <input type="number" min="0" data-monster-coin="sp" value="${coins.sp}"></label>
     <label>PC <input type="number" min="0" data-monster-coin="cp" value="${coins.cp}"></label>
-    <span class="od2qdv-monster-load" title="Inclui equipamentos, conteúdo dos recipientes e moedas"><i class="fas fa-weight-hanging"></i> Carga total: <strong>${load}</strong></span>
   </div>`;
-  const rows = inventoryItems(actor).map(itemRow).join("");
+  const groups = EQUIPMENT_GROUPS.map(([type, label]) => equipmentGroup(actor, type, label)).join("");
   return `<div class="tab od2qdv-monster-equipment" data-group="primary-tabs" data-tab="od2qdv-monster-equipment">
-    <header><strong>Equipamentos carregados</strong><button type="button" data-monster-equipment-action="create"><i class="fas fa-plus"></i> Criar item</button></header>
+    <header><strong>Equipamentos carregados</strong></header>
     <p class="hint">Arraste equipamentos dos compêndios ou de outra ficha para esta área.</p>
     ${wallet}
-    <ol class="item-list">${rows || '<li class="od2qdv-monster-empty">Nenhum equipamento.</li>'}</ol>
+    ${groups}
+    <div class="load border od2qdv-monster-load-card" title="Inclui equipamentos, conteúdo dos recipientes${countCoinsInLoad() ? " e moedas" : ""}">
+      <label class="font-bold">Carga</label>
+      <div class="load-values">
+        <div class="current-load"><input type="number" value="${load}" disabled><label>Atual</label></div>
+        <div class="max-load"><input type="number" value="${maxLoad}" disabled><label>Máx.</label></div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -216,7 +270,7 @@ async function enhanceMonsterSheet(app, html) {
     event.preventDefault(); event.stopPropagation();
     const item = actor.items.get(button.closest(".item[data-item-id]")?.dataset.itemId);
     const action = button.dataset.monsterEquipmentAction;
-    if (action === "create") await actor.createEmbeddedDocuments("Item", [{ name: "Novo item", type: "misc" }]);
+    if (action === "create") await actor.createEmbeddedDocuments("Item", [{ name: "Novo item", type: button.dataset.monsterEquipmentType ?? "misc" }]);
     if (action === "edit") item?.sheet.render(true);
     if (action === "transfer" && item) await chooseTarget(item);
     if (action === "delete" && item?.type === "container" && containersEnabled()) await deleteContainer(item);

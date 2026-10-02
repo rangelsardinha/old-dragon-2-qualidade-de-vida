@@ -5,6 +5,8 @@
   "OD2QDV.Settings.enableEquipmentContainers.hint": "Permite guardar itens e moedas em recipientes, aninhar recipientes e transferir todo o conteúdo em conjunto.",
   "OD2QDV.Settings.enableContainerLoadRules.name": "Habilitar regras de carga dos recipientes",
   "OD2QDV.Settings.enableContainerLoadRules.hint": "Atualiza os itens de recipientes com as regras de carga, peso, custo e capacidade do Livro Básico.",
+  "OD2QDV.Settings.countCoinsInLoad.name": "Contabilizar moedas na carga",
+  "OD2QDV.Settings.countCoinsInLoad.hint": "Inclui PO, PP e PC no peso carregado dos personagens, ajudantes e monstros.",
   "OD2QDV.Settings.enableMonsterEquipment.name": "Monstros carregam itens",
   "OD2QDV.Settings.enableMonsterEquipment.hint": "Adiciona uma aba de equipamentos aos monstros e permite transferir itens entre monstros, ajudantes e personagens.",
   "OD2QDV.Settings.enableSpellTome.name": "Tomo de Magia",
