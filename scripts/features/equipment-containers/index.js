@@ -1,5 +1,5 @@
 import {
-  COIN_KEYS, actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, containerContentsWeight, descendantIds, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
+  COIN_KEYS, SACK_WEIGHT_FLAG, actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, containerCoinCapacity, containerContentsWeight, containerLoadRule, descendantIds, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, sumAllocatedCoins, wouldCreateCycle
 } from "./model.js";
 import { updateInventoryItem } from "../../utils/actor-inventory.js";
 
@@ -9,17 +9,74 @@ const COINS_FLAG = "containerCoins";
 const EQUIPPED_AMMO_FLAG = "allowEquippedAmmunition";
 const WATERSKIN_FULL_FLAG = "waterskinFull";
 const WATERSKIN_STATES_FLAG = "waterskinStates";
+const CONTAINER_RULE_FLAG = "containerLoadRuleVersion";
+const CONTAINER_RULE_VERSION = 2;
 const COIN_LABELS = { gp: "PO", sp: "PP", cp: "PC" };
 const INVENTORY_TYPES = new Set(["weapon", "armor", "shield", "misc", "container", "vehicle"]);
+const LOAD_TYPES = new Set(["weapon", "armor", "shield", "misc", "container"]);
 const boundActorSheets = new WeakSet();
 const boundItemSheets = new WeakSet();
 const boundWaterskinSheets = new WeakSet();
+const actorSheetScrollPositions = new WeakMap();
+const patchedLoadPrototypes = new WeakSet();
 const waterskinScrollPositions = new Map();
 
 function enabled() {
   if (game.system.id !== "olddragon2e") return false;
   try { return game.settings.get(MODULE_ID, "enableEquipmentContainers"); }
   catch { return true; }
+}
+
+function loadRulesEnabled() {
+  try { return game.settings.get(MODULE_ID, "enableContainerLoadRules") === true; }
+  catch { return false; }
+}
+
+function containerRuleChanges(item) {
+  const rule = containerLoadRule(item);
+  if (!rule) return null;
+  return {
+    "system.description": rule.description,
+    "system.cost": rule.cost,
+    "system.weight_in_load": rule.weight_in_load,
+    "system.weight_in_grams": rule.weight_in_grams,
+    "system.increases_load_by": rule.increases_load_by ?? 0,
+    [`flags.${MODULE_ID}.${CONTAINER_RULE_FLAG}`]: CONTAINER_RULE_VERSION
+  };
+}
+
+async function applyContainerRule(item) {
+  if (!loadRulesEnabled() || item?.type !== "container" || !containerLoadRule(item)) return false;
+  const changes = containerRuleChanges(item);
+  if (!changes) return false;
+  const currentRuleVersion = item.getFlag?.(MODULE_ID, CONTAINER_RULE_FLAG) ?? item.flags?.[MODULE_ID]?.[CONTAINER_RULE_FLAG];
+  const needsUpdate = currentRuleVersion !== CONTAINER_RULE_VERSION
+    || Object.entries(changes).some(([path, value]) => path.startsWith("system.") && item.system?.[path.slice(7)] !== value);
+  if (!needsUpdate || !item.update) return false;
+  await item.update(changes, { render: false });
+  return true;
+}
+
+export async function migrateContainerItems() {
+  if (!loadRulesEnabled()) return { scanned: 0, updated: 0 };
+  const items = [
+    ...[...(game.actors ?? [])].flatMap((actor) => [...(actor.items ?? [])]),
+    ...[...(game.items ?? [])]
+  ];
+  let updated = 0;
+  for (const item of items) if (await applyContainerRule(item)) updated += 1;
+  for (const actor of game.actors ?? []) {
+    for (const item of actor.items ?? []) {
+      const parent = parentId(item) ? actor.items.get(parentId(item)) : null;
+      if (parent && isSackOfEstopa(parent) && !storedSackWeight(item)) {
+        await setSackWeight(item, true);
+        updated += 1;
+      }
+    }
+  }
+  if (updated) ui.notifications.info(`Regras de carga aplicadas a ${updated} recipiente(s).`);
+  console.log(`${MODULE_ID} | Regras de carga: ${updated} item(ns) atualizado(s) de ${items.length} verificado(s).`);
+  return { scanned: items.length, updated };
 }
 
 function rootElement(html) {
@@ -37,6 +94,68 @@ function isWaterskin(item) {
 
 function itemSheetScroller(root) {
   return root.closest?.(".window-content") ?? root.querySelector?.(".window-content") ?? root;
+}
+
+function actorSheetScroller(root) {
+  return root.closest?.(".window-content") ?? root.querySelector?.(".window-content") ?? root;
+}
+
+function descriptorInPrototypeChain(prototype, key) {
+  for (let current = prototype; current; current = Object.getPrototypeOf(current)) {
+    const descriptor = Object.getOwnPropertyDescriptor(current, key);
+    if (descriptor) return descriptor;
+  }
+  return null;
+}
+
+function correctedLoad(system, nativeGet) {
+  const nativeLoad = nativeGet.call(system);
+  const actor = system.parent;
+  if (!loadRulesEnabled() || !actor || (actor.type !== "character" && actor.type !== "retainer")) return nativeLoad;
+  return carriedLoad([...actor.items].filter((item) => LOAD_TYPES.has(item.type)), actorCoins(actor));
+}
+
+function patchLoadInstance(system) {
+  if (!system || Object.prototype.hasOwnProperty.call(system, "load_current")) return;
+  const descriptor = descriptorInPrototypeChain(Object.getPrototypeOf(system), "load_current");
+  if (typeof descriptor?.get !== "function") return;
+  try {
+    Object.defineProperty(system, "load_current", {
+      configurable: true,
+      enumerable: descriptor.enumerable ?? true,
+      get() { return correctedLoad(this, descriptor.get); }
+    });
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Não foi possível substituir a carga da ficha`, error);
+  }
+}
+
+function installContainerLoadCalculation() {
+  const modelPrototypes = new Set([
+    ...[...(game.actors ?? [])]
+      .filter((actor) => actor.type === "character" || actor.type === "retainer")
+      .map((actor) => Object.getPrototypeOf(actor.system)),
+    ...["character", "retainer"]
+      .map((type) => globalThis.CONFIG?.Actor?.dataModels?.[type]?.prototype)
+      .filter(Boolean)
+  ]);
+  for (const prototype of modelPrototypes) {
+    if (patchedLoadPrototypes.has(prototype)) continue;
+    const descriptor = descriptorInPrototypeChain(prototype, "load_current");
+    if (typeof descriptor?.get !== "function") continue;
+    const nativeGet = descriptor.get;
+    Object.defineProperty(prototype, "load_current", {
+      configurable: true,
+      enumerable: descriptor.enumerable ?? true,
+      get() {
+        return correctedLoad(this, nativeGet);
+      }
+    });
+    patchedLoadPrototypes.add(prototype);
+  }
+  for (const actor of game.actors ?? []) {
+    if (actor.type === "character" || actor.type === "retainer") patchLoadInstance(actor.system);
+  }
 }
 
 function enhanceWaterskinSheet(app, root) {
@@ -153,6 +272,7 @@ function containerContentsWeightFor(container) {
 }
 
 function canAddToContainer(item, container) {
+  if (!canApplyContainerLoadRule(item, container)) return false;
   if (!isSackOfEstopa(container)) return true;
   if (item?.type === "container") {
     ui.notifications.warn("Sacos de estopa não podem armazenar outros recipientes.");
@@ -162,6 +282,35 @@ function canAddToContainer(item, container) {
   if (nextWeight > 15) {
     ui.notifications.warn("O Saco de estopa comporta no máximo 15 kg.");
     return false;
+  }
+  return true;
+}
+
+function ammunitionKind(item) {
+  const name = normalizedName(item?.name);
+  if (name.includes("flecha")) return "arrow";
+  if (name.includes("virote") || name.includes("virotes")) return "bolt";
+  return null;
+}
+
+function directContents(container) {
+  return [...(container?.actor?.items ?? [])].filter((item) => item.flags?.[MODULE_ID]?.[PARENT_FLAG] === container.id);
+}
+
+function canApplyContainerLoadRule(item, container) {
+  if (!loadRulesEnabled()) return true;
+  const rule = containerLoadRule(container);
+  if (!rule) return true;
+  const kind = ammunitionKind(item);
+  const maxAmmunition = rule.ammunitionCapacity?.[kind];
+  if (maxAmmunition && isAmmunition(item)) {
+    const current = directContents(container)
+      .filter((candidate) => isAmmunition(candidate) && ammunitionKind(candidate) === kind)
+      .reduce((total, candidate) => total + containedQuantity(candidate), 0);
+    if (current + containedQuantity(item) > maxAmmunition) {
+      ui.notifications.warn(`${container.name} comporta no máximo ${maxAmmunition} ${kind === "arrow" ? "flechas" : "virotes"}.`);
+      return false;
+    }
   }
   return true;
 }
@@ -195,8 +344,42 @@ async function confirmDialog({ title, content }) {
 }
 
 async function setParent(item, newParentId) {
+  if (loadRulesEnabled() && item?.actor) {
+    const previousParent = item.actor.items.get(parentId(item));
+    const nextParent = newParentId ? item.actor.items.get(newParentId) : null;
+    if (previousParent && isSackOfEstopa(previousParent) && previousParent !== nextParent) await setSackWeight(item, false);
+    if (nextParent && isSackOfEstopa(nextParent) && previousParent !== nextParent) await setSackWeight(item, true);
+  }
   if (!newParentId) return item.unsetFlag(MODULE_ID, PARENT_FLAG);
   return item.setFlag(MODULE_ID, PARENT_FLAG, newParentId);
+}
+
+function storedSackWeight(item) {
+  return item?.getFlag?.(MODULE_ID, SACK_WEIGHT_FLAG) ?? item?.flags?.[MODULE_ID]?.[SACK_WEIGHT_FLAG] ?? null;
+}
+
+async function setSackWeight(item, insideSack) {
+  if (!item?.update) return;
+  const stored = storedSackWeight(item);
+  if (insideSack) {
+    if (stored) return;
+    const load = Math.max(0, Number(item.system?.weight_in_load) || 0);
+    const grams = Math.max(0, Number(item.system?.weight_in_grams) || 0);
+    const original = { weight_in_load: load, weight_in_grams: grams };
+    const totalGrams = load > 0 ? load * 1000 : grams;
+    await item.update({
+      "system.weight_in_load": 0,
+      "system.weight_in_grams": Math.round(totalGrams / 2),
+      [`flags.${MODULE_ID}.${SACK_WEIGHT_FLAG}`]: original
+    }, { render: false });
+    return;
+  }
+  if (!stored) return;
+  await item.update({
+    "system.weight_in_load": stored.weight_in_load,
+    "system.weight_in_grams": stored.weight_in_grams
+  }, { render: false });
+  await item.unsetFlag(MODULE_ID, SACK_WEIGHT_FLAG);
 }
 
 async function nestExistingItem(item, container) {
@@ -219,13 +402,49 @@ async function nestExistingItem(item, container) {
   return true;
 }
 
-function cloneSource(item, newParentId) {
+function cloneSource(item, newParentId, targetContainer = null) {
   const data = item.toObject();
+  const storedWeight = data.flags?.[MODULE_ID]?.[SACK_WEIGHT_FLAG];
+  const originalWeight = storedWeight ?? {
+    weight_in_load: Number(item.system?.weight_in_load) || 0,
+    weight_in_grams: Number(item.system?.weight_in_grams) || 0
+  };
+  if (storedWeight) {
+    data.system ??= {};
+    data.system.weight_in_load = storedWeight.weight_in_load;
+    data.system.weight_in_grams = storedWeight.weight_in_grams;
+    delete data.flags[MODULE_ID][SACK_WEIGHT_FLAG];
+  }
+  const rule = loadRulesEnabled() ? containerLoadRule(item) : null;
+  if (rule) {
+    data.system ??= {};
+    Object.assign(data.system, {
+      description: rule.description,
+      cost: rule.cost,
+      weight_in_load: rule.weight_in_load,
+      weight_in_grams: rule.weight_in_grams,
+      increases_load_by: rule.increases_load_by ?? 0
+    });
+    data.flags ??= {};
+    data.flags[MODULE_ID] ??= {};
+    data.flags[MODULE_ID][CONTAINER_RULE_FLAG] = CONTAINER_RULE_VERSION;
+  }
   delete data._id;
   data.flags ??= {};
   data.flags[MODULE_ID] ??= {};
   if (newParentId) data.flags[MODULE_ID][PARENT_FLAG] = newParentId;
   else delete data.flags[MODULE_ID][PARENT_FLAG];
+  if (loadRulesEnabled() && targetContainer && isSackOfEstopa(targetContainer)) {
+    const totalGrams = Number(data.system?.weight_in_load) > 0
+      ? Number(data.system.weight_in_load) * 1000
+      : Math.max(0, Number(data.system?.weight_in_grams) || 0);
+    data.system.weight_in_load = 0;
+    data.system.weight_in_grams = Math.round(totalGrams / 2);
+    data.flags[MODULE_ID][SACK_WEIGHT_FLAG] = {
+      weight_in_load: originalWeight.weight_in_load,
+      weight_in_grams: originalWeight.weight_in_grams
+    };
+  }
   return data;
 }
 
@@ -252,7 +471,8 @@ export async function transferEmbeddedTree(rootItem, targetActor, targetParentId
   for (const source of sourceItems) {
     const oldParentId = source.id === rootItem.id ? null : parentId(source);
     const newParentId = source.id === rootItem.id ? targetParentId : idMap.get(oldParentId);
-    const [created] = await targetActor.createEmbeddedDocuments("Item", [cloneSource(source, newParentId)]);
+    const targetContainer = source.id === rootItem.id && targetParentId ? targetActor.items.get(targetParentId) : null;
+    const [created] = await targetActor.createEmbeddedDocuments("Item", [cloneSource(source, newParentId, targetContainer)]);
     idMap.set(source.id, created.id);
   }
 
@@ -282,7 +502,7 @@ async function createInsideContainer(sourceItem, container) {
     return;
   }
   if (!canAddToContainer(sourceItem, container)) return;
-  const [created] = await container.actor.createEmbeddedDocuments("Item", [cloneSource(sourceItem, container.id)]);
+  const [created] = await container.actor.createEmbeddedDocuments("Item", [cloneSource(sourceItem, container.id, container)]);
   return created;
 }
 
@@ -407,6 +627,13 @@ export function enhanceActorSheet(app, html) {
   if (!enabled() || !app.actor?.isOwner) return;
   const root = rootElement(html);
   if (!root) return;
+  const savedScroll = actorSheetScrollPositions.get(app);
+  if (savedScroll) requestAnimationFrame(() => {
+    const scroller = actorSheetScroller(root);
+    scroller.scrollTop = savedScroll.top;
+    scroller.scrollLeft = savedScroll.left;
+    actorSheetScrollPositions.delete(app);
+  });
   const actor = app.actor;
 
   for (const row of root.querySelectorAll(".item[data-item-id]")) {
@@ -454,6 +681,11 @@ export function enhanceActorSheet(app, html) {
     }
   }, true);
   root.addEventListener("click", async (event) => {
+    const clickedRow = event.target.closest?.(".item[data-item-id]");
+    if (clickedRow) {
+      const scroller = actorSheetScroller(root);
+      actorSheetScrollPositions.set(app, { top: scroller.scrollTop, left: scroller.scrollLeft });
+    }
     const action = event.target.closest("[data-od2qdv-action]");
     const deleteButton = event.target.closest(".item-delete");
     const row = event.target.closest(".item[data-item-id]");
@@ -485,9 +717,13 @@ export function enhanceActorSheet(app, html) {
 
 function itemSheetPanel(item) {
   const coins = containerCoins(item);
+  const rule = loadRulesEnabled() ? containerLoadRule(item) : null;
+  const capacityHint = rule?.ammunitionCapacity
+    ? ` Comporta até ${rule.ammunitionCapacity.arrow} flechas ou ${rule.ammunitionCapacity.bolt} virotes.`
+    : rule?.capacityLiters ? ` Capacidade: ${rule.capacityLiters} litro(s).` : "";
   return `<section class="od2qdv-container-sheet" data-container-id="${item.id}">
     <h2><i class="fas fa-box-open"></i> Conteúdo</h2>
-    <p class="hint">Arraste equipamentos para esta área.${isSackOfEstopa(item) ? " Este saco comporta até 15 kg e não aceita recipientes." : " Recipientes podem ser aninhados."}</p>
+    <p class="hint">Arraste equipamentos para esta área.${isSackOfEstopa(item) ? " Este saco comporta até 15 kg e não aceita recipientes." : " Recipientes podem ser aninhados."}${capacityHint}</p>
     <label class="od2qdv-equipped-ammo-option"><input type="checkbox" data-equipped-ammo ${allowsEquippedAmmunition(item) ? "checked" : ""}> Permitir guardar munição equipada</label>
     <div class="od2qdv-coins">${["gp", "sp", "cp"].map((key) => `<label>${COIN_LABELS[key]}<input type="number" min="0" step="1" data-coin="${key}" value="${coins[key]}"></label>`).join("")}<button type="button" data-od2qdv-action="save-coins"><i class="fas fa-coins"></i> Guardar moedas</button></div>
     ${renderTree(item.actor, item)}
@@ -509,8 +745,9 @@ async function saveCoins(container, panel) {
       return;
     }
   }
-  if (isSackOfEstopa(container) && requested.cp + requested.sp + requested.gp > 600) {
-    ui.notifications.warn("O Saco de estopa comporta no máximo 600 moedas.");
+  const coinCapacity = loadRulesEnabled() ? containerCoinCapacity(container) : Infinity;
+  if (requested.cp + requested.sp + requested.gp > coinCapacity) {
+    ui.notifications.warn(`${container.name} comporta no máximo ${coinCapacity} moedas.`);
     return;
   }
   await container.setFlag(MODULE_ID, COINS_FLAG, requested);
@@ -572,5 +809,13 @@ Hooks.on("renderOD2CharacterSheet", enhanceActorSheet);
 Hooks.on("renderOD2RetainerSheet", enhanceActorSheet);
 Hooks.on("renderOD2ItemSheet", enhanceItemSheet);
 Hooks.once("ready", () => {
-  if (enabled()) console.log(`${MODULE_ID} | Equipamentos em recipientes ativo`);
+  if (enabled()) {
+    console.log(`${MODULE_ID} | Equipamentos em recipientes ativo`);
+    installContainerLoadCalculation();
+    migrateContainerItems().catch((error) => console.error(`${MODULE_ID} | Falha ao atualizar recipientes`, error));
+  }
+});
+
+Hooks.on("createItem", (item) => {
+  applyContainerRule(item).catch((error) => console.error(`${MODULE_ID} | Falha ao atualizar recipiente criado`, error));
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, descendantIds, emptyWaterskinStates, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
+import { actorOwnerNames, addCoins, canContainItems, canReceiveContainer, canStoreItem, carriedLoad, containerCoinCapacity, containerLoadRule, descendantIds, emptyWaterskinStates, hasSackAdjustedWeight, isAmmunition, isSackOfEstopa, normalizeCoins, normalizeWaterskinStates, subtractCoins, wouldCreateCycle } from "../scripts/features/equipment-containers/model.js";
 import { curseForRoll, selectRandomSpells } from "../scripts/features/scroll-generator/model.js";
 
 const items = [
@@ -68,6 +68,24 @@ test("reduz pela metade o peso de itens dentro do saco de estopa", () => {
   assert.equal(carriedLoad(items), 11);
 });
 
+test("calcula a carga exibida com o conteúdo do saco de estopa pela metade", () => {
+  const items = [
+    { id: "sack", type: "container", name: "Saco de Estopa", system: { weight_in_load: 0, quantity: 1 }, flags: {} },
+    { id: "item-1", type: "misc", system: { weight_in_load: 4, quantity: 1 }, flags: { "old-dragon-2-qualidade-de-vida": { parentContainerId: "sack" } } },
+    { id: "item-2", type: "misc", system: { weight_in_load: 2, quantity: 1 }, flags: { "old-dragon-2-qualidade-de-vida": { parentContainerId: "sack" } } }
+  ];
+  assert.equal(carriedLoad(items), 3);
+});
+
+test("não aplica duas vezes a redução de um item já ajustado no saco", () => {
+  const items = [
+    { id: "sack", type: "container", name: "Saco de Estopa", system: { weight_in_load: 0, quantity: 1 }, flags: {} },
+    { id: "ladder", type: "misc", system: { weight_in_load: 0, weight_in_grams: 2500, quantity: 1 }, flags: { "old-dragon-2-qualidade-de-vida": { parentContainerId: "sack", sackOriginalWeight: { weight_in_load: 0, weight_in_grams: 5000 } } } }
+  ];
+  assert.equal(hasSackAdjustedWeight(items[1]), true);
+  assert.equal(carriedLoad(items), 2);
+});
+
 test("permite transferir recipientes para personagens e ajudantes", () => {
   assert.equal(canReceiveContainer({ type: "character" }), true);
   assert.equal(canReceiveContainer({ type: "retainer" }), true);
@@ -79,6 +97,16 @@ test("controla o estado individual dos odres de uma pilha", () => {
   assert.deepEqual(normalizeWaterskinStates(3, undefined, true), [true, true, true]);
   assert.deepEqual(normalizeWaterskinStates(4, [true, false], false), [true, false, false, false]);
   assert.deepEqual(emptyWaterskinStates([true, false, true, true], 2), { states: [false, false, false, true], emptied: 2 });
+});
+
+test("mapeia as regras de carga dos recipientes", () => {
+  assert.equal(containerLoadRule({ name: "Algibeira" }).cost, "1 PC");
+  assert.equal(containerLoadRule({ name: "Aljava" }).ammunitionCapacity.arrow, 40);
+  assert.equal(containerLoadRule({ name: "Barril/Caixa Grande" }).capacityLiters, 200);
+  assert.equal(containerLoadRule({ name: "Mochila" }).increases_load_by, 5);
+  assert.equal(containerLoadRule({ name: "Porta Mapas" }).sheetCapacity, 20);
+  assert.equal(containerCoinCapacity({ name: "Saco de Estopa" }), 600);
+  assert.equal(containerCoinCapacity({ name: "Odre" }), 0);
 });
 
 test("lista os usuários proprietários do ator sem incluir Mestres", () => {

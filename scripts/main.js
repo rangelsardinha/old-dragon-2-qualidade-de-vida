@@ -10,6 +10,10 @@ Hooks.once("init", () => {
       name: "Equipamentos em recipientes",
       hint: "Permite guardar itens e moedas em recipientes, aninhar recipientes e transferir todo o conteúdo em conjunto."
     },
+    enableContainerLoadRules: {
+      name: "Habilitar regras de carga dos recipientes",
+      hint: "Atualiza os itens de recipientes com as regras de carga, peso, custo e capacidade do Livro Básico."
+    },
     enableMonsterEquipment: {
       name: "Monstros carregam itens",
       hint: "Adiciona uma aba de equipamentos aos monstros e permite transferir itens entre monstros, ajudantes e personagens."
@@ -75,6 +79,7 @@ Hooks.once("init", () => {
 
   worldToggle("enableCombatAutomation");
   worldToggle("enableEquipmentContainers");
+  worldToggle("enableContainerLoadRules", false);
   worldToggle("enableMonsterEquipment");
   worldToggle("enableSpellTome");
   worldToggle("enableScrollGenerator");

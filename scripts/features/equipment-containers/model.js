@@ -1,8 +1,25 @@
 export const COIN_KEYS = ["cp", "sp", "gp"];
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
+export const SACK_WEIGHT_FLAG = "sackOriginalWeight";
+
+export const CONTAINER_RULES = Object.freeze([
+  { key: "algibeira", match: /^algibeira(?:\b|\s|[-–—:])/, names: ["Algibeira"], description: "Pequeno saco de couro usado preso ao cinto da roupa. Comporta até 50 moedas.", weight_in_load: 0, weight_in_grams: 0, cost: "1 PC", coinCapacity: 50 },
+  { key: "aljava", match: /^aljava(?:\b|\s|[-–—:])/, names: ["Aljava"], description: "De couro, rígida para até 40 flechas ou 80 virotes. Comporta até 150 moedas.", weight_in_load: 0, weight_in_grams: 500, cost: "1 PO", coinCapacity: 150, ammunitionCapacity: { arrow: 40, bolt: 80 } },
+  { key: "small-barrel-box", match: /^(?:barril|caixa)(?:\/|\s+)(?:caixa\s+|barril\s+)?pequena(?:\b|\s|[-–—:])/, names: ["Barril/Caixa Pequena"], description: "De madeira, reforçado para transporte. Capacidade de 20 litros. Comporta até 200 moedas.", weight_in_load: 5, weight_in_grams: 0, cost: "2 PO", coinCapacity: 200, capacityLiters: 20 },
+  { key: "large-barrel-box", match: /^(?:barril|caixa)(?:\/|\s+)(?:caixa\s+|barril\s+)?grande(?:\b|\s|[-–—:])/, names: ["Barril/Caixa Grande"], description: "De madeira, reforçado para transporte. Capacidade de 200 litros. Comporta até 2.000 moedas.", weight_in_load: 10, weight_in_grams: 0, cost: "5 PO", coinCapacity: 2000, capacityLiters: 200 },
+  { key: "backpack", match: /^mochila(?:\b|\s|[-–—:])/, names: ["Mochila"], description: "De couro, com compartimentos para exploradores e reforço para peso. Adiciona 5 ao valor de carga do personagem. Comporta até 400 moedas.", weight_in_load: 0, weight_in_grams: 0, cost: "2 PO", coinCapacity: 400, loadBonus: 5, increases_load_by: 5 },
+  { key: "waterskin", match: /^odre(?:\b|\s|[-–—:])/, names: ["Odre"], description: "Saco de couro com rolha para líquidos com capacidade para 1 litro. Não comporta moedas.", weight_in_load: 0, weight_in_grams: 500, cost: "5 PP", coinCapacity: 0, capacityLiters: 1 },
+  { key: "map-case", match: /^porta mapas(?:\b|\s|[-–—:])/, names: ["Porta Mapas"], description: "Acomoda até 20 folhas de pergaminhos ou mapas. Comporta até 50 moedas.", weight_in_load: 0, weight_in_grams: 500, cost: "1 PO", coinCapacity: 50, sheetCapacity: 20 },
+  { key: "sack-of-estopa", match: /^saco de estopa(?:\b|\s|[-–—:])/, names: ["Saco de Estopa"], description: "Para carregar até 15 kg. Quando carregado, reduz pela metade o peso dos objetos em seu interior. Comporta até 600 moedas.", weight_in_load: 0, weight_in_grams: 0, cost: "5 PC", coinCapacity: 600, maxWeightKg: 15, weightReduction: 0.5 }
+]);
 
 function normalizedName(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
+}
+
+export function containerRule(itemOrName) {
+  const name = normalizedName(typeof itemOrName === "string" ? itemOrName : itemOrName?.name);
+  return CONTAINER_RULES.find((rule) => rule.match.test(name)) ?? null;
 }
 
 export function isSackOfEstopa(item) {
@@ -13,6 +30,14 @@ export function canContainItems(item) {
   return item?.type === "container" && !/^odre(?:\b|\s|[-–—:])/.test(normalizedName(item?.name));
 }
 
+export function containerCoinCapacity(item) {
+  return containerRule(item)?.coinCapacity ?? Infinity;
+}
+
+export function containerLoadRule(item) {
+  return containerRule(item);
+}
+
 export function itemWeight(item) {
   const calculated = Number(item?.system?.total_weight);
   if (Number.isFinite(calculated)) return Math.max(0, calculated);
@@ -20,6 +45,10 @@ export function itemWeight(item) {
   const load = Math.max(0, Number(item?.system?.weight_in_load) || 0);
   const grams = Math.max(0, Number(item?.system?.weight_in_grams) || 0);
   return load > 0 ? load * quantity : (grams * quantity) / 1000;
+}
+
+export function hasSackAdjustedWeight(item) {
+  return Boolean(item?.flags?.[MODULE_ID]?.[SACK_WEIGHT_FLAG]);
 }
 
 export function containerContentsWeight(items = [], containerId) {
@@ -82,7 +111,7 @@ export function carriedLoad(items = [], coins = {}) {
       seen.add(parentId);
       const parent = byId.get(parentId);
       if (!parent) break;
-      if (isSackOfEstopa(parent)) factor *= 0.5;
+      if (isSackOfEstopa(parent) && !hasSackAdjustedWeight(item)) factor *= 0.5;
       parentId = parent.flags?.[MODULE_ID]?.parentContainerId;
     }
     return total + itemWeight(item) * factor;

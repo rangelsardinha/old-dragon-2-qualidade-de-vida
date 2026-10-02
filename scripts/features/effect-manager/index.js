@@ -28,6 +28,11 @@ function enabled() {
   return game.system.id === "olddragon2e" && game.settings.get(MODULE_ID, "enableEffectManager");
 }
 
+function containerLoadRulesEnabled() {
+  try { return game.settings.get(MODULE_ID, "enableContainerLoadRules") === true; }
+  catch { return false; }
+}
+
 function effectsFor(actor) {
   return (actor?.getFlag(MODULE_ID, FLAG) || []).map((effect) => normalizeEffect(effect, () => foundry.utils.randomID()));
 }
@@ -412,7 +417,9 @@ function actorSnapshot(actor, context = {}) {
   const items = [...actor.items];
   const equipment = items.filter((item) => ["weapon", "armor", "shield", "misc", "container", "vehicle"].includes(item.type));
   const coins = actorCoins(actor);
-  const currentLoad = actor.type === "monster" ? carriedLoad(equipment, coins) : Number(system.load_current) || 0;
+  const currentLoad = actor.type === "monster" || containerLoadRulesEnabled()
+    ? carriedLoad(equipment.filter((item) => ["weapon", "armor", "shield", "misc", "container"].includes(item.type)), coins)
+    : Number(system.load_current) || 0;
   const maxLoad = Number(system.load_max) || 0;
   const qdvEffects = effectsFor(actor);
   const movementNormal = Number(system.current_movement ?? system.mv) || 0;
