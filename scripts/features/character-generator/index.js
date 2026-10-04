@@ -6,6 +6,8 @@ import { darkSunDocuments, darkSunEnabled } from "../../integrations/dark-sun.js
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const SOCKET = `module.${MODULE_ID}`;
+const DISABLED_CLASSES_SETTING = "characterGeneratorDisabledClasses";
+const DISABLED_RACES_SETTING = "characterGeneratorDisabledRaces";
 const pendingApprovals = new Map();
 const STYLES = {
   classic: ["Estilo Clássico", "3d6 em ordem: FOR, DES, CON, INT, SAB e CAR."],
@@ -29,6 +31,23 @@ function escapeHtml(value) {
 
 function sourceSuffix(document) {
   return String(document?.uuid ?? "").startsWith(`Compendium.${game.system.id}.`) ? "" : " [Dark Sun]";
+}
+
+function documentPack(document) {
+  if (document?.pack) return document.pack;
+  const parts = String(document?.uuid ?? "").split(".");
+  return parts[0] === "Compendium" && parts.length >= 5 ? parts.slice(1, -2).join(".") : "";
+}
+
+function compendiumLabel(document) {
+  const packId = documentPack(document);
+  const pack = game.packs.get(packId);
+  return pack?.metadata?.label ?? pack?.title ?? packId;
+}
+
+function compareCharacterDocuments(left, right) {
+  return compendiumLabel(left).localeCompare(compendiumLabel(right), "pt-BR")
+    || left.name.localeCompare(right.name, "pt-BR");
 }
 
 function dialogV2() {
@@ -156,13 +175,155 @@ async function documentsFromPack(name, type) {
 async function characterDocuments(packName, type) {
   const documents = await documentsFromPack(packName, type);
   if (darkSunEnabled()) documents.push(...await darkSunDocuments(type));
-  return documents.sort((a, b) => a.name.localeCompare(b.name));
+  return documents.sort(compareCharacterDocuments);
+}
+
+function disabledDocumentUuids(kind) {
+  const setting = kind === "class" ? DISABLED_CLASSES_SETTING : DISABLED_RACES_SETTING;
+  try {
+    const value = game.settings.get(MODULE_ID, setting);
+    const parsed = JSON.parse(value || "[]");
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (_error) {
+    return new Set();
+  }
+}
+
+async function enabledCharacterDocuments(kind) {
+  const documents = await characterDocuments(kind === "class" ? "classes" : "races", kind);
+  const disabled = disabledDocumentUuids(kind);
+  return documents.filter((document) => !disabled.has(document.uuid));
+}
+
+function registerGeneratorOptionMenus() {
+  const BaseFormApplication = globalThis.FormApplication ?? foundry.appv1?.api?.FormApplication;
+  if (!BaseFormApplication || !game.settings.registerMenu) return;
+  class GeneratorOptionsMenu extends BaseFormApplication {
+    constructor(options = {}) {
+      super(options);
+      this.kind = options.kind ?? "class";
+    }
+
+    static get defaultOptions() {
+      return foundry.utils.mergeObject(super.defaultOptions, {
+        width: 520,
+        height: "auto",
+        minHeight: 0,
+        closeOnSubmit: true,
+        submitOnChange: false
+      });
+    }
+
+    get template() {
+      return "modules/old-dragon-2-qualidade-de-vida/templates/character-generator-options.hbs";
+    }
+
+    async getData() {
+      const documents = await characterDocuments(this.kind === "class" ? "classes" : "races", this.kind);
+      const disabled = disabledDocumentUuids(this.kind);
+      const entries = documents.map((document) => ({
+        name: document.name,
+        uuid: document.uuid,
+        pack: documentPack(document),
+        compendium: compendiumLabel(document),
+        source: sourceSuffix(document).trim(),
+        disabled: disabled.has(document.uuid)
+      }));
+      const groups = [];
+      entries.forEach((entry) => {
+        let group = groups.at(-1);
+        if (!group || group.name !== entry.compendium) {
+          group = { name: entry.compendium, documents: [] };
+          groups.push(group);
+        }
+        group.documents.push(entry);
+      });
+      return {
+        kind: this.kind,
+        title: this.kind === "class" ? "Classes habilitadas" : "Raças habilitadas",
+        hint: this.kind === "class" ? "Escolha as classes disponíveis no Criador de Personagens." : "Escolha as raças disponíveis no Criador de Personagens.",
+        groups
+      };
+    }
+
+    activateListeners(html) {
+      super.activateListeners(html);
+      const root = html instanceof HTMLElement ? html : html?.[0];
+      root?.querySelectorAll("input[name=enabled]").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => this.saveSelection(root));
+      });
+      root?.querySelectorAll("[data-generator-option-pack]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const pack = game.packs.get(button.dataset.generatorOptionPack);
+          if (!pack) {
+            ui.notifications.warn("Compêndio não encontrado.");
+            return;
+          }
+          pack.render(true);
+        });
+      });
+    }
+
+    async saveSelection(root) {
+      const enabled = [...root.querySelectorAll("input[name=enabled]:checked")].map((checkbox) => checkbox.value);
+      const documents = await characterDocuments(this.kind === "class" ? "classes" : "races", this.kind);
+      const enabledSet = new Set(enabled);
+      const disabled = documents.filter((document) => !enabledSet.has(document.uuid)).map((document) => document.uuid);
+      const setting = this.kind === "class" ? DISABLED_CLASSES_SETTING : DISABLED_RACES_SETTING;
+      await game.settings.set(MODULE_ID, setting, JSON.stringify(disabled));
+    }
+
+    async _updateObject(_event, formData) {
+      const documents = await characterDocuments(this.kind === "class" ? "classes" : "races", this.kind);
+      const enabled = new Set([].concat(formData.enabled ?? []).filter(Boolean));
+      const disabled = documents.filter((document) => !enabled.has(document.uuid)).map((document) => document.uuid);
+      const setting = this.kind === "class" ? DISABLED_CLASSES_SETTING : DISABLED_RACES_SETTING;
+      await game.settings.set(MODULE_ID, setting, JSON.stringify(disabled));
+    }
+  }
+  class ClassesMenu extends GeneratorOptionsMenu { constructor(options = {}) { super({ ...options, kind: "class" }); } }
+  class RacesMenu extends GeneratorOptionsMenu { constructor(options = {}) { super({ ...options, kind: "race" }); } }
+  game.settings.register(MODULE_ID, DISABLED_CLASSES_SETTING, { scope: "world", config: false, type: String, default: "[]" });
+  game.settings.register(MODULE_ID, DISABLED_RACES_SETTING, { scope: "world", config: false, type: String, default: "[]" });
+  game.settings.registerMenu(MODULE_ID, "characterGeneratorClassesMenu", {
+    name: "OD2QDV.Settings.characterGeneratorClassesMenu.name",
+    label: "OD2QDV.Settings.characterGeneratorClassesMenu.label",
+    hint: "OD2QDV.Settings.characterGeneratorClassesMenu.hint",
+    icon: "fas fa-chess-knight",
+    type: ClassesMenu,
+    restricted: true
+  });
+  game.settings.registerMenu(MODULE_ID, "characterGeneratorRacesMenu", {
+    name: "OD2QDV.Settings.characterGeneratorRacesMenu.name",
+    label: "OD2QDV.Settings.characterGeneratorRacesMenu.label",
+    hint: "OD2QDV.Settings.characterGeneratorRacesMenu.hint",
+    icon: "fas fa-users",
+    type: RacesMenu,
+    restricted: true
+  });
+}
+
+function moveGeneratorMenusBelowToggle(_application, html) {
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  if (!root) return;
+  const settingRow = (key, fallback) => {
+    const direct = root.querySelector(`[data-setting-id$=".${key}"]`);
+    if (direct) return direct.closest(".form-group") ?? direct;
+    const input = root.querySelector(`[name="${MODULE_ID}.${key}"]`);
+    if (input) return input.closest(".form-group") ?? input;
+    return [...root.querySelectorAll(".form-group")].find((row) => row.textContent.includes(fallback));
+  };
+  const generator = settingRow("enableCharacterGenerator", "Gerador de personagens");
+  const classes = settingRow("characterGeneratorClassesMenu", "Configurar classes");
+  const races = settingRow("characterGeneratorRacesMenu", "Configurar raças");
+  if (!generator || !classes || !races || generator === classes || generator === races) return;
+  generator.after(classes, races);
 }
 
 async function identityStep(races, playerMode = false) {
   const users = game.users.filter((user) => !user.isGM).sort((a, b) => a.name.localeCompare(b.name));
   const userOptions = [`<option value="">Somente o Mestre</option>`, ...users.map((user) => `<option value="${user.id}">${escapeHtml(user.name)}</option>`)].join("");
-  const raceOptions = races.map((race) => `<option value="${race.uuid}">${escapeHtml(race.name)}${sourceSuffix(race)}</option>`).join("");
+  const raceOptions = races.map((race, index) => `${index === 0 || compendiumLabel(races[index - 1]) !== compendiumLabel(race) ? `<optgroup label="${escapeHtml(compendiumLabel(race))}">` : ""}<option value="${race.uuid}">${escapeHtml(race.name)}${sourceSuffix(race)}</option>${index === races.length - 1 || compendiumLabel(races[index + 1]) !== compendiumLabel(race) ? "</optgroup>" : ""}`).join("");
   return prompt({
     title: "Criar novo personagem",
     content: `<div class="od2qdv-character-step"><div class="form-group"><label>Nome do personagem</label><input name="name" required autofocus></div>${playerMode ? `<input type="hidden" name="owner" value="${game.user.id}"><p>Jogador dono: <strong>${escapeHtml(game.user.name)}</strong></p>` : `<div class="form-group"><label>Jogador dono</label><select name="owner">${userOptions}</select></div>`}<div class="form-group"><label>Raça (SRD)</label><select name="race">${raceOptions}</select></div></div>`,
@@ -296,7 +457,7 @@ async function distributeDice(dice) {
 
 async function classAndLevelStep(classes, race, fixedLevel = null) {
   const allowed = classes.filter((characterClass) => classAllowsRace(characterClass, race.name));
-  const options = allowed.map((characterClass) => `<option value="${characterClass.uuid}">${escapeHtml(characterClass.name)}${sourceSuffix(characterClass)}</option>`).join("");
+  const options = allowed.map((characterClass, index) => `${index === 0 || compendiumLabel(allowed[index - 1]) !== compendiumLabel(characterClass) ? `<optgroup label="${escapeHtml(compendiumLabel(characterClass))}">` : ""}<option value="${characterClass.uuid}">${escapeHtml(characterClass.name)}${sourceSuffix(characterClass)}</option>${index === allowed.length - 1 || compendiumLabel(allowed[index + 1]) !== compendiumLabel(characterClass) ? "</optgroup>" : ""}`).join("");
   const level = fixedLevel == null ? null : Math.min(15, Math.max(1, Math.trunc(Number(fixedLevel) || 1)));
   return prompt({
     title: "Classe e nível",
@@ -419,7 +580,7 @@ function finalSummaryHtml(draft) {
 }
 
 async function createCharacterFromDraft(draft) {
-  const [races, classes] = await Promise.all([characterDocuments("races", "race"), characterDocuments("classes", "class")]);
+  const [races, classes] = await Promise.all([enabledCharacterDocuments("race"), enabledCharacterDocuments("class")]);
   const race = races.find((entry) => entry.uuid === draft.raceUuid);
   const characterClass = classes.find((entry) => entry.uuid === draft.classUuid);
   if (!race || !characterClass) throw new Error("Raça ou classe do SRD não encontrada.");
@@ -448,7 +609,7 @@ async function generateCharacter() {
     authorizedStyle = start.style;
     authorizedLevel = start.level;
   }
-  const [races, classes] = await Promise.all([characterDocuments("races", "race"), characterDocuments("classes", "class")]);
+  const [races, classes] = await Promise.all([enabledCharacterDocuments("race"), enabledCharacterDocuments("class")]);
   const identity = await identityStep(races, playerMode);
   if (!identity?.name) return;
   const race = races.find((entry) => entry.uuid === identity.raceUuid);
@@ -518,6 +679,8 @@ function installBarbarianJpcBonus() {
 Hooks.on("renderActorDirectory", addDirectoryButton);
 Hooks.on("renderActorDirectoryV2", addDirectoryButton);
 Hooks.on(foundry.applications?.api?.ApplicationV2 ? "renderChatMessageHTML" : "renderChatMessage", bindApprovalMessage);
+Hooks.on("renderSettingsConfig", moveGeneratorMenusBelowToggle);
+Hooks.once("init", registerGeneratorOptionMenus);
 
 Hooks.once("ready", () => {
   installBarbarianJpcBonus();

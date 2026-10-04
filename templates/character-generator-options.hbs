@@ -1,0 +1,21 @@
+<div class="od2qdv-generator-window">
+<p class="hint">{{hint}}</p>
+<div class="od2qdv-generator-options">
+  {{#each groups}}
+    <h3 class="od2qdv-generator-compendium">{{name}}</h3>
+    {{#each documents as |document index|}}
+    <div class="od2qdv-generator-option">
+      <span class="od2qdv-generator-option-name">
+        <strong>{{document.name}}</strong>
+        {{#if document.source}}<small>{{document.source}}</small>{{/if}}
+      </span>
+      <input id="od2qdv-generator-option-{{index}}" class="od2qdv-generator-switch-input" type="checkbox" name="enabled" value="{{document.uuid}}" {{#unless document.disabled}}checked{{/unless}}>
+      <label class="od2qdv-generator-switch" for="od2qdv-generator-option-{{index}}" title="Habilitar ou desabilitar">
+        <span></span>
+      </label>
+      <button type="button" class="od2qdv-generator-pack" data-generator-option-pack="{{document.pack}}" title="Abrir compêndio"><i class="fas fa-book-open"></i></button>
+    </div>
+    {{/each}}
+  {{/each}}
+</div>
+</div>
