@@ -2,6 +2,8 @@
 
 Módulo comunitário para Foundry VTT que reúne automações opcionais para o sistema **Old Dragon 2ª Edição**.
 
+Versão atual: **0.10.99**.
+
 ## Conjuntos de regras
 
 Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Configurar ajustes → Configurações de módulo**.
@@ -133,6 +135,7 @@ O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Mora
 - Configura nível, XP mínimo do nível, PV com dado de vida e Constituição e renda inicial editável.
 - Permite ao Mestre configurar, nas opções do módulo, quais classes e raças ficam disponíveis para o criador; as seleções são salvas imediatamente e organizadas por compêndio e ordem alfabética.
 - As listas do gerador agrupam classes e raças por compêndio, incluindo os compêndios Dark Sun ativos, e permitem abrir diretamente o compêndio de origem.
+- A versão 0.10.99 corrige a distribuição do template usado pelas configurações de classes e raças, evitando o erro de arquivo ausente ao abrir essas opções após a instalação pelo pacote do GitHub.
 - Ao concluir, abre a ficha e orienta o jogador a escolher equipamentos e magias.
 - Jogadores podem solicitar a criação; o Mestre autoriza o início, cada rerrolagem e o resumo final diretamente pelo chat.
 

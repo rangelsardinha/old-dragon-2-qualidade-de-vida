@@ -11,7 +11,7 @@ for (const [key, value] of Object.entries(expectedCompatibility)) {
     throw new Error(`Compatibilidade ${key} deve ser ${value}`);
   }
 }
-for (const path of [...manifest.esmodules, ...manifest.styles, ...manifest.languages.map(({ path }) => path)]) {
+for (const path of [...manifest.esmodules, ...manifest.styles, ...manifest.templates, ...manifest.languages.map(({ path }) => path)]) {
   await access(new URL(`../${path}`, import.meta.url));
 }
 const lightSources = manifest.relationships.requires.find(({ id }) => id === "light-sources");
