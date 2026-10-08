@@ -2,11 +2,11 @@
   "id": "old-dragon-2-qualidade-de-vida",
   "title": "Old Dragon 2: Qualidade de Vida",
   "description": "Automações modulares e configuráveis para o sistema Old Dragon 2ª Edição.",
-  "version": "0.10.99",
+  "version": "0.10.108",
   "license": "CC-BY-SA-4.0",
   "url": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida",
   "manifest": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/latest/download/module.json",
-  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.10.99/old-dragon-2-qualidade-de-vida.zip",
+  "download": "https://github.com/rangelsardinha/old-dragon-2-qualidade-de-vida/releases/download/v0.10.108/old-dragon-2-qualidade-de-vida.zip",
   "authors": [
     {
       "name": "Rangel Sardinha"
@@ -128,6 +128,12 @@
       "type": "Item",
       "system": "olddragon2e",
       "banner": "systems/olddragon2e/assets/compendium-banner/magic-items.webp"
+    },
+    {
+      "name": "critical-tables",
+      "label": "QdV: Tabelas de Críticos",
+      "path": "packs/critical-tables",
+      "type": "RollTable"
     }
   ],
   "packFolders": [
@@ -152,7 +158,8 @@
       "sorting": "m",
       "color": "#7b1f32",
       "packs": [
-        "effects"
+        "effects",
+        "critical-tables"
       ]
     }
   ],

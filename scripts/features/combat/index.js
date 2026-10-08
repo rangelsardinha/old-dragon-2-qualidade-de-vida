@@ -2,6 +2,8 @@ import { applyModifiers, shiftDamageDice, shiftDifficulty } from '../effect-mana
 import { inventoryActor, updateInventoryItem } from '../../utils/actor-inventory.js';
 
 const MODULE_ID = 'old-dragon-2-qualidade-de-vida';
+const CRITICAL_TABLES_VERSION = '1.0.0';
+const CRITICAL_TABLES_PACK = `${MODULE_ID}.critical-tables`;
 
 const ATTACK_SELECTOR = '.olddragon2e.sheet .attack-roll';
 const parryRequests = new Map();
@@ -170,6 +172,12 @@ Hooks.on('renderActorSheet', (app, html) => {
 });
 
 Hooks.once('init', () => {
+  game.settings.register(MODULE_ID, 'criticalTablesVersion', {
+    scope: 'world',
+    config: false,
+    type: String,
+    default: '',
+  });
   const hook = foundry.applications?.api?.ApplicationV2
     ? 'renderChatMessageHTML'
     : 'renderChatMessage';
@@ -187,6 +195,11 @@ Hooks.once('init', () => {
     }
     if (payload?.type === 'parryResponse' && parryRequests.has(payload.requestId)) { parryRequests.get(payload.requestId)(Boolean(payload.parry)); parryRequests.delete(payload.requestId); }
   });
+});
+
+Hooks.once('ready', () => {
+  if (!game.user?.isGM) return;
+  ensureCriticalTablesPack().catch((error) => console.error(`${MODULE_ID} | Falha ao popular tabelas de críticos`, error));
 });
 
 async function requestParryDecision(target, attacker) {
@@ -657,7 +670,7 @@ async function handleAttack(actor, button) {
     });
     return true;
   }
-  const hit = !fumble && (Boolean(critical) || attackRoll.total >= targetAc);
+  const hit = !fumble && (Boolean(critical) || attackRoll.total > targetAc);
 
   if (hit && isParryEligibleActor(target.actor) && actor.type === 'monster') {
     const parry = await requestParryDecision(target, actor);
@@ -1359,6 +1372,85 @@ const FUMBLE_TABLE = [
     effect: 'Voce cai, bate a cabeca e esta inconsciente com 0 hits (estabilizado).',
   },
 ];
+
+function criticalTablesForPack() {
+  const criticalResults = Object.entries(CRITICAL_TABLE).map(([total, entry]) => ({
+    _id: foundry.utils.randomID(),
+    type: 'text',
+    text: `${entry.description} — ${entry.damageLabel}. ${entry.effect}`,
+    img: 'icons/svg/d20-black.svg',
+    weight: 1,
+    range: [Number(total), Number(total)],
+    drawn: false,
+    flags: {},
+  }));
+
+  const fumbleResults = FUMBLE_TABLE.map((entry) => ({
+    _id: foundry.utils.randomID(),
+    type: 'text',
+    text: entry.effect,
+    img: 'icons/svg/d20-black.svg',
+    weight: 1,
+    range: [entry.min, entry.max],
+    drawn: false,
+    flags: {},
+  }));
+
+  return [
+    {
+      _id: foundry.utils.randomID(),
+      name: 'Acerto Crítico (Tabela 2d6)',
+      img: 'icons/svg/d20-grey.svg',
+      description: '<p>Role 2d6 e consulte o resultado do acerto crítico. A automação aplica também o modo de dano indicado e os efeitos adicionais da entrada.</p>',
+      formula: '2d6',
+      replacement: true,
+      displayRoll: true,
+      results: criticalResults,
+      flags: { [MODULE_ID]: { source: 'Automação de combate', table: 'critical' } },
+    },
+    {
+      _id: foundry.utils.randomID(),
+      name: 'Falha Crítica (Tabela 1d20)',
+      img: 'icons/svg/d20-grey.svg',
+      description: '<p>Role 1d20 e aplique o efeito correspondente à falha crítica.</p>',
+      formula: '1d20',
+      replacement: true,
+      displayRoll: true,
+      results: fumbleResults,
+      flags: { [MODULE_ID]: { source: 'Automação de combate', table: 'fumble' } },
+    },
+  ];
+}
+
+async function ensureCriticalTablesPack() {
+  const pack = game.packs.get(CRITICAL_TABLES_PACK);
+  if (!pack) {
+    console.warn(`${MODULE_ID} | Compendio nao encontrado: ${CRITICAL_TABLES_PACK}`);
+    return;
+  }
+
+  const currentVersion = game.settings.get(MODULE_ID, 'criticalTablesVersion');
+  const index = await pack.getIndex();
+  const indexSize = index.size ?? index.length ?? 0;
+  if (currentVersion === CRITICAL_TABLES_VERSION && indexSize === 2) return;
+
+  const wasLocked = pack.locked;
+  await pack.configure({ locked: false });
+  try {
+    if (pack.locked) {
+      console.warn(`${MODULE_ID} | Compendio bloqueado; população ignorada: ${pack.collection}`);
+      return;
+    }
+    const documents = await pack.getDocuments();
+    if (documents.length) {
+      await RollTable.deleteDocuments(documents.map((document) => document.id), { pack: pack.collection });
+    }
+    await RollTable.createDocuments(criticalTablesForPack(), { pack: pack.collection, keepId: true });
+    await game.settings.set(MODULE_ID, 'criticalTablesVersion', CRITICAL_TABLES_VERSION);
+  } finally {
+    if (wasLocked) await pack.configure({ locked: true });
+  }
+}
 
 function increaseDamageDice(formula) {
   return String(formula).replace(/(\d*)d(3|4|6|8|12)\b/gi, (match, count, faces) => {

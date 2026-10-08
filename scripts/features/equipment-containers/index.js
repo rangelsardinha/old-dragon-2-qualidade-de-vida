@@ -681,10 +681,9 @@ export function enhanceActorSheet(app, html) {
       ui.notifications.warn("Odres não podem armazenar itens.");
       return;
     }
-    const handled = await handleDrop(event, actor, isContainerTarget ? target : null);
-    if (handled) {
-      app.render(false);
-    }
+    await handleDrop(event, actor, isContainerTarget ? target : null);
+    // A criação/atualização do Item já dispara a renderização da ficha pelo Foundry.
+    // Evite uma segunda renderização manual, que causa um recarregamento visível do ator.
   }, true);
   root.addEventListener("click", async (event) => {
     const clickedRow = event.target.closest?.(".item[data-item-id]");
@@ -717,7 +716,6 @@ export function enhanceActorSheet(app, html) {
     if (action.dataset.od2qdvAction === "remove-item" && actionItem) await setParent(actionItem, null);
     if (action.dataset.od2qdvAction === "delete-item" && canContainItems(actionItem)) await deleteContainer(actionItem);
     else if (action.dataset.od2qdvAction === "delete-item" && actionItem) await actor.deleteEmbeddedDocuments("Item", [actionItem.id]);
-    app.render(false);
   }, true);
 }
 
@@ -776,8 +774,7 @@ function enhanceItemSheet(app, html) {
   root.addEventListener("drop", async (event) => {
     if (!event.target.closest(".od2qdv-container-sheet")) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
-    const handled = await handleDrop(event, app.item.actor, app.item);
-    if (handled) app.render(false);
+    await handleDrop(event, app.item.actor, app.item);
   }, true);
   root.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-od2qdv-action]");
@@ -793,7 +790,6 @@ function enhanceItemSheet(app, html) {
     if (button.dataset.od2qdvAction === "remove-item" && selected) await setParent(selected, null);
     if (button.dataset.od2qdvAction === "delete-item" && canContainItems(selected)) await deleteContainer(selected);
     else if (button.dataset.od2qdvAction === "delete-item" && selected) await actor.deleteEmbeddedDocuments("Item", [selected.id]);
-    app.render(false);
   }, true);
   root.addEventListener("change", async (event) => {
     if (event.target.matches?.(".od2qdv-container-sheet [data-equipped-ammo]")) {

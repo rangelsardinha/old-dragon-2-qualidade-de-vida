@@ -2,7 +2,14 @@
 
 Módulo comunitário para Foundry VTT que reúne automações opcionais para o sistema **Old Dragon 2ª Edição**.
 
-Versão atual: **0.10.99**.
+Versão atual: **0.10.108**.
+
+### Novidades da versão 0.10.108
+
+- A automação de combate considera acerto somente quando a rolagem é maior que a CA do alvo; resultados iguais à CA são falhas.
+- O compêndio **QdV: Tabelas de Críticos** disponibiliza as tabelas de acerto e falha crítica utilizadas pela automação.
+- Mover, retirar ou excluir equipamentos em recipientes não força mais uma segunda renderização da ficha do ator.
+- As linhas de recipientes receberam destaque visual, e o conteúdo interno passou a respeitar a largura e o alinhamento da área de Equipamentos.
 
 ## Conjuntos de regras
 
@@ -35,6 +42,7 @@ Cada conjunto pode ser ativado ou desativado em **Configurações do jogo → Co
 - Rola e aplica dano, com ajustes de fraqueza e resistência.
 - Os cartões de combate respeitam a cor automática do tema, incluindo temas escuros.
 - Trata acertos e erros críticos pela opção **Rolagens Críticas**, que permite usar as regras do LB1, as regras do LB2 ou perguntar a cada rolagem.
+- Disponibiliza o compêndio **QdV: Tabelas de Críticos**, com as tabelas de acerto crítico (2d6) e falha crítica (1d20) usadas pela automação.
 - Automatiza **Aparar** do Bárbaro, Guerreiro e Paladino: Mestre e jogador recebem a decisão antes da divulgação do ataque e do dano; aceitar interrompe o golpe.
 - Ao chegar a 0 PV, personagens recebem o status **Inconsciente** e ficam impedidos de atacar ou mover o token.
 - No início das rodadas seguintes, solicita pelo chat uma jogada de agonização usando o maior total entre JPC e JPS.
