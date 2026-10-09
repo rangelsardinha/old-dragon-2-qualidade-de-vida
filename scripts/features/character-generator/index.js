@@ -2,7 +2,6 @@ import {
   ATTRIBUTES, ATTRIBUTE_LABELS, allocationFromDice, calculateHitPoints,
   classAllowsRace, experienceForLevel, hitDieForClass, hitDieForClassLevel, hitPointBonusForClass, hitPointBonusForRace, jpcBonusForClass, racialAttributes
 } from "./model.js";
-import { darkSunDocuments, darkSunEnabled } from "../../integrations/dark-sun.js";
 
 const MODULE_ID = "old-dragon-2-qualidade-de-vida";
 const SOCKET = `module.${MODULE_ID}`;
@@ -30,7 +29,8 @@ function escapeHtml(value) {
 }
 
 function sourceSuffix(document) {
-  return String(document?.uuid ?? "").startsWith(`Compendium.${game.system.id}.`) ? "" : " [Dark Sun]";
+  const label = compendiumLabel(document);
+  return label ? ` [${label}]` : "";
 }
 
 function documentPack(document) {
@@ -165,17 +165,19 @@ async function roll(formula) {
   return result;
 }
 
-async function documentsFromPack(name, type) {
-  const pack = game.packs.get(`${game.system.id}.${name}`);
-  if (!pack) throw new Error(`Compêndio ${name} não encontrado.`);
-  const documents = await pack.getDocuments();
-  return documents.filter((document) => document.type === type).sort((a, b) => a.name.localeCompare(b.name));
-}
-
-async function characterDocuments(packName, type) {
-  const documents = await documentsFromPack(packName, type);
-  if (darkSunEnabled()) documents.push(...await darkSunDocuments(type));
-  return documents.sort(compareCharacterDocuments);
+async function characterDocuments(_packName, type) {
+  const documents = [];
+  for (const pack of game.packs ?? []) {
+    if (pack.documentName !== "Item") continue;
+    try {
+      const index = await pack.getIndex({ fields: ["type"] });
+      if (!index.some((entry) => entry.type === type)) continue;
+      documents.push(...(await pack.getDocuments()).filter((document) => document.type === type));
+    } catch (error) {
+      console.warn(`${MODULE_ID} | Não foi possível ler o compêndio ${pack.collection}.`, error);
+    }
+  }
+  return [...new Map(documents.map((document) => [document.uuid, document])).values()].sort(compareCharacterDocuments);
 }
 
 function disabledDocumentUuids(kind) {

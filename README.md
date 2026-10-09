@@ -144,6 +144,7 @@ O uso nativo da habilidade do Clérigo cria uma área de 18 metros, testa a Mora
 - Permite ao Mestre configurar, nas opções do módulo, quais classes e raças ficam disponíveis para o criador; as seleções são salvas imediatamente e organizadas por compêndio e ordem alfabética.
 - As listas do gerador agrupam classes e raças por compêndio, incluindo os compêndios Dark Sun ativos, e permitem abrir diretamente o compêndio de origem.
 - A versão 0.10.99 corrige a distribuição do template usado pelas configurações de classes e raças, evitando o erro de arquivo ausente ao abrir essas opções após a instalação pelo pacote do GitHub.
+- O gerador também lê classes e raças personalizadas em compêndios locais e de outros módulos, sem exigir que a pasta do compêndio seja desbloqueada; a origem aparece pelo nome real do compêndio.
 - Ao concluir, abre a ficha e orienta o jogador a escolher equipamentos e magias.
 - Jogadores podem solicitar a criação; o Mestre autoriza o início, cada rerrolagem e o resumo final diretamente pelo chat.
 

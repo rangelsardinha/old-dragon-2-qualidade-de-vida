@@ -538,6 +538,10 @@ async function handleDrop(event, targetActor, targetContainer = null) {
     else await createInsideContainer(sourceItem, targetContainer);
     return true;
   }
+  if (sourceItem.actor?.id === targetActor.id && parentId(sourceItem)) {
+    await setParent(sourceItem, null);
+    return true;
+  }
   if (canContainItems(sourceItem) && sourceItem.actor && sourceItem.actor.id !== targetActor.id) {
     await transferEmbeddedTree(sourceItem, targetActor);
     return true;
@@ -617,7 +621,7 @@ function renderTree(actor, rootContainer, depth = 0) {
     const ammoToggle = allowsEquippedAmmunition(rootContainer) && isAmmunition(item)
       ? `<button type="button" data-od2qdv-action="toggle-ammunition" data-item-id="${item.id}" title="${item.system?.is_equipped ? "Desequipar" : "Equipar"} munição"><i class="fas ${item.system?.is_equipped ? "fa-toggle-on" : "fa-toggle-off"}"></i></button>`
       : "";
-    return `<li class="od2qdv-contained-item" data-contained-item-id="${item.id}">
+    return `<li class="od2qdv-contained-item" data-contained-item-id="${item.id}" draggable="true">
       <img src="${escapeHtml(item.img)}" alt="" width="24" height="24">
       <button type="button" data-od2qdv-action="open-item" data-item-id="${item.id}">${escapeHtml(item.name)}</button>
       <span class="od2qdv-contained-quantity">${escapeHtml(containedQuantity(item))}</span>
@@ -665,6 +669,15 @@ export function enhanceActorSheet(app, html) {
 
   if (boundActorSheets.has(root)) return;
   boundActorSheets.add(root);
+  root.addEventListener("dragstart", (event) => {
+    const contained = event.target.closest?.(".od2qdv-contained-item[data-contained-item-id]");
+    if (!contained) return;
+    const item = actor.items.get(contained.dataset.containedItemId);
+    if (!item) return;
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid: item.uuid }));
+  }, true);
   root.addEventListener("drop", async (event) => {
     const row = event.target.closest(".item[data-item-id]");
     const target = row ? actor.items.get(row.dataset.itemId) : null;
@@ -673,9 +686,10 @@ export function enhanceActorSheet(app, html) {
     if (dropData?.type !== "Item") return;
     const isRejectedWaterskinTarget = canContainItems(target) && isWaterskin(target);
     const isContainerTarget = canContainItems(target);
-    const dragged = globalThis.fromUuidSync?.(dropData.uuid);
+    const dragged = await Item.implementation.fromDropData(dropData);
     const isExternalContainer = canContainItems(dragged) && Boolean(dragged.actor) && dragged.actor.id !== actor.id;
-    if (!isContainerTarget && !isExternalContainer && !isRejectedWaterskinTarget) return;
+    const isNestedSameActor = Boolean(dragged?.actor?.id === actor.id && parentId(dragged));
+    if (!isContainerTarget && !isExternalContainer && !isRejectedWaterskinTarget && !isNestedSameActor) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
     if (isRejectedWaterskinTarget) {
       ui.notifications.warn("Odres não podem armazenar itens.");
@@ -771,6 +785,15 @@ function enhanceItemSheet(app, html) {
   form.insertAdjacentHTML("beforeend", itemSheetPanel(app.item));
   if (boundItemSheets.has(root)) return;
   boundItemSheets.add(root);
+  root.addEventListener("dragstart", (event) => {
+    const contained = event.target.closest?.(".od2qdv-contained-item[data-contained-item-id]");
+    if (!contained) return;
+    const item = app.item.actor.items.get(contained.dataset.containedItemId);
+    if (!item) return;
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid: item.uuid }));
+  }, true);
   root.addEventListener("drop", async (event) => {
     if (!event.target.closest(".od2qdv-container-sheet")) return;
     event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
